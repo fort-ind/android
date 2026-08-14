@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="15%"
+    android:insetTop="15%"
+    android:insetRight="15%"
+    android:insetBottom="15%">
+    <bitmap android:src="@mipmap/ic_launcher_foreground" />
+</inset>

@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/main"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#3B0C5A"
+        tools:context=".MainActivity">
+
+        <ImageView
+            android:id="@+id/backgroundImage"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:scaleType="centerCrop"
+            android:src="@drawable/bg_pattern"
+            android:contentDescription="@null"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="24dp"
+            android:paddingBottom="12dp"
+            android:background="#1A1A1A"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageView
+                android:id="@+id/menuIcon"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginStart="12dp"
+                android:src="@drawable/ic_menu"
+                android:contentDescription="Menu"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <TextView
+                android:id="@+id/logoText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="fort.ind"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:fontFamily="@font/comfortaa_regular"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <ImageView
+                android:id="@+id/logo"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/fort_logo"
+                android:contentDescription="Fort.ind logo"
+                app:layout_constraintEnd_toStartOf="@id/logoText"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <TextView
+            android:id="@+id/welcomeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Welcome Back! :)"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/comfortaa_regular"
+            app:layout_constraintTop_toBottomOf="@id/topBar"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/localTimeLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="Current Time"
+            android:textColor="#DDDDDD"
+            android:textSize="13sp"
+            android:fontFamily="@font/comfortaa_regular"
+            app:layout_constraintTop_toBottomOf="@id/welcomeText"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/localTimeClock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="00:00:00"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/comfortaa_regular"
+            app:layout_constraintTop_toBottomOf="@id/localTimeLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/localDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-4dp"
+            android:text="Day, Month 00"
+            android:textColor="#DDDDDD"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/comfortaa_regular"
+            app:layout_constraintTop_toBottomOf="@id/localTimeClock"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/newsHeader"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginStart="16dp"
+            android:text="News"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/comfortaa_regular"
+            app:layout_constraintTop_toBottomOf="@id/localDate"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/newsBody"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:text="whats new?\n\nwe got a mobile app, features from the website will be added at some point."
+            android:textColor="#DDDDDD"
+            android:textSize="18sp"
+            android:fontFamily="@font/comfortaa_regular"
+            app:layout_constraintTop_toBottomOf="@id/newsHeader"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <LinearLayout
+            android:id="@+id/footer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingHorizontal="16dp"
+            android:layout_marginBottom="16dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Version Beta"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="@font/comfortaa_regular" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Fort.ind - The Open Source Game Archive!"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="@font/comfortaa_regular"
+                android:gravity="center" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Note: We don't own the games provided here; the games belong to their developers, and our role is just archiving them for people to enjoy"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:fontFamily="@font/comfortaa_regular"
+                android:gravity="center" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="16dp"
+                android:text="Made with love by the fort.ind team. since 2019 🏳️‍🌈💜"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:fontFamily="@font/comfortaa_regular"
+                android:gravity="center" />
+
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/sideMenu"
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="#4B0082"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="24dp"
+            android:paddingBottom="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="menu"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:gravity="center"
+                android:fontFamily="@font/comfortaa_regular" />
+
+            <TextView
+                android:id="@+id/menuHome"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:layout_marginTop="20dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="home"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuWhatsNew"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="what's new?"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuFortServer"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="fort.server"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuGames"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="⌄  games"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuSocial"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="⌄  social"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuEmulators"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="⌄  emulators"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuApps"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="⌄  apps"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuLabs"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="⌄  labs + betas"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuExtras"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="⌄  extras"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuLink"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="link to fort.ind"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
+                android:id="@+id/menuHelp"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="16dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="help"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+</androidx.drawerlayout.widget.DrawerLayout>
