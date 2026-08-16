@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="centerCrop"
-            android:src="@drawable/bg_pattern"
+            android:src="@drawable/bg_pattern_purple"
             android:contentDescription="@null"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -29,7 +29,7 @@
             android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="24dp"
+            android:paddingTop="32dp"
             android:paddingBottom="12dp"
             android:background="#1A1A1A"
             app:layout_constraintTop_toTopOf="parent"
@@ -54,6 +54,7 @@
                 android:text="fort.ind"
                 android:textColor="#FFFFFF"
                 android:textSize="20sp"
+                android:translationY="-2dp"
                 android:fontFamily="@font/comfortaa_regular"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -64,7 +65,8 @@
                 android:id="@+id/logo"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:layout_marginEnd="10dp"
+                android:layout_marginEnd="6dp"
+                android:translationY="-2dp"
                 android:src="@drawable/fort_logo"
                 android:contentDescription="Fort.ind logo"
                 app:layout_constraintEnd_toStartOf="@id/logoText"
@@ -72,6 +74,12 @@
                 app:layout_constraintBottom_toBottomOf="parent" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.Group
+            android:id="@+id/homeGroup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:constraint_referenced_ids="welcomeText,localTimeLabel,localTimeClock,localDate,newsHeader,newsBody,footer" />
 
         <TextView
             android:id="@+id/welcomeText"
@@ -210,6 +218,135 @@
 
         </LinearLayout>
 
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/settingsContent"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/topBar"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:id="@+id/settingsTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginStart="16dp"
+                android:text="Settings"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/comfortaa_regular"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <TextView
+                android:id="@+id/themeLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginStart="16dp"
+                android:text="Theme"
+                android:textColor="#DDDDDD"
+                android:textSize="14sp"
+                android:fontFamily="@font/comfortaa_regular"
+                app:layout_constraintTop_toBottomOf="@id/settingsTitle"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/themeSwatchRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:orientation="horizontal"
+                app:layout_constraintTop_toBottomOf="@id/themeLabel"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <View
+                    android:id="@+id/themeSwatchPurple"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/swatch_purple"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <View
+                    android:id="@+id/themeSwatchBlue"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/swatch_blue"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <View
+                    android:id="@+id/themeSwatchGreen"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/swatch_green"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <View
+                    android:id="@+id/themeSwatchRed"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/swatch_red"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <View
+                    android:id="@+id/themeSwatchLight"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/swatch_light"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <FrameLayout
+            android:id="@+id/splashOverlay"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="#3B0C5A"
+            android:clickable="true"
+            android:focusable="true"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageView
+                android:id="@+id/splashLogo"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_gravity="center"
+                android:src="@drawable/fort_logo"
+                android:contentDescription="Fort.ind logo" />
+
+            <TextView
+                android:id="@+id/splashText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginStart="34dp"
+                android:text="fort.ind"
+                android:textColor="#FFFFFF"
+                android:textSize="26sp"
+                android:fontFamily="@font/comfortaa_regular"
+                android:alpha="0" />
+
+        </FrameLayout>
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
@@ -228,20 +365,11 @@
             android:paddingBottom="24dp">
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="36dp"
-                android:text="menu"
-                android:textColor="#FFFFFF"
-                android:textSize="20sp"
-                android:gravity="center"
-                android:fontFamily="@font/comfortaa_regular" />
-
-            <TextView
                 android:id="@+id/menuHome"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:layout_marginTop="20dp"
-                android:paddingStart="16dp"
+                android:layout_marginTop="56dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="home"
@@ -256,7 +384,7 @@
                 android:id="@+id/menuWhatsNew"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="what's new?"
@@ -271,7 +399,7 @@
                 android:id="@+id/menuFortServer"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="fort.server"
@@ -286,7 +414,7 @@
                 android:id="@+id/menuGames"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="⌄  games"
@@ -301,7 +429,7 @@
                 android:id="@+id/menuSocial"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="⌄  social"
@@ -316,7 +444,7 @@
                 android:id="@+id/menuEmulators"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="⌄  emulators"
@@ -331,7 +459,7 @@
                 android:id="@+id/menuApps"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="⌄  apps"
@@ -346,7 +474,7 @@
                 android:id="@+id/menuLabs"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="⌄  labs + betas"
@@ -361,7 +489,7 @@
                 android:id="@+id/menuExtras"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="⌄  extras"
@@ -373,10 +501,25 @@
                 android:background="@android:color/transparent" />
 
             <TextView
+                android:id="@+id/menuSettings"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:paddingStart="12dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="settings"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/comfortaa_regular"
+                android:includeFontPadding="false"
+                android:background="@android:color/transparent" />
+
+            <TextView
                 android:id="@+id/menuLink"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="link to fort.ind"
@@ -391,7 +534,7 @@
                 android:id="@+id/menuHelp"
                 android:layout_width="match_parent"
                 android:layout_height="34dp"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp"
                 android:text="help"
