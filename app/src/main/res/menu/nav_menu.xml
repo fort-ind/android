@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The side menu. Groups are what NavigationView draws dividers between, so they carry
+  the grouping the twelve flat rows used to imply: what you are looking at, what you can
+  browse, and everything else.
+
+  The browse group's items were prefixed "⌄" as an expand affordance, but nothing was
+  ever wired to expand them. When those categories get children they should become
+  <menu> submenus here, which NavigationView renders as labelled sections.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group
+        android:id="@+id/nav_group_main"
+        android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_home"
+            android:checkable="true"
+            android:title="home" />
+        <item
+            android:id="@+id/nav_whats_new"
+            android:checkable="true"
+            android:title="what's new?" />
+        <item
+            android:id="@+id/nav_fort_server"
+            android:checkable="true"
+            android:title="fort.server" />
+    </group>
+
+    <group
+        android:id="@+id/nav_group_browse"
+        android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_games"
+            android:checkable="true"
+            android:title="games" />
+        <item
+            android:id="@+id/nav_social"
+            android:checkable="true"
+            android:title="social" />
+        <item
+            android:id="@+id/nav_emulators"
+            android:checkable="true"
+            android:title="emulators" />
+        <item
+            android:id="@+id/nav_apps"
+            android:checkable="true"
+            android:title="apps" />
+        <item
+            android:id="@+id/nav_labs"
+            android:checkable="true"
+            android:title="labs + betas" />
+        <item
+            android:id="@+id/nav_extras"
+            android:checkable="true"
+            android:title="extras" />
+    </group>
+
+    <group
+        android:id="@+id/nav_group_more"
+        android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_settings"
+            android:checkable="true"
+            android:title="settings" />
+        <item
+            android:id="@+id/nav_link"
+            android:checkable="true"
+            android:title="link to fort.ind" />
+        <item
+            android:id="@+id/nav_help"
+            android:checkable="true"
+            android:title="help" />
+    </group>
+
+</menu>

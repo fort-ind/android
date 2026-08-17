@@ -2,4 +2,9 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- The top bar is a brand constant rather than part of a palette: it stays dark
+         in all five themes, so it is a fixed colour and not a theme role. -->
+    <color name="fort_top_bar">#1A1A1A</color>
+    <color name="fort_on_top_bar">#FFFFFF</color>
 </resources>

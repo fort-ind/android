@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Side-menu labels. Material 3 draws drawer items with ?attr/textAppearanceLabelLarge;
+      this keeps that structure and swaps in Comfortaa at the size the menu already used.
+
+      When the Comfortaa family gains real weights, this should collapse into an app-wide
+      type scale on the theme rather than a per-component override.
+    -->
+    <style name="TextAppearance.Fortind.NavigationItem" parent="TextAppearance.Material3.LabelLarge">
+        <item name="fontFamily">@font/comfortaa_regular</item>
+        <item name="android:fontFamily">@font/comfortaa_regular</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+</resources>

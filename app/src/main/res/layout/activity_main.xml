@@ -10,7 +10,7 @@
         android:id="@+id/main"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#3B0C5A"
+        android:background="?attr/colorSurface"
         tools:context=".MainActivity">
 
         <ImageView
@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="centerCrop"
-            android:src="@drawable/bg_pattern_purple"
+            android:src="?attr/fortPatternBackground"
             android:contentDescription="@null"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -31,7 +31,7 @@
             android:layout_height="wrap_content"
             android:paddingTop="32dp"
             android:paddingBottom="12dp"
-            android:background="#1A1A1A"
+            android:background="@color/fort_top_bar"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
@@ -52,7 +52,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="fort.ind"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/fort_on_top_bar"
                 android:textSize="20sp"
                 android:translationY="-2dp"
                 android:fontFamily="@font/comfortaa_regular"
@@ -87,7 +87,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:text="Welcome Back! :)"
-            android:textColor="#FFFFFF"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="@font/comfortaa_regular"
@@ -101,7 +101,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:text="Current Time"
-            android:textColor="#DDDDDD"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="13sp"
             android:fontFamily="@font/comfortaa_regular"
             app:layout_constraintTop_toBottomOf="@id/welcomeText"
@@ -114,7 +114,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="00:00:00"
-            android:textColor="#FFFFFF"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="28sp"
             android:textStyle="bold"
             android:fontFamily="@font/comfortaa_regular"
@@ -128,7 +128,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="-4dp"
             android:text="Day, Month 00"
-            android:textColor="#DDDDDD"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="17sp"
             android:textStyle="bold"
             android:fontFamily="@font/comfortaa_regular"
@@ -143,7 +143,7 @@
             android:layout_marginTop="24dp"
             android:layout_marginStart="16dp"
             android:text="News"
-            android:textColor="#FFFFFF"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp"
             android:textStyle="bold"
             android:fontFamily="@font/comfortaa_regular"
@@ -158,7 +158,7 @@
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
             android:text="whats new?\n\nwe got a mobile app, features from the website will be added at some point."
-            android:textColor="#DDDDDD"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="18sp"
             android:fontFamily="@font/comfortaa_regular"
             app:layout_constraintTop_toBottomOf="@id/newsHeader"
@@ -181,7 +181,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Version Beta"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 android:fontFamily="@font/comfortaa_regular" />
 
@@ -190,7 +190,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Fort.ind - The Open Source Game Archive!"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 android:fontFamily="@font/comfortaa_regular"
                 android:gravity="center" />
@@ -200,7 +200,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Note: We don't own the games provided here; the games belong to their developers, and our role is just archiving them for people to enjoy"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="10sp"
                 android:fontFamily="@font/comfortaa_regular"
                 android:gravity="center" />
@@ -211,7 +211,7 @@
                 android:layout_marginTop="4dp"
                 android:layout_marginBottom="16dp"
                 android:text="Made with love by the fort.ind team. since 2019 🏳️‍🌈💜"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="10sp"
                 android:fontFamily="@font/comfortaa_regular"
                 android:gravity="center" />
@@ -235,7 +235,7 @@
                 android:layout_marginTop="24dp"
                 android:layout_marginStart="16dp"
                 android:text="Settings"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:fontFamily="@font/comfortaa_regular"
@@ -249,7 +249,7 @@
                 android:layout_marginTop="24dp"
                 android:layout_marginStart="16dp"
                 android:text="Theme"
-                android:textColor="#DDDDDD"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="14sp"
                 android:fontFamily="@font/comfortaa_regular"
                 app:layout_constraintTop_toBottomOf="@id/settingsTitle"
@@ -317,7 +317,7 @@
             android:id="@+id/splashOverlay"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:background="#3B0C5A"
+            android:background="?attr/colorSurface"
             android:clickable="true"
             android:focusable="true"
             app:layout_constraintTop_toTopOf="parent"
@@ -340,7 +340,7 @@
                 android:layout_gravity="center"
                 android:layout_marginStart="34dp"
                 android:text="fort.ind"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="26sp"
                 android:fontFamily="@font/comfortaa_regular"
                 android:alpha="0" />
@@ -349,204 +349,15 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <ScrollView
+    <com.google.android.material.navigation.NavigationView
         android:id="@+id/sideMenu"
         android:layout_width="300dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="#4B0082"
-        android:fillViewport="true">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingTop="24dp"
-            android:paddingBottom="24dp">
-
-            <TextView
-                android:id="@+id/menuHome"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:layout_marginTop="56dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="home"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuWhatsNew"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="what's new?"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuFortServer"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="fort.server"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuGames"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="⌄  games"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuSocial"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="⌄  social"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuEmulators"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="⌄  emulators"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuApps"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="⌄  apps"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuLabs"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="⌄  labs + betas"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuExtras"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="⌄  extras"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuSettings"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="settings"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuLink"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="link to fort.ind"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-            <TextView
-                android:id="@+id/menuHelp"
-                android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:paddingStart="12dp"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp"
-                android:text="help"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:gravity="center_vertical"
-                android:fontFamily="@font/comfortaa_regular"
-                android:includeFontPadding="false"
-                android:background="@android:color/transparent" />
-
-        </LinearLayout>
-
-    </ScrollView>
+        android:background="?attr/colorSurfaceContainer"
+        android:fitsSystemWindows="true"
+        app:itemTextAppearance="@style/TextAppearance.Fortind.NavigationItem"
+        app:itemTextAppearanceActiveBoldEnabled="false"
+        app:menu="@menu/nav_menu" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

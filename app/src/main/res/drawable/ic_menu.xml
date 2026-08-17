@@ -3,7 +3,7 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24"
-    android:tint="#FFFFFF">
+    android:tint="@color/fort_on_top_bar">
     <path
         android:fillColor="#FF000000"
         android:pathData="M3,6h18v2H3V6zm0,5h18v2H3v-2zm0,5h18v2H3v-2z"/>

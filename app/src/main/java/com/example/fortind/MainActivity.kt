@@ -1,6 +1,5 @@
 package com.example.fortind
 
-import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -8,16 +7,17 @@ import android.text.SpannableString
 import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.Group
 import androidx.drawerlayout.widget.DrawerLayout
+import com.google.android.material.navigation.NavigationView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,20 +29,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var timeLabel: TextView
     private lateinit var dateText: TextView
     private lateinit var drawerLayout: DrawerLayout
+    private lateinit var sideMenu: NavigationView
     private lateinit var menuIcon: ImageView
-
-    private lateinit var menuHome: TextView
-    private lateinit var menuWhatsNew: TextView
-    private lateinit var menuFortServer: TextView
-    private lateinit var menuGames: TextView
-    private lateinit var menuSocial: TextView
-    private lateinit var menuEmulators: TextView
-    private lateinit var menuApps: TextView
-    private lateinit var menuLabs: TextView
-    private lateinit var menuExtras: TextView
-    private lateinit var menuSettings: TextView
-    private lateinit var menuLink: TextView
-    private lateinit var menuHelp: TextView
 
     private lateinit var splashOverlay: FrameLayout
     private lateinit var splashLogo: ImageView
@@ -51,28 +39,27 @@ class MainActivity : AppCompatActivity() {
     private lateinit var homeGroup: Group
     private lateinit var settingsContent: ConstraintLayout
 
-    private lateinit var mainLayout: ConstraintLayout
-    private lateinit var backgroundImage: ImageView
-    private lateinit var sideMenu: ScrollView
     private lateinit var themeSwatchPurple: View
     private lateinit var themeSwatchBlue: View
     private lateinit var themeSwatchGreen: View
     private lateinit var themeSwatchRed: View
     private lateinit var themeSwatchLight: View
 
+    private var showingSettings = false
+
     private val handler = Handler(Looper.getMainLooper())
 
-    private var activeColor = Color.parseColor("#8740B3")
-    private val inactiveColor = Color.TRANSPARENT
-
-    private data class ThemeColors(val background: Int, val drawer: Int, val accent: Int, val patternRes: Int?, val isLight: Boolean = false)
-
-    private val themes = mapOf(
-        "purple" to ThemeColors(Color.parseColor("#3D0C5D"), Color.parseColor("#4D0086"), Color.parseColor("#8B42B8"), R.drawable.bg_pattern_purple),
-        "blue" to ThemeColors(Color.parseColor("#0C205D"), Color.parseColor("#132C86"), Color.parseColor("#2F62E0"), R.drawable.bg_pattern_blue),
-        "green" to ThemeColors(Color.parseColor("#0C5D2B"), Color.parseColor("#0F7E3C"), Color.parseColor("#30AD5B"), R.drawable.bg_pattern_green),
-        "red" to ThemeColors(Color.parseColor("#5D0C0C"), Color.parseColor("#861313"), Color.parseColor("#E0452F"), R.drawable.bg_pattern_red),
-        "light" to ThemeColors(Color.parseColor("#F5F5F5"), Color.parseColor("#FFFFFF"), Color.parseColor("#E0E0E0"), null, isLight = true)
+    /**
+     * Each palette is a Material 3 theme overlay. Applying one is the whole of theming:
+     * the overlay supplies the colour roles, and every view resolves them from
+     * ?attr/... when it inflates.
+     */
+    private val themeOverlays = mapOf(
+        "purple" to R.style.ThemeOverlay_Fortind_Purple,
+        "blue" to R.style.ThemeOverlay_Fortind_Blue,
+        "green" to R.style.ThemeOverlay_Fortind_Green,
+        "red" to R.style.ThemeOverlay_Fortind_Red,
+        "light" to R.style.ThemeOverlay_Fortind_Light
     )
 
     private val clockRunnable = object : Runnable {
@@ -111,44 +98,18 @@ class MainActivity : AppCompatActivity() {
         return cityPart.replace("_", " ")
     }
 
-    private fun setMenuColor(view: TextView, color: Int) {
-        view.setBackgroundColor(color)
+    /**
+     * The rows NavigationView builds from the menu resource. They live in a RecyclerView
+     * it manages internally, so the staggered entrance reaches them through the list
+     * rather than through fields. Degrades to no animation if that child is not there.
+     */
+    private fun menuRowViews(): List<View> {
+        val list = sideMenu.getChildAt(0) as? ViewGroup ?: return emptyList()
+        return (0 until list.childCount).map { list.getChildAt(it) }
     }
-
-    private fun selectMenuItem(selected: TextView) {
-        setMenuColor(menuHome, inactiveColor)
-        setMenuColor(menuWhatsNew, inactiveColor)
-        setMenuColor(menuFortServer, inactiveColor)
-        setMenuColor(menuGames, inactiveColor)
-        setMenuColor(menuSocial, inactiveColor)
-        setMenuColor(menuEmulators, inactiveColor)
-        setMenuColor(menuApps, inactiveColor)
-        setMenuColor(menuLabs, inactiveColor)
-        setMenuColor(menuExtras, inactiveColor)
-        setMenuColor(menuSettings, inactiveColor)
-        setMenuColor(menuLink, inactiveColor)
-        setMenuColor(menuHelp, inactiveColor)
-
-        setMenuColor(selected, activeColor)
-    }
-
-    private fun menuItems() = listOf(
-        menuHome,
-        menuWhatsNew,
-        menuFortServer,
-        menuGames,
-        menuSocial,
-        menuEmulators,
-        menuApps,
-        menuLabs,
-        menuExtras,
-        menuSettings,
-        menuLink,
-        menuHelp
-    )
 
     private fun resetMenuForAnimation() {
-        menuItems().forEach { view ->
+        menuRowViews().forEach { view ->
             view.animate().cancel()
             view.alpha = 0f
             view.translationX = -120f
@@ -158,7 +119,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun animateMenu() {
-        menuItems().forEachIndexed { index, view ->
+        menuRowViews().forEachIndexed { index, view ->
             view.animate()
                 .alpha(1f)
                 .translationX(0f)
@@ -172,65 +133,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showHome() {
+        showingSettings = false
         homeGroup.visibility = View.VISIBLE
         settingsContent.visibility = View.GONE
-        selectMenuItem(menuHome)
+        sideMenu.setCheckedItem(R.id.nav_home)
     }
 
     private fun showSettings() {
+        showingSettings = true
         homeGroup.visibility = View.GONE
         settingsContent.visibility = View.VISIBLE
-        selectMenuItem(menuSettings)
+        sideMenu.setCheckedItem(R.id.nav_settings)
     }
 
-    private fun applyTextColor(view: View, color: Int) {
-        if (view.id == R.id.splashOverlay || view.id == R.id.topBar) return
+    /**
+     * Persists the palette and recreates the activity so the new overlay is in place
+     * before anything inflates. Nothing is recoloured by hand.
+     */
+    private fun selectTheme(key: String) {
+        if (!themeOverlays.containsKey(key) || key == loadSavedTheme()) return
 
-        if (view is TextView) {
-            view.setTextColor(color)
-        }
-
-        if (view is android.view.ViewGroup) {
-            for (i in 0 until view.childCount) {
-                applyTextColor(view.getChildAt(i), color)
-            }
-        }
-    }
-
-    private fun applyTheme(key: String) {
-        val theme = themes[key] ?: return
-
-        mainLayout.setBackgroundColor(theme.background)
-
-        if (theme.patternRes != null) {
-            backgroundImage.visibility = View.VISIBLE
-            backgroundImage.clearColorFilter()
-            backgroundImage.setImageResource(theme.patternRes)
-            backgroundImage.alpha = 1.0f
-        } else {
-            backgroundImage.visibility = View.GONE
-        }
-
-        sideMenu.setBackgroundColor(theme.drawer)
-        activeColor = theme.accent
-
-        val textColor = if (theme.isLight) Color.parseColor("#1A1A1A") else Color.WHITE
-        applyTextColor(mainLayout, textColor)
-        applyTextColor(sideMenu, textColor)
-
-        menuItems().forEach { it.setTextColor(textColor) }
-
-        selectMenuItem(if (settingsContent.visibility == View.VISIBLE) menuSettings else menuHome)
-
-        getSharedPreferences("fortind_prefs", MODE_PRIVATE)
+        getSharedPreferences(PREFS, MODE_PRIVATE)
             .edit()
-            .putString("theme", key)
+            .putString(KEY_THEME, key)
             .apply()
+
+        recreate()
     }
 
     private fun loadSavedTheme(): String {
-        return getSharedPreferences("fortind_prefs", MODE_PRIVATE)
-            .getString("theme", "purple") ?: "purple"
+        return getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(KEY_THEME, DEFAULT_THEME) ?: DEFAULT_THEME
     }
 
     private fun runSplashAnimation() {
@@ -267,6 +200,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Must run before any view is inflated: the overlay is what gives ?attr/... its
+        // values, so it has to be on the theme before setContentView resolves them.
+        theme.applyStyle(themeOverlays[loadSavedTheme()] ?: R.style.ThemeOverlay_Fortind_Purple, true)
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -274,20 +211,8 @@ class MainActivity : AppCompatActivity() {
         timeLabel = findViewById(R.id.localTimeLabel)
         dateText = findViewById(R.id.localDate)
         drawerLayout = findViewById(R.id.drawerLayout)
+        sideMenu = findViewById(R.id.sideMenu)
         menuIcon = findViewById(R.id.menuIcon)
-
-        menuHome = findViewById(R.id.menuHome)
-        menuWhatsNew = findViewById(R.id.menuWhatsNew)
-        menuFortServer = findViewById(R.id.menuFortServer)
-        menuGames = findViewById(R.id.menuGames)
-        menuSocial = findViewById(R.id.menuSocial)
-        menuEmulators = findViewById(R.id.menuEmulators)
-        menuApps = findViewById(R.id.menuApps)
-        menuLabs = findViewById(R.id.menuLabs)
-        menuExtras = findViewById(R.id.menuExtras)
-        menuSettings = findViewById(R.id.menuSettings)
-        menuLink = findViewById(R.id.menuLink)
-        menuHelp = findViewById(R.id.menuHelp)
 
         splashOverlay = findViewById(R.id.splashOverlay)
         splashLogo = findViewById(R.id.splashLogo)
@@ -296,9 +221,6 @@ class MainActivity : AppCompatActivity() {
         homeGroup = findViewById(R.id.homeGroup)
         settingsContent = findViewById(R.id.settingsContent)
 
-        mainLayout = findViewById(R.id.main)
-        backgroundImage = findViewById(R.id.backgroundImage)
-        sideMenu = findViewById(R.id.sideMenu)
         themeSwatchPurple = findViewById(R.id.themeSwatchPurple)
         themeSwatchBlue = findViewById(R.id.themeSwatchBlue)
         themeSwatchGreen = findViewById(R.id.themeSwatchGreen)
@@ -316,33 +238,56 @@ class MainActivity : AppCompatActivity() {
             }, 100)
         }
 
-        menuHome.setOnClickListener {
-            showHome()
+        sideMenu.setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> showHome()
+                R.id.nav_settings -> showSettings()
+                // The remaining destinations are not built yet. Leaving them unhandled
+                // keeps the checked row on the section actually on screen.
+                else -> return@setNavigationItemSelectedListener false
+            }
             drawerLayout.closeDrawer(Gravity.START)
+            true
         }
 
-        menuSettings.setOnClickListener {
+        themeSwatchPurple.setOnClickListener { selectTheme("purple") }
+        themeSwatchBlue.setOnClickListener { selectTheme("blue") }
+        themeSwatchGreen.setOnClickListener { selectTheme("green") }
+        themeSwatchRed.setOnClickListener { selectTheme("red") }
+        themeSwatchLight.setOnClickListener { selectTheme("light") }
+
+        // Switching palette recreates the activity, so the visible section has to
+        // survive that (and a rotation) rather than snapping back to home.
+        if (savedInstanceState?.getBoolean(STATE_SHOWING_SETTINGS) == true) {
             showSettings()
-            drawerLayout.closeDrawer(Gravity.START)
+        } else {
+            showHome()
         }
-
-        themeSwatchPurple.setOnClickListener { applyTheme("purple") }
-        themeSwatchBlue.setOnClickListener { applyTheme("blue") }
-        themeSwatchGreen.setOnClickListener { applyTheme("green") }
-        themeSwatchRed.setOnClickListener { applyTheme("red") }
-        themeSwatchLight.setOnClickListener { applyTheme("light") }
-
-        applyTheme(loadSavedTheme())
-
-        selectMenuItem(menuHome)
 
         handler.post(clockRunnable)
 
-        runSplashAnimation()
+        // Only a cold start gets the splash; a recreate already showed it.
+        if (savedInstanceState == null) {
+            runSplashAnimation()
+        } else {
+            splashOverlay.visibility = View.GONE
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_SHOWING_SETTINGS, showingSettings)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(clockRunnable)
+    }
+
+    private companion object {
+        const val PREFS = "fortind_prefs"
+        const val KEY_THEME = "theme"
+        const val DEFAULT_THEME = "purple"
+        const val STATE_SHOWING_SETTINGS = "showingSettings"
     }
 }

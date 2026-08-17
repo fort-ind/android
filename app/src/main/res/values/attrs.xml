@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The tiled pattern drawn behind the app surface. Part of the palette, so it
+         lives in the theme overlay alongside the colour roles rather than being
+         swapped at runtime. @null for palettes that have no pattern. -->
+    <attr name="fortPatternBackground" format="reference" />
+</resources>

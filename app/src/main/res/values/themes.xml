@@ -1,9 +1,93 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+
     <!-- Base application theme. -->
-    <style name="Base.Theme.Fortind" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+    <style name="Base.Theme.Fortind" parent="Theme.Material3Expressive.DayNight.NoActionBar">
+        <!-- The top bar stays dark in every palette (including the light one), so the
+             status bar icons drawn over it must always be light. -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="Theme.Fortind" parent="Base.Theme.Fortind" />
+
+    <!--
+      The five fort.ind palettes, expressed as Material 3 colour roles.
+
+      Each overlay is layered onto the activity theme in MainActivity.onCreate via
+      Theme.applyStyle, so every view resolves its colours at inflation time from
+      ?attr/... instead of having them assigned by walking the view tree afterwards.
+
+      Roles in use:
+        colorPrimary            the fort.ind accent
+        colorSecondaryContainer the active side-menu indicator. Material's drawer reads
+                                this role, so the accent is declared here rather than
+                                restyling the component to look at colorPrimary.
+        colorSurface            the app background
+        colorSurfaceContainer   the side menu
+        colorOnSurface          primary text
+        colorOnSurfaceVariant   secondary text, and inactive side-menu labels
+    -->
+
+    <style name="ThemeOverlay.Fortind.Purple" parent="">
+        <item name="colorPrimary">#8B42B8</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondaryContainer">#8B42B8</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
+        <item name="colorSurface">#3D0C5D</item>
+        <item name="colorSurfaceContainer">#4D0086</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="colorOnSurfaceVariant">#DDDDDD</item>
+        <item name="fortPatternBackground">@drawable/bg_pattern_purple</item>
+    </style>
+
+    <style name="ThemeOverlay.Fortind.Blue" parent="">
+        <item name="colorPrimary">#2F62E0</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondaryContainer">#2F62E0</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
+        <item name="colorSurface">#0C205D</item>
+        <item name="colorSurfaceContainer">#132C86</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="colorOnSurfaceVariant">#DDDDDD</item>
+        <item name="fortPatternBackground">@drawable/bg_pattern_blue</item>
+    </style>
+
+    <style name="ThemeOverlay.Fortind.Green" parent="">
+        <item name="colorPrimary">#30AD5B</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondaryContainer">#30AD5B</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
+        <item name="colorSurface">#0C5D2B</item>
+        <item name="colorSurfaceContainer">#0F7E3C</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="colorOnSurfaceVariant">#DDDDDD</item>
+        <item name="fortPatternBackground">@drawable/bg_pattern_green</item>
+    </style>
+
+    <style name="ThemeOverlay.Fortind.Red" parent="">
+        <item name="colorPrimary">#E0452F</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondaryContainer">#E0452F</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
+        <item name="colorSurface">#5D0C0C</item>
+        <item name="colorSurfaceContainer">#861313</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="colorOnSurfaceVariant">#DDDDDD</item>
+        <item name="fortPatternBackground">@drawable/bg_pattern_red</item>
+    </style>
+
+    <style name="ThemeOverlay.Fortind.Light" parent="">
+        <item name="android:isLightTheme">true</item>
+        <item name="colorPrimary">#E0E0E0</item>
+        <item name="colorOnPrimary">#1A1A1A</item>
+        <item name="colorSecondaryContainer">#E0E0E0</item>
+        <item name="colorOnSecondaryContainer">#1A1A1A</item>
+        <item name="colorSurface">#F5F5F5</item>
+        <item name="colorSurfaceContainer">#FFFFFF</item>
+        <item name="colorOnSurface">#1A1A1A</item>
+        <!-- The only palette where the secondary text tone has to go darker, not
+             lighter, than the primary one. -->
+        <item name="colorOnSurfaceVariant">#5F5F5F</item>
+        <item name="fortPatternBackground">@null</item>
+    </style>
+
 </resources>

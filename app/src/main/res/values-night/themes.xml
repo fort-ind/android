@@ -1,7 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.Fortind" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    <!-- The palette is always chosen explicitly in Settings, and the chosen
+         ThemeOverlay.Fortind.* supplies every colour role the app reads, so there is
+         nothing to vary by night mode here. Kept so the DayNight parent resolves
+         consistently in both configurations. -->
+    <style name="Base.Theme.Fortind" parent="Theme.Material3Expressive.DayNight.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
