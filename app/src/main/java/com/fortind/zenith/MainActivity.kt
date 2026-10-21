@@ -1,87 +1,107 @@
-    package com.fortind.zenith
+package com.fortind.zenith
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.navigation.NavigationView
-import androidx.navigation.findNavController
-import androidx.navigation.fragment.NavHostFragment
-import androidx.navigation.ui.AppBarConfiguration
-import androidx.navigation.ui.navigateUp
-import androidx.navigation.ui.setupActionBarWithNavController
-import androidx.navigation.ui.setupWithNavController
-import androidx.appcompat.app.AppCompatActivity
-import com.fortind.zenith.databinding.ActivityMainBinding
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.window.core.layout.WindowSizeClass
+import com.fortind.zenith.ui.theme.ZenithTheme
 
-class MainActivity : AppCompatActivity() {
+enum class AppDestination(
+    @param:StringRes val labelRes: Int,
+    val icon: ImageVector
+) {
+    PAGE_1(R.string.page_1, Icons.Default.Home),
+    PAGE_2(R.string.page_2, Icons.Default.Favorite),
+    PAGE_3(R.string.page_3, Icons.Default.DateRange),
+    PAGE_4(R.string.page_4, Icons.Default.AccountCircle),
+    PAGE_5(R.string.page_5, Icons.Default.Settings)
+}
 
-    private lateinit var appBarConfiguration: AppBarConfiguration
-    private lateinit var binding: ActivityMainBinding
-
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        setSupportActionBar(binding.appBarMain.toolbar)
-
-        binding.appBarMain.fab?.setOnClickListener { view ->
-            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                .setAction("Action", null)
-                .setAnchorView(R.id.fab).show()
-        }
-
-        val navHostFragment =
-            (supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment?)!!
-        val navController = navHostFragment.navController
-
-        binding.navView?.let {
-            appBarConfiguration = AppBarConfiguration(
-                setOf(
-                    R.id.nav_transform, R.id.nav_reflow, R.id.nav_slideshow, R.id.nav_settings
-                ),
-                binding.drawerLayout
-            )
-            setupActionBarWithNavController(navController, appBarConfiguration)
-            it.setupWithNavController(navController)
-        }
-
-        binding.appBarMain.contentMain.bottomNavView?.let {
-            appBarConfiguration = AppBarConfiguration(
-                setOf(
-                    R.id.nav_transform, R.id.nav_reflow, R.id.nav_slideshow
-                )
-            )
-            setupActionBarWithNavController(navController, appBarConfiguration)
-            it.setupWithNavController(navController)
-        }
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        val result = super.onCreateOptionsMenu(menu)
-        // Using findViewById because NavigationView exists in different layout files
-        // between w600dp and w1240dp
-        val navView: NavigationView? = findViewById(R.id.nav_view)
-        if (navView == null) {
-            // The navigation drawer already has the items including the items in the overflow menu
-            // We only inflate the overflow menu if the navigation drawer isn't visible
-            menuInflater.inflate(R.menu.overflow, menu)
-        }
-        return result
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.nav_settings -> {
-                val navController = findNavController(R.id.nav_host_fragment_content_main)
-                navController.navigate(R.id.nav_settings)
+        enableEdgeToEdge()
+        setContent {
+            ZenithTheme {
+                ZenithApp()
             }
         }
-        return super.onOptionsItemSelected(item)
+    }
+}
+
+@Composable
+fun ZenithApp() {
+    var currentDestination by rememberSaveable { mutableStateOf(AppDestination.PAGE_1) }
+    val adaptiveInfo = currentWindowAdaptiveInfoV2()
+
+    // Small devices (phones / compact width < 600dp) -> NavigationBar
+    // Larger screens (unfolded foldables, tablets, Chromebooks >= 600dp) -> NavigationRail
+    val layoutType = if (
+        adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(
+            WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND
+        )
+    ) {
+        NavigationSuiteType.NavigationRail
+    } else {
+        NavigationSuiteType.NavigationBar
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        val navController = findNavController(R.id.nav_host_fragment_content_main)
-        return navController.navigateUp(appBarConfiguration) || super.onSupportNavigateUp()
+    NavigationSuiteScaffold(
+        layoutType = layoutType,
+        navigationSuiteItems = {
+            AppDestination.entries.forEach { destination ->
+                item(
+                    selected = currentDestination == destination,
+                    onClick = { currentDestination = destination },
+                    icon = {
+                        Icon(
+                            imageVector = destination.icon,
+                            contentDescription = stringResource(destination.labelRes)
+                        )
+                    },
+                    label = { Text(text = stringResource(destination.labelRes)) }
+                )
+            }
+        }
+    ) {
+        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            when (currentDestination) {
+                AppDestination.PAGE_1 -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.PAGE_2 -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.PAGE_3 -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.PAGE_4 -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.PAGE_5 -> BlankPage(modifier = Modifier.padding(innerPadding))
+            }
+        }
     }
+}
+
+@Composable
+fun BlankPage(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize())
 }
