@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.auth.SessionState
+import com.fortind.zenith.ui.games.GamesScreen
 import com.fortind.zenith.ui.login.LoginScreen
 import com.fortind.zenith.ui.profile.ProfileScreen
 import com.fortind.zenith.ui.theme.ZenithTheme
@@ -118,7 +119,7 @@ fun ZenithApp() {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             when (currentDestination) {
                 AppDestination.HOME -> BlankPage(modifier = Modifier.padding(innerPadding))
-                AppDestination.GAMES -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.GAMES -> GamesScreen(modifier = Modifier.padding(innerPadding))
                 AppDestination.SOCIAL -> BlankPage(modifier = Modifier.padding(innerPadding))
                 AppDestination.PROFILE -> ProfileScreen(modifier = Modifier.padding(innerPadding))
                 AppDestination.SETTINGS -> BlankPage(modifier = Modifier.padding(innerPadding))

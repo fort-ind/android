@@ -11,13 +11,10 @@ import org.json.JSONObject
 
 class HttpStatusException(val code: Int) : IOException("HTTP $code")
 
-/** Minimal JSON-over-HTTPS POST helper; every request goes to [FortInstance.HOST]. */
+
 class FortHttp(private val host: String = FortInstance.HOST) {
 
-    /**
-     * Not cancellable on purpose: MiAuth returns the token on the first successful check only, so a
-     * response that arrives while the caller is being cancelled must still be delivered.
-     */
+
     suspend fun postJson(path: String, body: JSONObject): JSONObject =
         withContext(NonCancellable + Dispatchers.IO) {
             val connection = URL("https://$host$path").openConnection() as HttpURLConnection

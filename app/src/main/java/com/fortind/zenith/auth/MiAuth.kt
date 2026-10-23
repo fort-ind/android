@@ -49,14 +49,6 @@ class MiAuthPoller(
     private val timeoutMs: Long = 5 * 60_000,
     private val maxConsecutiveFailures: Int = 5,
 ) {
-    /**
-     * Polls until the session is approved, [timeoutMs] elapses, or the caller cancels.
-     *
-     * Custom Tabs can't report that they were closed, so the caller flips [tabClosed] once the app is
-     * foregrounded again. A check that *started after* that flip is required before giving up, so an
-     * approval made just before the tab closed is never missed. MiAuth hands the token out only once,
-     * so that last check matters.
-     */
     suspend fun poll(session: String, tabClosed: () -> Boolean = { false }): PollOutcome =
         withTimeoutOrNull(timeoutMs) { pollUntilDecided(session, tabClosed) } ?: PollOutcome.TimedOut
 

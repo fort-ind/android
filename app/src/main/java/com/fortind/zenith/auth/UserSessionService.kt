@@ -43,20 +43,13 @@ class UserSessionService(
         }
     }
 
-    /**
-     * Verifies [token] by fetching the current user, and only then persists it, so a failed sign-in
-     * leaves nothing behind. Throws [TokenRejectedException] or another [IOException] on failure.
-     */
+
     suspend fun signIn(token: String) {
         val user = userApi.fetchCurrentUser(token)
         withContext(Dispatchers.IO) { tokenStore.write(token) }
         _state.value = SessionState.SignedIn(user)
     }
 
-    /**
-     * Retries loading the profile after a restore that happened offline. Returns false if it still
-     * couldn't be loaded; a rejected token signs the user out.
-     */
     suspend fun refreshUser(): Boolean {
         val token = token() ?: return false.also { _state.value = SessionState.SignedOut }
         return try {
@@ -74,7 +67,7 @@ class UserSessionService(
         _state.value = SessionState.Guest
     }
 
-    /** Back to the login screen from guest mode. */
+
     fun leaveGuest() {
         if (_state.value == SessionState.Guest) _state.value = SessionState.SignedOut
     }
@@ -84,6 +77,6 @@ class UserSessionService(
         _state.value = SessionState.SignedOut
     }
 
-    /** For authenticated API calls added later. */
+
     suspend fun token(): String? = withContext(Dispatchers.IO) { tokenStore.read() }
 }

@@ -7,16 +7,19 @@ import com.fortind.zenith.auth.HttpUserApi
 import com.fortind.zenith.auth.KeystoreTokenStore
 import com.fortind.zenith.auth.MiAuthApi
 import com.fortind.zenith.auth.UserSessionService
+import com.fortind.zenith.games.AssetGameCatalog
+import com.fortind.zenith.games.GameCatalog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/** Hand-rolled dependency container; small enough that a DI framework would be noise. */
+/** hi **/
 class AppContainer(application: Application) {
     private val http = FortHttp()
     val miAuthApi: MiAuthApi = HttpMiAuthApi(http)
     val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http))
+    val gameCatalog: GameCatalog = AssetGameCatalog(application.assets)
 }
 
 class ZenithApplication : Application() {
