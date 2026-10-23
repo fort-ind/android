@@ -10,7 +10,10 @@
         android:name="android.hardware.type.pc"
         android:required="false" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
+        android:name=".ZenithApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

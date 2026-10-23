@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -27,19 +29,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
+import com.fortind.zenith.auth.SessionState
+import com.fortind.zenith.ui.login.LoginScreen
+import com.fortind.zenith.ui.profile.ProfileScreen
 import com.fortind.zenith.ui.theme.ZenithTheme
 
 enum class AppDestination(
     @param:StringRes val labelRes: Int,
     val icon: ImageVector
 ) {
-    PAGE_1(R.string.page_1, Icons.Default.Home),
-    PAGE_2(R.string.page_2, Icons.Default.Favorite),
-    PAGE_3(R.string.page_3, Icons.Default.DateRange),
-    PAGE_4(R.string.page_4, Icons.Default.AccountCircle),
-    PAGE_5(R.string.page_5, Icons.Default.Settings)
+    HOME(R.string.nav_home, Icons.Default.Home),
+    GAMES(R.string.nav_games, Icons.Default.Favorite),
+    SOCIAL(R.string.nav_social, Icons.Default.DateRange),
+    PROFILE(R.string.nav_profile, Icons.Default.AccountCircle),
+    SETTINGS(R.string.nav_settings, Icons.Default.Settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -48,15 +55,34 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ZenithTheme {
-                ZenithApp()
+                ZenithRoot()
             }
         }
     }
 }
 
 @Composable
+fun ZenithRoot() {
+    val app = LocalContext.current.applicationContext as ZenithApplication
+    val session by app.container.sessionService.state.collectAsStateWithLifecycle()
+
+    when (session) {
+        // Held on a blank background so a stored session doesn't flash the login screen.
+        SessionState.Restoring -> Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        )
+        SessionState.SignedOut -> LoginScreen(
+            onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
+        )
+        is SessionState.SignedIn, SessionState.Guest -> ZenithApp()
+    }
+}
+
+@Composable
 fun ZenithApp() {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestination.PAGE_1) }
+    var currentDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
 
     // Small devices (phones / compact width < 600dp) -> NavigationBar
@@ -91,11 +117,11 @@ fun ZenithApp() {
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             when (currentDestination) {
-                AppDestination.PAGE_1 -> BlankPage(modifier = Modifier.padding(innerPadding))
-                AppDestination.PAGE_2 -> BlankPage(modifier = Modifier.padding(innerPadding))
-                AppDestination.PAGE_3 -> BlankPage(modifier = Modifier.padding(innerPadding))
-                AppDestination.PAGE_4 -> BlankPage(modifier = Modifier.padding(innerPadding))
-                AppDestination.PAGE_5 -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.HOME -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.GAMES -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.SOCIAL -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.PROFILE -> ProfileScreen(modifier = Modifier.padding(innerPadding))
+                AppDestination.SETTINGS -> BlankPage(modifier = Modifier.padding(innerPadding))
             }
         }
     }
