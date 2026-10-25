@@ -1,7 +1,7 @@
 package com.fortind.zenith.ui.login
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
+import com.fortind.zenith.ui.theme.isThemeDark
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,7 +63,7 @@ fun LoginScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = isThemeDark()
     val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
 
     LaunchedEffect(viewModel) {
@@ -119,7 +119,7 @@ fun LoginContent(
     }
 
     Scaffold(modifier = modifier, containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
-        // fillMaxSize before verticalScroll keeps the content centered, and it still scrolls at large font scales.
+        // gay
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -210,7 +210,7 @@ private fun Actions(
                 .heightIn(min = ButtonDefaults.MediumContainerHeight)
                 .then(
                     if (state.signingIn) {
-                        // Live region: TalkBack announces "Signing in…" when the label swaps for the indicator.
+                        // Live region?
                         Modifier.semantics {
                             contentDescription = signingInLabel
                             liveRegion = LiveRegionMode.Polite
@@ -221,7 +221,7 @@ private fun Actions(
                 ),
         ) {
             when {
-                // The indicator is motion, so reduced-motion users get the plain label instead.
+                // motion yay
                 state.signingIn && !reduceMotion -> LoadingIndicator(
                     color = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(32.dp),
@@ -282,14 +282,13 @@ private fun LogoShape.polygon(): RoundedPolygon = when (this) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MorphingLogo(target: LogoShape, reduceMotion: Boolean, modifier: Modifier = Modifier) {
-    // Enters as a pill and morphs into the idle cookie on load.
     val shape = rememberMorphingShape(target.polygon(), reduceMotion, start = MaterialShapes.Pill)
     Box(
         modifier = modifier
             .size(168.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
-            // Decorative: the headline already names the screen.
+            // Decorative
             .clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {

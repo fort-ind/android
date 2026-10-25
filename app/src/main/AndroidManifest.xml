@@ -27,13 +27,35 @@
             android:exported="true"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Zenith"
-            tools:targetApi="24">
+            tools:targetApi="24" />
+
+
+        <activity-alias
+            android:name=".LauncherDefault"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherFall"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_fall"
+            android:roundIcon="@mipmap/ic_launcher_fall_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
     </application>
 
 </manifest>

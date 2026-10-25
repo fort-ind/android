@@ -6,14 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,9 +34,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.auth.SessionState
+import com.fortind.zenith.settings.AppSettings
+import com.fortind.zenith.settings.ThemeMode
 import com.fortind.zenith.ui.games.GamesScreen
+import com.fortind.zenith.ui.icons.GamesIcon
 import com.fortind.zenith.ui.login.LoginScreen
 import com.fortind.zenith.ui.profile.ProfileScreen
+import com.fortind.zenith.ui.ZoomableContent
+import com.fortind.zenith.ui.settings.SettingsScreen
 import com.fortind.zenith.ui.theme.ZenithTheme
 
 enum class AppDestination(
@@ -44,8 +49,8 @@ enum class AppDestination(
     val icon: ImageVector
 ) {
     HOME(R.string.nav_home, Icons.Default.Home),
-    GAMES(R.string.nav_games, Icons.Default.Favorite),
-    SOCIAL(R.string.nav_social, Icons.Default.DateRange),
+    GAMES(R.string.nav_games, GamesIcon),
+    NOTIFICATIONS(R.string.nav_notifications, Icons.Default.Notifications),
     PROFILE(R.string.nav_profile, Icons.Default.AccountCircle),
     SETTINGS(R.string.nav_settings, Icons.Default.Settings)
 }
@@ -55,8 +60,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            ZenithTheme {
-                ZenithRoot()
+            val app = LocalContext.current.applicationContext as ZenithApplication
+            val settings by app.container.settingsStore.settings
+                .collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
+            val current = settings
+            if (current == null) {
+                // Wait for the saved theme so the first frame doesn't flash the default.
+                Box(Modifier.fillMaxSize())
+            } else {
+                val systemDark = isSystemInDarkTheme()
+                ZenithTheme(
+                    darkTheme = when (current.themeMode) {
+                        ThemeMode.SYSTEM -> systemDark
+                        ThemeMode.LIGHT -> false
+                        ThemeMode.DARK -> true
+                    },
+                    dynamicColor = current.dynamicColor,
+                ) {
+                    ZenithRoot()
+                }
             }
         }
     }
@@ -67,17 +89,19 @@ fun ZenithRoot() {
     val app = LocalContext.current.applicationContext as ZenithApplication
     val session by app.container.sessionService.state.collectAsStateWithLifecycle()
 
-    when (session) {
-        // Held on a blank background so a stored session doesn't flash the login screen.
-        SessionState.Restoring -> Box(
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        )
-        SessionState.SignedOut -> LoginScreen(
-            onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
-        )
-        is SessionState.SignedIn, SessionState.Guest -> ZenithApp()
+    ZoomableContent(Modifier.fillMaxSize()) {
+        when (session) {
+            // Held on a blank background so a stored session doesn't flash the login screen.
+            SessionState.Restoring -> Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            )
+            SessionState.SignedOut -> LoginScreen(
+                onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
+            )
+            is SessionState.SignedIn, SessionState.Guest -> ZenithApp()
+        }
     }
 }
 
@@ -86,8 +110,8 @@ fun ZenithApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
 
-    // Small devices (phones / compact width < 600dp) -> NavigationBar
-    // Larger screens (unfolded foldables, tablets, Chromebooks >= 600dp) -> NavigationRail
+    // smol devices (phones < 600dp) -> bottom nav bar
+    // fat screens googlebooks, unfolded devices use a nav rail
     val layoutType = if (
         adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(
             WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND
@@ -120,9 +144,9 @@ fun ZenithApp() {
             when (currentDestination) {
                 AppDestination.HOME -> BlankPage(modifier = Modifier.padding(innerPadding))
                 AppDestination.GAMES -> GamesScreen(modifier = Modifier.padding(innerPadding))
-                AppDestination.SOCIAL -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.NOTIFICATIONS -> BlankPage(modifier = Modifier.padding(innerPadding))
                 AppDestination.PROFILE -> ProfileScreen(modifier = Modifier.padding(innerPadding))
-                AppDestination.SETTINGS -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.SETTINGS -> SettingsScreen(modifier = Modifier.padding(innerPadding))
             }
         }
     }

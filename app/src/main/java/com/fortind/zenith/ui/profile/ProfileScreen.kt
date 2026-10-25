@@ -1,7 +1,6 @@
 package com.fortind.zenith.ui.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +69,7 @@ import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.rememberMorphingShape
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.launch
 
 private val AvatarSize = 112.dp
@@ -85,7 +85,7 @@ fun ProfileScreen(
     var confirmingLogout by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = isThemeDark()
     val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()

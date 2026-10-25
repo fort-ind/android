@@ -6,7 +6,6 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,6 +117,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.games.Game
+import com.fortind.zenith.ui.pointerHover
+import com.fortind.zenith.ui.theme.isThemeDark
 import com.fortind.zenith.games.GameCategory
 import com.fortind.zenith.games.GameSection
 import com.fortind.zenith.games.searchGames
@@ -139,7 +140,7 @@ fun GamesScreen(
 
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = isThemeDark()
     val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -454,6 +455,7 @@ private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
         menuOpen = false
         action(game)
     }
+    var hovered by remember { mutableStateOf(false) }
 
     Box {
         SegmentedListItem(
@@ -464,9 +466,16 @@ private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
             leadingContent = { CategoryBadge(game) },
             supportingContent = { Text(categoryLabel(game.category)) },
             // The default container is the page's own surface color, which hides the segment shapes.
-            colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+            colors = ListItemDefaults.segmentedColors(
+                containerColor = if (hovered) {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                },
+            ),
             modifier = Modifier
                 .fillMaxWidth()
+                .pointerHover { hovered = it }
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -544,12 +553,21 @@ private fun SearchResults(query: String, results: List<Game>, onOpen: (Game) -> 
     }
     LazyColumn(modifier = Modifier.fillMaxWidth()) {
         items(results, key = { it.url }) { game ->
+            var hovered by remember { mutableStateOf(false) }
             ListItem(
                 onClick = { onOpen(game) },
                 leadingContent = { CategoryBadge(game) },
                 supportingContent = { Text(categoryLabel(game.category)) },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                modifier = Modifier.fillMaxWidth(),
+                colors = ListItemDefaults.colors(
+                    containerColor = if (hovered) {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    } else {
+                        Color.Transparent
+                    },
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerHover { hovered = it },
             ) {
                 Text(game.title)
             }

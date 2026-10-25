@@ -15,7 +15,6 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class MiAuthPollerTest {
 
-    /** Replays [script] in order; the last entry repeats once the script is exhausted. */
     private class ScriptedApi(private val script: List<Any>) : MiAuthApi {
         var calls = 0
             private set
@@ -115,15 +114,13 @@ class MiAuthPollerTest {
 
     @Test
     fun approvalMadeJustBeforeTheTabClosedIsStillPickedUp() = runTest {
-        // The check that was already in flight when the tab closed saw nothing; the next one must run
-        // before giving up, because MiAuth only hands the token out once.
         var closed = false
         val api = object : MiAuthApi {
             var calls = 0
             override suspend fun check(session: String): CheckResult {
                 calls++
                 if (calls == 1) {
-                    closed = true // the tab closes while this check is in flight
+                    closed = true
                     return CheckResult.Pending
                 }
                 return CheckResult.Approved("tok")

@@ -29,12 +29,12 @@ class ResponseParsingTest {
     fun currentUserIsParsedFromApiI() {
         val user = parseCurrentUser(
             JSONObject(
-                """{"id":"9abc","username":"ranvir","name":"Ranvir","avatarUrl":"https://x/a.png",
+                """{"id":"9abc","username":"example","name":"Example","avatarUrl":"https://x/a.png",
                     "bannerUrl":"https://x/b.png","host":null}"""
             )
         )
 
-        assertEquals(CurrentUser("9abc", "ranvir", "Ranvir", "https://x/a.png", "https://x/b.png"), user)
+        assertEquals(CurrentUser("9abc", "example", "Example", "https://x/a.png", "https://x/b.png"), user)
     }
 
     @Test
@@ -46,16 +46,16 @@ class ResponseParsingTest {
 
     @Test
     fun handleIsFullyQualifiedToTheFortInstance() {
-        val user = parseCurrentUser(JSONObject("""{"id":"1","username":"ranvir"}"""))
+        val user = parseCurrentUser(JSONObject("""{"id":"1","username":"example"}"""))
 
-        assertEquals("@ranvir@social.fort1nd.com", user.handle)
+        assertEquals("@example@social.fort1nd.com", user.handle)
     }
 
     @Test
     fun displayNameFallsBackToUsername() {
-        val user = parseCurrentUser(JSONObject("""{"id":"1","username":"ranvir","name":null}"""))
+        val user = parseCurrentUser(JSONObject("""{"id":"1","username":"example","name":null}"""))
 
-        assertEquals("ranvir", user.displayName)
+        assertEquals("example", user.displayName)
     }
 
     @Test

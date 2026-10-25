@@ -9,6 +9,10 @@ import com.fortind.zenith.auth.MiAuthApi
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.games.AssetGameCatalog
 import com.fortind.zenith.games.GameCatalog
+import com.fortind.zenith.settings.AppIconSwitcher
+import com.fortind.zenith.settings.DataStoreSettingsStore
+import com.fortind.zenith.settings.PackageManagerAppIconSwitcher
+import com.fortind.zenith.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +24,8 @@ class AppContainer(application: Application) {
     val miAuthApi: MiAuthApi = HttpMiAuthApi(http)
     val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http))
     val gameCatalog: GameCatalog = AssetGameCatalog(application.assets)
+    val settingsStore: SettingsStore = DataStoreSettingsStore(application)
+    val appIconSwitcher: AppIconSwitcher = PackageManagerAppIconSwitcher(application)
 }
 
 class ZenithApplication : Application() {

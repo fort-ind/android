@@ -4,13 +4,19 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+
+/** The theme actually in effect, which can differ from the system setting when the user overrides it. */
+@Composable
+fun isThemeDark(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
 private val DarkColorScheme = darkColorScheme(
     primary = FortDarkPrimary,
