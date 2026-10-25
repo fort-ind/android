@@ -3,6 +3,6 @@
    https://developer.android.com/guide/topics/data/autobackup
 -->
 <full-backup-content>
-    <!-- The session token is wrapped by a device-bound Keystore key, so a restored copy is useless. -->
-    <exclude domain="sharedpref" path="fort_session.xml" />
+
+<exclude domain="sharedpref" path="fort_session.xml" />
 </full-backup-content>
