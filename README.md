@@ -1,5 +1,8 @@
 ## fort.ind on android !!!
 
+> [!NOTE]
+> fort.android is currently being rewritten from scratch, check the master branch for the latest changes
+
 Built using Kotlin fort.ind for Android is a 1:1 recreation of Fort.inds site, but directly into an Android app (natively obv) 
 currently targets android 16
 
