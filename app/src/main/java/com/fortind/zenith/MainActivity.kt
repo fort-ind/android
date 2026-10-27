@@ -32,11 +32,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
+import com.fortind.zenith.ui.ComingSoonPage
 import com.fortind.zenith.ui.games.GamesScreen
+import com.fortind.zenith.ui.games.GamesViewModel
+import com.fortind.zenith.ui.home.HomeScreen
 import com.fortind.zenith.ui.icons.GamesIcon
 import com.fortind.zenith.ui.login.LoginScreen
 import com.fortind.zenith.ui.profile.ProfileScreen
@@ -65,7 +69,6 @@ class MainActivity : ComponentActivity() {
                 .collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
             val current = settings
             if (current == null) {
-                // Wait for the saved theme so the first frame doesn't flash the default.
                 Box(Modifier.fillMaxSize())
             } else {
                 val systemDark = isSystemInDarkTheme()
@@ -91,7 +94,6 @@ fun ZenithRoot() {
 
     ZoomableContent(Modifier.fillMaxSize()) {
         when (session) {
-            // Held on a blank background so a stored session doesn't flash the login screen.
             SessionState.Restoring -> Box(
                 Modifier
                     .fillMaxSize()
@@ -108,10 +110,9 @@ fun ZenithRoot() {
 @Composable
 fun ZenithApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
+    val gamesViewModel: GamesViewModel = viewModel(factory = GamesViewModel.Factory)
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
 
-    // smol devices (phones < 600dp) -> bottom nav bar
-    // fat screens googlebooks, unfolded devices use a nav rail
     val layoutType = if (
         adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(
             WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND
@@ -122,10 +123,17 @@ fun ZenithApp() {
         NavigationSuiteType.NavigationBar
     }
 
+    val isRail = layoutType == NavigationSuiteType.NavigationRail
+
     NavigationSuiteScaffold(
         layoutType = layoutType,
         navigationSuiteItems = {
             AppDestination.entries.forEach { destination ->
+                val labelRes = if (isRail && destination == AppDestination.NOTIFICATIONS) {
+                    R.string.nav_notifications_short
+                } else {
+                    destination.labelRes
+                }
                 item(
                     selected = currentDestination == destination,
                     onClick = { currentDestination = destination },
@@ -135,24 +143,33 @@ fun ZenithApp() {
                             contentDescription = stringResource(destination.labelRes)
                         )
                     },
-                    label = { Text(text = stringResource(destination.labelRes)) }
+                    label = { Text(text = stringResource(labelRes)) }
                 )
             }
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             when (currentDestination) {
-                AppDestination.HOME -> BlankPage(modifier = Modifier.padding(innerPadding))
-                AppDestination.GAMES -> GamesScreen(modifier = Modifier.padding(innerPadding))
-                AppDestination.NOTIFICATIONS -> BlankPage(modifier = Modifier.padding(innerPadding))
+                AppDestination.HOME -> HomeScreen(
+                    onBrowseGames = { currentDestination = AppDestination.GAMES },
+                    onSeeAllFavorites = {
+                        gamesViewModel.showFavorites()
+                        currentDestination = AppDestination.GAMES
+                    },
+                    modifier = Modifier.padding(innerPadding),
+                )
+                AppDestination.GAMES -> GamesScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    viewModel = gamesViewModel,
+                )
+                AppDestination.NOTIFICATIONS -> ComingSoonPage(
+                    title = stringResource(AppDestination.NOTIFICATIONS.labelRes),
+                    icon = AppDestination.NOTIFICATIONS.icon,
+                    modifier = Modifier.padding(innerPadding),
+                )
                 AppDestination.PROFILE -> ProfileScreen(modifier = Modifier.padding(innerPadding))
                 AppDestination.SETTINGS -> SettingsScreen(modifier = Modifier.padding(innerPadding))
             }
         }
     }
-}
-
-@Composable
-fun BlankPage(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize())
 }

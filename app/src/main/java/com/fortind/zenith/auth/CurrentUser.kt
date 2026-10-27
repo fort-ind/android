@@ -12,15 +12,12 @@ data class CurrentUser(
 ) {
     val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: username
 
-    /** `@username@social.fort1nd.com`: the fully qualified Fediverse handle. */
     val handle: String get() = "@$username@${FortInstance.HOST}"
 }
 
-/** The server refused the token (revoked, or the session was never approved). */
 class TokenRejectedException(val code: Int) : IOException("Token rejected (HTTP $code)")
 
 interface UserApi {
-    /** Throws [TokenRejectedException] on 401/403 and other [IOException]s on transport failure. */
     suspend fun fetchCurrentUser(token: String): CurrentUser
 }
 

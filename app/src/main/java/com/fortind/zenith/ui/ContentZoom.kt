@@ -18,10 +18,6 @@ import androidx.compose.ui.unit.Density
 private const val MinZoom = 0.75f
 private const val MaxZoom = 2f
 
-/**
- * Ctrl + mouse wheel zooms [content]. It scales density rather than the layout, so text reflows
- * and stays sharp, the way browser zoom works.
- */
 @Composable
 fun ZoomableContent(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     var zoom by rememberSaveable { mutableFloatStateOf(1f) }
@@ -30,7 +26,6 @@ fun ZoomableContent(modifier: Modifier = Modifier, content: @Composable () -> Un
         modifier = modifier.pointerInput(Unit) {
             awaitPointerEventScope {
                 while (true) {
-                    // Initial pass so a scrollable child doesn't take the wheel first.
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
                         val delta = event.changes.first().scrollDelta.y

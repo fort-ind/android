@@ -3,6 +3,7 @@
     <string name="nav_home">Home</string>
     <string name="nav_games">Games</string>
     <string name="nav_notifications">Notifications</string>
+    <string name="nav_notifications_short">Notifs</string>
     <string name="nav_profile">Profile</string>
     <string name="nav_settings">Settings</string>
 
@@ -51,9 +52,41 @@
     <string name="games_menu_copy_link">Copy link</string>
     <string name="games_menu_share">Share</string>
     <string name="games_link_copied">Link copied!</string>
+    <string name="games_filter_favorites">Favorites</string>
+    <string name="games_no_favorites_title">no favorites yet</string>
+    <string name="games_no_matches_title">no games here :(</string>
+
+    <string name="favorites_add">Add to favorites</string>
+    <string name="favorites_remove">Remove from favorites</string>
+    <string name="favorites_marker">Favorite</string>
+    <string name="favorites_added">Added %1$s to favorites</string>
+    <string name="favorites_removed">Removed %1$s from favorites</string>
+    <string name="favorites_undo">Undo</string>
+    <string name="favorites_how_to">long press a game (or right click it) and pick Add to favorites, it\'ll show up here so you can get to em easily :D</string>
+
+    <string name="home_subtitle">what\'s new + your favorite games</string>
+    <string name="home_favorites_title">Your favorites</string>
+    <plurals name="home_favorites_count">
+        <item quantity="one">%d game</item>
+        <item quantity="other">%d games</item>
+    </plurals>
+    <string name="home_favorites_expanded">Expanded</string>
+    <string name="home_favorites_collapsed">Collapsed</string>
+    <string name="home_favorites_expand">Expand favorites</string>
+    <string name="home_favorites_collapse">Collapse favorites</string>
+    <string name="home_favorites_empty">when you favorite a game it will show here so you can easily get to em :D long press any game in Games (or right click it) and pick Add to favorites</string>
+    <string name="home_favorites_browse">Browse games</string>
+    <string name="home_favorites_see_all">see all your favorites</string>
+    <string name="home_feed_overline">soon :3</string>
+    <string name="home_feed_title">your fort.social feed is moving in</string>
+    <string name="home_feed_body">posts from people you follow will show up right here on Home. hang tight!</string>
+
+    <string name="coming_soon_title">coming soon!</string>
+    <string name="coming_soon_body">%1$s isn\'t ready yet, check back in a future update :3</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_category_appearance">Appearance</string>
+    <string name="settings_category_home">Home</string>
     <string name="settings_category_about">About</string>
     <string name="settings_detail_empty">pick a setting.. any setting :3</string>
     <string name="settings_search_placeholder">Search Settings</string>
@@ -62,6 +95,9 @@
     <string name="settings_search_no_results">No settings match “%1$s”</string>
     <string name="settings_appearance_supporting">Theme and color and other doodads</string>
     <string name="settings_about_supporting">Version and build</string>
+    <string name="settings_home_supporting">Favorites and what shows up first</string>
+    <string name="settings_home_favorites_title">Show favorites</string>
+    <string name="settings_home_favorites_supporting">Keep your favorite games at the top of Home</string>
     <string name="settings_back">Back</string>
     <string name="settings_theme_section">Theme</string>
     <string name="settings_theme_system">System</string>

@@ -11,14 +11,11 @@ sealed interface SessionState {
     data object Restoring : SessionState
     data object SignedOut : SessionState
 
-    /** Browsing the app without an account. Not persisted: a restart returns to the login screen. */
     data object Guest : SessionState
 
-    /** [user] is null only when a stored token couldn't be verified because the device is offline. */
     data class SignedIn(val user: CurrentUser?) : SessionState
 }
 
-/** Process-wide owner of the signed-in session; the single source of truth for "who am I". */
 class UserSessionService(
     private val tokenStore: TokenStore,
     private val userApi: UserApi,
@@ -26,7 +23,6 @@ class UserSessionService(
     private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    /** Loads a stored token, if any, and verifies it against `/api/i`. */
     suspend fun restore() {
         val token = withContext(Dispatchers.IO) { tokenStore.read() }
         if (token == null) {
@@ -42,7 +38,6 @@ class UserSessionService(
             SessionState.SignedIn(user = null)
         }
     }
-
 
     suspend fun signIn(token: String) {
         val user = userApi.fetchCurrentUser(token)
@@ -67,7 +62,6 @@ class UserSessionService(
         _state.value = SessionState.Guest
     }
 
-
     fun leaveGuest() {
         if (_state.value == SessionState.Guest) _state.value = SessionState.SignedOut
     }
@@ -76,7 +70,6 @@ class UserSessionService(
         withContext(Dispatchers.IO) { tokenStore.clear() }
         _state.value = SessionState.SignedOut
     }
-
 
     suspend fun token(): String? = withContext(Dispatchers.IO) { tokenStore.read() }
 }

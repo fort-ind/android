@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
@@ -120,10 +121,10 @@ private enum class SettingsPage(
     val icon: ImageVector,
 ) {
     APPEARANCE(R.string.settings_category_appearance, R.string.settings_appearance_supporting, Icons.Default.Palette),
+    HOME(R.string.settings_category_home, R.string.settings_home_supporting, Icons.Default.Home),
     ABOUT(R.string.settings_category_about, R.string.settings_about_supporting, Icons.Default.Info),
 }
 
-// Each individual setting is searchable; [alsoMatches] covers its option labels (e.g. "Dark" finds Theme).
 private enum class SettingsEntry(
     val page: SettingsPage,
     @param:StringRes val titleRes: Int,
@@ -143,6 +144,11 @@ private enum class SettingsEntry(
         SettingsPage.APPEARANCE,
         R.string.settings_icon_section,
         listOf(R.string.settings_icon_default, R.string.settings_icon_fall),
+    ),
+    HOME_FAVORITES(
+        SettingsPage.HOME,
+        R.string.settings_home_favorites_title,
+        listOf(R.string.settings_home_favorites_supporting, R.string.home_favorites_title),
     ),
     VERSION(SettingsPage.ABOUT, R.string.settings_about_version),
     BUILD(SettingsPage.ABOUT, R.string.settings_about_build),
@@ -166,11 +172,9 @@ fun SettingsScreen(
         navigator = navigator,
         modifier = modifier
             .fillMaxSize()
-            // Handled here rather than in the list pane so Ctrl+F also works while focus is in the detail pane.
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.F) {
                     val listVisible = navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Expanded
-                    // On compact widths the search bar only exists in the list, so go back to it first.
                     if (!listVisible) scope.launch { navigator.navigateBack() }
                     searchRequested = true
                     true
@@ -194,7 +198,6 @@ fun SettingsScreen(
             if (page == null) {
                 EmptyDetail()
             } else {
-                // Back is always offered, since on unfolded screens both panes can be visible and the list isn't a back target.
                 SettingsDetail(
                     page = page,
                     settings = settings,
@@ -202,6 +205,7 @@ fun SettingsScreen(
                     onThemeMode = viewModel::setThemeMode,
                     onDynamicColor = viewModel::setDynamicColor,
                     onAppIcon = viewModel::setAppIcon,
+                    onShowHomeFavorites = viewModel::setShowHomeFavorites,
                     onBack = { scope.launch { navigator.navigateBack() } },
                 )
             }
@@ -226,7 +230,6 @@ private fun SettingsList(
 
     val query = textFieldState.text.toString().trim()
     val entries = SettingsEntry.entries.filter {
-        // Wallpaper-based color is an Android 12 (API 31) feature, so it isn't searchable below that.
         it != SettingsEntry.DYNAMIC_COLOR || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     }
     val labels = entries.associateWith { entry ->
@@ -244,7 +247,6 @@ private fun SettingsList(
             textFieldState = textFieldState,
             searchBarState = searchBarState,
             modifier = Modifier.fillMaxWidth(),
-            // Enter opens the best match, so keyboard users can search and jump without leaving the field.
             onSearch = { results.firstOrNull()?.let(openFromSearch) },
             placeholder = {
                 Text(
@@ -271,7 +273,6 @@ private fun SettingsList(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // The shell's Scaffold already applied the system insets, so the bar must not apply them again.
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             contentWindowInsets = WindowInsets(0),
@@ -329,13 +330,11 @@ private fun SettingsList(
             }
         }
 
-        // Full screen on compact widths, a dropdown under the bar on wider ones, per the M3 search guidance.
         if (!windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)) {
             ExpandedFullScreenSearchBar(state = searchBarState, inputField = inputField) {
                 SearchResults(query = query, results = results, onOpen = openFromSearch)
             }
         } else {
-            // The docked popup wraps its content, which would shrink it to the input field's 360dp minimum.
             ExpandedDockedSearchBar(
                 state = searchBarState,
                 inputField = inputField,
@@ -402,10 +401,12 @@ private fun IconBadge(page: SettingsPage) {
     val colors = MaterialTheme.colorScheme
     val (container, content) = when (page) {
         SettingsPage.APPEARANCE -> colors.primaryContainer to colors.onPrimaryContainer
+        SettingsPage.HOME -> colors.secondaryContainer to colors.onSecondaryContainer
         SettingsPage.ABOUT -> colors.tertiaryContainer to colors.onTertiaryContainer
     }
     val polygon = when (page) {
         SettingsPage.APPEARANCE -> MaterialShapes.Cookie9Sided
+        SettingsPage.HOME -> MaterialShapes.Cookie4Sided
         SettingsPage.ABOUT -> MaterialShapes.Cookie6Sided
     }
     Box(
@@ -427,6 +428,7 @@ private fun SettingsDetail(
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
     onAppIcon: (AppIcon) -> Unit,
+    onShowHomeFavorites: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -482,6 +484,7 @@ private fun SettingsDetail(
                         onDynamicColor = onDynamicColor,
                         onAppIcon = onAppIcon,
                     )
+                    SettingsPage.HOME -> HomeSettings(settings = settings, onShowFavorites = onShowHomeFavorites)
                     SettingsPage.ABOUT -> AboutSettings()
                 }
             }
@@ -500,30 +503,54 @@ private fun AppearanceSettings(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionLabel(R.string.settings_theme_section)
         ThemeModePicker(selected = settings.themeMode, onSelect = onThemeMode)
-        // Wallpaper-based color is an Android 12 (API 31) feature, so the switch only exists there.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             SectionLabel(R.string.settings_color_section)
-            SettingsRow(
-                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
-                action = RowAction.Toggle(checked = settings.dynamicColor, onCheckedChange = onDynamicColor),
-                headline = { Text(stringResource(R.string.settings_dynamic_color_title)) },
-                supporting = { Text(stringResource(R.string.settings_dynamic_color_supporting)) },
-                trailing = {
-                    Switch(
-                        checked = settings.dynamicColor,
-                        onCheckedChange = null,
-                        thumbContent = if (settings.dynamicColor) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
-                        } else {
-                            null
-                        },
-                    )
-                },
+            SwitchRow(
+                checked = settings.dynamicColor,
+                onCheckedChange = onDynamicColor,
+                titleRes = R.string.settings_dynamic_color_title,
+                supportingRes = R.string.settings_dynamic_color_supporting,
             )
         }
         SectionLabel(R.string.settings_icon_section)
         AppIconPicker(selected = appIcon, onSelect = onAppIcon)
     }
+}
+
+@Composable
+private fun HomeSettings(settings: AppSettings, onShowFavorites: (Boolean) -> Unit) {
+    SwitchRow(
+        checked = settings.showHomeFavorites,
+        onCheckedChange = onShowFavorites,
+        titleRes = R.string.settings_home_favorites_title,
+        supportingRes = R.string.settings_home_favorites_supporting,
+    )
+}
+
+@Composable
+private fun SwitchRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    @StringRes titleRes: Int,
+    @StringRes supportingRes: Int,
+) {
+    SettingsRow(
+        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+        action = RowAction.Toggle(checked = checked, onCheckedChange = onCheckedChange),
+        headline = { Text(stringResource(titleRes)) },
+        supporting = { Text(stringResource(supportingRes)) },
+        trailing = {
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                thumbContent = if (checked) {
+                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
+                } else {
+                    null
+                },
+            )
+        },
+    )
 }
 
 @Composable
@@ -633,7 +660,6 @@ private sealed interface RowAction {
     data class Toggle(val checked: Boolean, val onCheckedChange: (Boolean) -> Unit) : RowAction
 }
 
-/** A segmented row. Read-only rows ([RowAction.None]) get no hover cursor or highlight. */
 @Composable
 private fun SettingsRow(
     shapes: ListItemShapes,

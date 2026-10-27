@@ -3,13 +3,10 @@ package com.fortind.zenith.ui.settings
 import com.fortind.zenith.settings.AppIcon
 import com.fortind.zenith.settings.AppIconSwitcher
 import com.fortind.zenith.settings.AppSettings
-import com.fortind.zenith.settings.SettingsStore
+import com.fortind.zenith.settings.FakeSettingsStore
 import com.fortind.zenith.settings.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -70,6 +67,18 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun setShowHomeFavoritesWritesThroughToTheStore() = runTest(dispatcher) {
+        val store = FakeSettingsStore()
+        val viewModel = SettingsViewModel(store, FakeIconSwitcher())
+
+        viewModel.setShowHomeFavorites(false)
+        advanceUntilIdle()
+
+        assertEquals(false, store.current.showHomeFavorites)
+        assertEquals(false, viewModel.settings.value.showHomeFavorites)
+    }
+
+    @Test
     fun appIconStartsAsTheCurrentlyEnabledIcon() = runTest(dispatcher) {
         val viewModel = SettingsViewModel(FakeSettingsStore(), FakeIconSwitcher(AppIcon.FALL))
 
@@ -92,21 +101,6 @@ class SettingsViewModelTest {
 
         override fun set(icon: AppIcon) {
             this.icon = icon
-        }
-    }
-
-    private class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
-        private val state = MutableStateFlow(initial)
-        val current: AppSettings get() = state.value
-
-        override val settings: Flow<AppSettings> = state
-
-        override suspend fun setThemeMode(mode: ThemeMode) {
-            state.update { it.copy(themeMode = mode) }
-        }
-
-        override suspend fun setDynamicColor(enabled: Boolean) {
-            state.update { it.copy(dynamicColor = enabled) }
         }
     }
 }

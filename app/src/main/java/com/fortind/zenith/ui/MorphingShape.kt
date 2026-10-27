@@ -13,11 +13,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
 
-/**
- * A [Shape] that morphs to [target] with the theme's expressive spatial spring whenever it changes.
- * It starts at [start] and morphs to [target] on first composition. With [reduceMotion] it snaps instead. 
- * i find it really cool that materail does this
- */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun rememberMorphingShape(
@@ -37,7 +32,6 @@ fun rememberMorphingShape(
             to = target
             progress.snapTo(1f)
         } else {
-            // If a morph is interrupted halfway, continue from whichever shape is closer.
             from = if (progress.value < 0.5f) from else to
             to = target
             progress.snapTo(0f)

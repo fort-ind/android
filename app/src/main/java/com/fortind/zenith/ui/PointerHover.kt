@@ -7,7 +7,6 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 
-/** Reports mouse or trackpad hover and shows a hand cursor. Touch and stylus don't count as hover. */
 fun Modifier.pointerHover(onHoverChanged: (Boolean) -> Unit): Modifier = this
     .pointerInput(Unit) {
         awaitPointerEventScope {

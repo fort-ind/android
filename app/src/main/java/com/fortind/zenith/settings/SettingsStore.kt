@@ -16,17 +16,20 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
+    val showHomeFavorites: Boolean = true,
+    val homeFavoritesExpanded: Boolean = true,
 )
 
 interface SettingsStore {
     val settings: Flow<AppSettings>
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setDynamicColor(enabled: Boolean)
+    suspend fun setShowHomeFavorites(show: Boolean)
+    suspend fun setHomeFavoritesExpanded(expanded: Boolean)
 }
 
 private val Context.settingsDataStore by preferencesDataStore(
     name = "settings",
-    // Without this, a corrupt file would throw on every launch.
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
@@ -39,6 +42,8 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
                 ?.let { saved -> ThemeMode.entries.firstOrNull { it.name == saved } }
                 ?: ThemeMode.SYSTEM,
             dynamicColor = prefs[DynamicColorKey] ?: true,
+            showHomeFavorites = prefs[ShowHomeFavoritesKey] ?: true,
+            homeFavoritesExpanded = prefs[HomeFavoritesExpandedKey] ?: true,
         )
     }
 
@@ -50,8 +55,18 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         dataStore.edit { it[DynamicColorKey] = enabled }
     }
 
+    override suspend fun setShowHomeFavorites(show: Boolean) {
+        dataStore.edit { it[ShowHomeFavoritesKey] = show }
+    }
+
+    override suspend fun setHomeFavoritesExpanded(expanded: Boolean) {
+        dataStore.edit { it[HomeFavoritesExpandedKey] = expanded }
+    }
+
     private companion object {
         val ThemeModeKey = stringPreferencesKey("theme_mode")
         val DynamicColorKey = booleanPreferencesKey("dynamic_color")
+        val ShowHomeFavoritesKey = booleanPreferencesKey("show_home_favorites")
+        val HomeFavoritesExpandedKey = booleanPreferencesKey("home_favorites_expanded")
     }
 }

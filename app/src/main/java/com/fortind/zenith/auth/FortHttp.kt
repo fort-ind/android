@@ -11,9 +11,7 @@ import org.json.JSONObject
 
 class HttpStatusException(val code: Int) : IOException("HTTP $code")
 
-
 class FortHttp(private val host: String = FortInstance.HOST) {
-
 
     suspend fun postJson(path: String, body: JSONObject): JSONObject =
         withContext(NonCancellable + Dispatchers.IO) {

@@ -8,7 +8,6 @@ import org.junit.Test
 
 class HingeSplitTest {
 
-    // A 1000px window with a zero-width hinge at x=500 and a 200px rail on the left.
     private val hinge = Rect(500f, 0f, 500f, 1000f)
     private val grid = Rect(200f, 0f, 1000f, 1000f)
 
@@ -16,7 +15,6 @@ class HingeSplitTest {
     fun cellsMeetAtTheHingeNotTheGridCenter() {
         val cells = hingeSplitCells(hinge, grid, gutterPx = 20f, clearancePx = 10, LayoutDirection.Ltr)
 
-        // Content starts at 220, so the hinge is 280px in; the content is 760px wide.
         assertEquals(HingeSplitCells(startWidth = 270, endOffset = 290), cells)
     }
 

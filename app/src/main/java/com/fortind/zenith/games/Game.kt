@@ -8,7 +8,6 @@ import java.text.Normalizer
 import java.util.Locale
 import javax.xml.parsers.DocumentBuilderFactory
 
-/** Declared in the order the filter chips show them; [OTHER] catches anything else under /games/. */
 enum class GameCategory(val pathPrefix: String) {
     HTML("games/html/"),
     FLASH("games/flash/"),
@@ -77,7 +76,6 @@ fun sortGames(games: List<Game>): List<Game> =
         titleCollator.compare(a.title, b.title).takeIf { it != 0 } ?: a.category.compareTo(b.category)
     }
 
-/** Letters group under their unaccented capital (É under E); digits and symbols under "#". */
 fun sectionLetter(title: String): String {
     val first = stripMarks(title.take(1)).firstOrNull() ?: return "#"
     return if (first.isLetter()) first.uppercase() else "#"
@@ -85,7 +83,6 @@ fun sectionLetter(title: String): String {
 
 fun sectionGames(games: List<Game>): List<GameSection> =
     games.groupBy { sectionLetter(it.title) }.map { (letter, items) -> GameSection(letter, items) }
-
 
 fun searchGames(games: List<Game>, query: String): List<Game> {
     val needle = searchWords(query).joinToString("")

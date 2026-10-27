@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 
-/** The theme actually in effect, which can differ from the system setting when the user overrides it. */
 @Composable
 fun isThemeDark(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 

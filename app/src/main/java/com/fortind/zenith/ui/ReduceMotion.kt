@@ -12,10 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 
-/**
- * True when the user has turned animations off ("Remove animations" / animator duration scale 0).
- * That setting is the system's reduce-motion signal on every API level we support.
- */
 @Composable
 fun rememberReduceMotion(): Boolean {
     val context = LocalContext.current

@@ -2,10 +2,6 @@ package com.fortind.zenith.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Fallback palette for devices without dynamic color (API < 31) or when it is turned off.
-// Tonal roles generated from the seed #415F91 (a slate "fort" blue). The seed is a placeholder
-// until a brand color is chosen; swap it by regenerating these roles from the new seed.
-
 val FortLightPrimary = Color(0xFF415F91)
 val FortLightOnPrimary = Color(0xFFFFFFFF)
 val FortLightPrimaryContainer = Color(0xFFD6E3FF)

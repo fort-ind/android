@@ -80,7 +80,6 @@ fun LoginScreen(
         }
     }
 
-    // Coming back to the app after launching the tab means the tab was closed.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onReturnedToApp() }
 
     LoginContent(
@@ -119,7 +118,6 @@ fun LoginContent(
     }
 
     Scaffold(modifier = modifier, containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
-        // gay
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -210,7 +208,6 @@ private fun Actions(
                 .heightIn(min = ButtonDefaults.MediumContainerHeight)
                 .then(
                     if (state.signingIn) {
-                        // Live region?
                         Modifier.semantics {
                             contentDescription = signingInLabel
                             liveRegion = LiveRegionMode.Polite
@@ -221,7 +218,6 @@ private fun Actions(
                 ),
         ) {
             when {
-                // motion yay
                 state.signingIn && !reduceMotion -> LoadingIndicator(
                     color = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(32.dp),
@@ -271,7 +267,6 @@ private fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
 
 private enum class LogoShape { Idle, SigningIn, Error }
 
-/** The M3 Expressive shape each logo state morphs into. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 private fun LogoShape.polygon(): RoundedPolygon = when (this) {
     LogoShape.Idle -> MaterialShapes.Cookie9Sided
@@ -288,7 +283,6 @@ private fun MorphingLogo(target: LogoShape, reduceMotion: Boolean, modifier: Mod
             .size(168.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
-            // Decorative
             .clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {

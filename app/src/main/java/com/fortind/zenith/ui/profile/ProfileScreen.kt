@@ -132,7 +132,6 @@ fun ProfileContent(
     val wide = currentWindowAdaptiveInfoV2().windowSizeClass
         .isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
 
-    // Same single column everywhere, capped and centered; the wider the window, the more air around it.
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -179,7 +178,6 @@ fun ProfileContent(
 @Composable
 private fun ProfileHeader(user: CurrentUser, wide: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // The bottom padding reserves the half of the avatar that hangs below the banner.
         Box(modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = (AvatarSize + AvatarRing * 2) / 2)) {
@@ -213,7 +211,6 @@ private fun ProfileHeader(user: CurrentUser, wide: Boolean) {
     }
 }
 
-/** The banner image, over a tonal shape collage that also stands in while loading or when there is none. */
 @Composable
 private fun Banner(url: String?, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
@@ -221,7 +218,7 @@ private fun Banner(url: String?, modifier: Modifier = Modifier) {
         if (url != null) {
             AsyncImage(
                 model = url,
-                contentDescription = null, // decorative
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
             )
@@ -257,14 +254,12 @@ private fun ArtShape(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun Avatar(user: CurrentUser, modifier: Modifier = Modifier) {
-    // Circle on first frame, then it blooms into a 12-sided cookie.
     val shape = rememberMorphingShape(
         target = MaterialShapes.Cookie12Sided,
         reduceMotion = rememberReduceMotion(),
         start = MaterialShapes.Circle,
     )
     val description = stringResource(R.string.profile_avatar_description)
-    // The ring is the page color so the avatar looks cut out of the banner.
     Box(
         modifier = modifier
             .size(AvatarSize + AvatarRing * 2)
@@ -299,7 +294,6 @@ private fun Avatar(user: CurrentUser, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProfileActions(onManageOnWeb: () -> Unit, onLogOut: () -> Unit) {
-    // Two across when they fit, stacked at large font scales.
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -381,7 +375,6 @@ private fun RetryButton(refreshing: Boolean, onRetry: () -> Unit) {
     }
 }
 
-/** Centered shape + title + body + actions, used when there is no profile to show. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun StatusMessage(

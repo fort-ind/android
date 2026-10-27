@@ -54,8 +54,6 @@ class LoginViewModel(
     private var completing = false
 
     init {
-        // The process died while the browser was open: the poller is gone, but the session may have
-        // been approved in the meantime, so make one last check and then give up.
         savedState.get<String>(KEY_SESSION)?.let { session ->
             tabClosed = true
             _uiState.value = LoginUiState(signingIn = true)
@@ -84,14 +82,12 @@ class LoginViewModel(
         fail(LoginError.NoBrowser)
     }
 
-    /** Called on every resume. Returning from the Custom Tab means the user closed it. */
     fun onReturnedToApp() {
         if (!tabOpened || completing) return
         tabOpened = false
         tabClosed = true
     }
 
-    /** The user backed out while we were waiting; returns to a clean idle state without an error. */
     fun onCancel() {
         authJob?.cancel()
         reset()

@@ -8,7 +8,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 object MiAuthUrl {
     private val SCOPE_FORMAT = Regex("[a-z-]+:[a-z-]+(:[a-z-]+)?")
 
-    /** `https://<host>/miauth/<session>?name=<name>&permission=<a,b,c>` */
     fun authorize(
         host: String = FortInstance.HOST,
         session: String,
@@ -30,7 +29,6 @@ sealed interface CheckResult {
 }
 
 interface MiAuthApi {
-    /** One poll of the check endpoint. Throws [IOException] on transport or parse failure. */
     suspend fun check(session: String): CheckResult
 }
 
@@ -38,7 +36,6 @@ sealed interface PollOutcome {
     data class Approved(val token: String) : PollOutcome
     data object TimedOut : PollOutcome
 
-    /** The user left the browser without approving. */
     data object Abandoned : PollOutcome
     data class NetworkFailure(val cause: IOException) : PollOutcome
 }

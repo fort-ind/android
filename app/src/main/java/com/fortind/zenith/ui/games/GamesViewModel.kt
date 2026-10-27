@@ -8,6 +8,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.games.FavoriteEditor
+import com.fortind.zenith.games.FavoriteNotice
+import com.fortind.zenith.games.FavoritesStore
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.games.GameCatalog
 import com.fortind.zenith.games.GameCategory
@@ -27,8 +30,11 @@ sealed interface GamesUiState {
     data object Loading : GamesUiState
     data object Failed : GamesUiState
 
-    /** [games] is the whole catalog (what search looks through); [sections] is it after the category filter. */
-    data class Loaded(val games: List<Game>, val sections: List<GameSection>) : GamesUiState
+    data class Loaded(
+        val games: List<Game>,
+        val sections: List<GameSection>,
+        val favorites: Set<String>,
+    ) : GamesUiState
 }
 
 private sealed interface CatalogState {
@@ -39,10 +45,15 @@ private sealed interface CatalogState {
 
 class GamesViewModel(
     private val catalog: GameCatalog,
+    favoritesStore: FavoritesStore,
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
     private val catalogState = MutableStateFlow<CatalogState>(CatalogState.Loading)
+
+    private val favoriteEditor = FavoriteEditor(favoritesStore, viewModelScope)
+
+    val favoriteNotice: StateFlow<FavoriteNotice?> = favoriteEditor.notice
 
     private val _selectedCategories = MutableStateFlow(
         savedState.get<List<String>>(KEY_CATEGORIES).orEmpty()
@@ -50,16 +61,27 @@ class GamesViewModel(
             .toSet()
     )
 
-    /** Empty means no filter: every category is shown. */
     val selectedCategories: StateFlow<Set<GameCategory>> = _selectedCategories.asStateFlow()
 
-    val uiState: StateFlow<GamesUiState> = combine(catalogState, _selectedCategories) { state, selected ->
+    private val _favoritesOnly = MutableStateFlow(savedState.get<Boolean>(KEY_FAVORITES_ONLY) ?: false)
+
+    val favoritesOnly: StateFlow<Boolean> = _favoritesOnly.asStateFlow()
+
+    val uiState: StateFlow<GamesUiState> = combine(
+        catalogState,
+        _selectedCategories,
+        _favoritesOnly,
+        favoritesStore.urls,
+    ) { state, selected, favoritesOnly, favoriteUrls ->
         when (state) {
             CatalogState.Loading -> GamesUiState.Loading
             CatalogState.Failed -> GamesUiState.Failed
             is CatalogState.Loaded -> {
-                val shown = if (selected.isEmpty()) state.games else state.games.filter { it.category in selected }
-                GamesUiState.Loaded(games = state.games, sections = sectionGames(shown))
+                val favorites = favoriteUrls.toSet()
+                val shown = state.games.filter { game ->
+                    (selected.isEmpty() || game.category in selected) && (!favoritesOnly || game.url in favorites)
+                }
+                GamesUiState.Loaded(games = state.games, sections = sectionGames(shown), favorites = favorites)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GamesUiState.Loading)
@@ -78,9 +100,30 @@ class GamesViewModel(
         savedState[KEY_CATEGORIES] = ArrayList(updated.map { it.name })
     }
 
-    fun clearCategories() {
+    fun clearFilters() {
         _selectedCategories.value = emptySet()
         savedState[KEY_CATEGORIES] = ArrayList<String>()
+        setFavoritesOnly(false)
+    }
+
+    fun toggleFavoritesOnly() {
+        setFavoritesOnly(!_favoritesOnly.value)
+    }
+
+    fun showFavorites() {
+        clearFilters()
+        setFavoritesOnly(true)
+    }
+
+    fun toggleFavorite(game: Game) = favoriteEditor.toggle(game)
+
+    fun undoFavorite(notice: FavoriteNotice) = favoriteEditor.undo(notice)
+
+    fun favoriteNoticeShown(notice: FavoriteNotice) = favoriteEditor.noticeShown(notice)
+
+    private fun setFavoritesOnly(favoritesOnly: Boolean) {
+        _favoritesOnly.value = favoritesOnly
+        savedState[KEY_FAVORITES_ONLY] = favoritesOnly
     }
 
     private fun load() {
@@ -98,11 +141,12 @@ class GamesViewModel(
 
     companion object {
         private const val KEY_CATEGORIES = "selected_categories"
+        private const val KEY_FAVORITES_ONLY = "favorites_only"
 
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ZenithApplication
-                GamesViewModel(app.container.gameCatalog, createSavedStateHandle())
+                GamesViewModel(app.container.gameCatalog, app.container.favoritesStore, createSavedStateHandle())
             }
         }
     }

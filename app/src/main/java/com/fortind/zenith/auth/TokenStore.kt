@@ -17,11 +17,6 @@ interface TokenStore {
     fun clear()
 }
 
-/**
- * Keeps the token AES-GCM encrypted with a non-exportable AndroidKeyStore key (available since API 23).
- * Only `iv + ciphertext` ever touches disk. If the key is gone or invalidated, the stored value is
- * unreadable and is treated as signed out.
- */
 class KeystoreTokenStore(context: Context) : TokenStore {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

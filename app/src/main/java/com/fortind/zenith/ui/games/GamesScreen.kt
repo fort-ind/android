@@ -1,8 +1,5 @@
 package com.fortind.zenith.ui.games
 
-import android.content.ClipData
-import android.content.Intent
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -78,7 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -95,9 +93,6 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -118,16 +113,13 @@ import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.ui.pointerHover
-import com.fortind.zenith.ui.theme.isThemeDark
 import com.fortind.zenith.games.GameCategory
 import com.fortind.zenith.games.GameSection
 import com.fortind.zenith.games.searchGames
-import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.rememberReduceMotion
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
-// Matches the input field's own maximum, so the chips line up under the search bar.
 private val HeaderMaxWidth = 720.dp
 
 @Composable
@@ -137,64 +129,41 @@ fun GamesScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
-
-    val context = LocalContext.current
-    val clipboard = LocalClipboard.current
-    val darkTheme = isThemeDark()
-    val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
+    val favoritesOnly by viewModel.favoritesOnly.collectAsStateWithLifecycle()
+    val favoriteNotice by viewModel.favoriteNotice.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val noBrowserMessage = stringResource(R.string.login_error_no_browser)
-    val linkCopiedMessage = stringResource(R.string.games_link_copied)
+
+    FavoriteNoticeEffect(
+        notice = favoriteNotice,
+        snackbarHostState = snackbarHostState,
+        onUndo = viewModel::undoFavorite,
+        onShown = viewModel::favoriteNoticeShown,
+    )
 
     Box(modifier = modifier.fillMaxSize()) {
         GamesContent(
             state = state,
             selectedCategories = selectedCategories,
+            favoritesOnly = favoritesOnly,
             onToggleCategory = viewModel::toggleCategory,
-            onClearCategories = viewModel::clearCategories,
+            onToggleFavoritesOnly = viewModel::toggleFavoritesOnly,
+            onClearFilters = viewModel::clearFilters,
             onRetry = viewModel::retry,
-            actions = GameActions(
-                open = { game ->
-                    if (!launchCustomTab(context, game.url, darkTheme, toolbarColor)) {
-                        scope.launch { snackbarHostState.showSnackbar(noBrowserMessage) }
-                    }
-                },
-                copyLink = { game ->
-                    scope.launch {
-                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(game.title, game.url)))
-                        // Android 13+ shows its own confirmation for clipboard writes.
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                            snackbarHostState.showSnackbar(linkCopiedMessage)
-                        }
-                    }
-                },
-                share = { game ->
-                    val send = Intent(Intent.ACTION_SEND)
-                        .setType("text/plain")
-                        .putExtra(Intent.EXTRA_SUBJECT, game.title)
-                        .putExtra(Intent.EXTRA_TEXT, game.url)
-                    context.startActivity(Intent.createChooser(send, game.title))
-                },
-            ),
+            actions = gameActions(snackbarHostState, onToggleFavorite = viewModel::toggleFavorite),
         )
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
-
-class GameActions(
-    val open: (Game) -> Unit,
-    val copyLink: (Game) -> Unit,
-    val share: (Game) -> Unit,
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GamesContent(
     state: GamesUiState,
     selectedCategories: Set<GameCategory>,
+    favoritesOnly: Boolean,
     onToggleCategory: (GameCategory) -> Unit,
-    onClearCategories: () -> Unit,
+    onToggleFavoritesOnly: () -> Unit,
+    onClearFilters: () -> Unit,
     onRetry: () -> Unit,
     actions: GameActions,
     modifier: Modifier = Modifier,
@@ -232,7 +201,6 @@ fun GamesContent(
             textFieldState = textFieldState,
             searchBarState = searchBarState,
             modifier = Modifier.fillMaxWidth(),
-            // Enter opens the best match, so keyboard users can search and launch without leaving the field.
             onSearch = { results.firstOrNull()?.let(openFromSearch) },
             placeholder = {
                 Text(
@@ -268,8 +236,10 @@ fun GamesContent(
             )
             CategoryChips(
                 selected = selectedCategories,
+                favoritesOnly = favoritesOnly,
                 onToggle = onToggleCategory,
-                onClear = onClearCategories,
+                onToggleFavoritesOnly = onToggleFavoritesOnly,
+                onClear = onClearFilters,
             )
         }
     }
@@ -277,13 +247,18 @@ fun GamesContent(
         when (state) {
             GamesUiState.Loading -> LoadingState()
             GamesUiState.Failed -> FailedState(onRetry = onRetry)
-            is GamesUiState.Loaded -> GameGrid(
-                sections = state.sections,
-                columns = columns,
-                gutter = gutter,
-                bookHinge = bookHinge,
-                actions = actions,
-            )
+            is GamesUiState.Loaded -> if (state.sections.isEmpty()) {
+                EmptyFilterState(favoritesOnly = favoritesOnly)
+            } else {
+                GameGrid(
+                    sections = state.sections,
+                    favorites = state.favorites,
+                    columns = columns,
+                    gutter = gutter,
+                    bookHinge = bookHinge,
+                    actions = actions,
+                )
+            }
         }
     }
 
@@ -302,7 +277,6 @@ fun GamesContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (tabletopHinge != null) {
-            // Tabletop: games on the upright half, search and filters on the flat half within thumb reach.
             with(density) {
                 Box(Modifier.height((tabletopHinge.top - contentTopInWindow).coerceAtLeast(0f).toDp())) { body() }
                 Spacer(Modifier.height(tabletopHinge.height.toDp()))
@@ -314,14 +288,11 @@ fun GamesContent(
         }
     }
 
-    // Full screen on compact widths, a dropdown under the bar on wider ones, per the M3 search guidance.
-    // In tabletop the dropdown would open toward the keyboard, so results go full screen there too.
     if (columns == 1 || tabletopHinge != null) {
         ExpandedFullScreenSearchBar(state = searchBarState, inputField = inputField) {
             SearchResults(query = query, results = results, onOpen = openFromSearch)
         }
     } else {
-        // The docked popup wraps its content, which would shrink it to the input field's 360dp minimum.
         ExpandedDockedSearchBar(
             state = searchBarState,
             inputField = inputField,
@@ -348,7 +319,9 @@ private fun SearchLeadingIcon(searchBarState: SearchBarState) {
 @Composable
 private fun CategoryChips(
     selected: Set<GameCategory>,
+    favoritesOnly: Boolean,
     onToggle: (GameCategory) -> Unit,
+    onToggleFavoritesOnly: () -> Unit,
     onClear: () -> Unit,
 ) {
     Row(
@@ -357,7 +330,17 @@ private fun CategoryChips(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CategoryChip(label = stringResource(R.string.games_filter_all), selected = selected.isEmpty(), onClick = onClear)
+        CategoryChip(
+            label = stringResource(R.string.games_filter_all),
+            selected = selected.isEmpty() && !favoritesOnly,
+            onClick = onClear,
+        )
+        CategoryChip(
+            label = stringResource(R.string.games_filter_favorites),
+            selected = favoritesOnly,
+            onClick = onToggleFavoritesOnly,
+            unselectedIcon = Icons.Default.Star,
+        )
         GameCategory.entries.forEach { category ->
             CategoryChip(
                 label = categoryLabel(category),
@@ -369,15 +352,19 @@ private fun CategoryChips(
 }
 
 @Composable
-private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun CategoryChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    unselectedIcon: ImageVector? = null,
+) {
+    val icon = if (selected) Icons.Default.Check else unselectedIcon
     FilterChip(
         selected = selected,
         onClick = onClick,
         label = { Text(label) },
-        leadingIcon = if (selected) {
-            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-        } else {
-            null
+        leadingIcon = icon?.let {
+            { Icon(it, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
         },
     )
 }
@@ -386,6 +373,7 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 @Composable
 private fun GameGrid(
     sections: List<GameSection>,
+    favorites: Set<String>,
     columns: Int,
     gutter: Dp,
     bookHinge: Rect?,
@@ -397,7 +385,6 @@ private fun GameGrid(
     val hingeSplit = bookHinge?.let {
         with(density) { hingeSplitCells(it, gridBoundsInWindow, gutter.toPx(), HingeClearance.roundToPx(), layoutDirection) }
     }
-    // A single column reads as one segmented list per letter; in a grid each item stands alone.
     val segmented = columns == 1 && hingeSplit == null
     LazyVerticalGrid(
         columns = hingeSplit ?: GridCells.Fixed(columns),
@@ -416,6 +403,7 @@ private fun GameGrid(
             itemsIndexed(section.games, key = { _, game -> game.url }, contentType = { _, _ -> "game" }) { index, game ->
                 GameItem(
                     game = game,
+                    favorite = game.url in favorites,
                     shapes = if (segmented) {
                         ListItemDefaults.segmentedShapes(index = index, count = section.games.size)
                     } else {
@@ -430,7 +418,6 @@ private fun GameGrid(
 
 @Composable
 private fun SectionHeader(letter: String) {
-    // Opaque so items scroll underneath it while it's pinned.
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Text(
             text = letter,
@@ -444,7 +431,14 @@ private fun SectionHeader(letter: String) {
 }
 
 @Composable
-private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
+internal fun GameItem(
+    game: Game,
+    favorite: Boolean,
+    shapes: ListItemShapes,
+    actions: GameActions,
+    modifier: Modifier = Modifier,
+    showFavoriteMarker: Boolean = true,
+) {
     var menuOpen by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
     val showMenu = { offset: DpOffset ->
@@ -457,7 +451,7 @@ private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
     }
     var hovered by remember { mutableStateOf(false) }
 
-    Box {
+    Box(modifier = modifier) {
         SegmentedListItem(
             onClick = { actions.open(game) },
             shapes = shapes,
@@ -465,7 +459,17 @@ private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
             onLongClickLabel = stringResource(R.string.games_menu_label, game.title),
             leadingContent = { CategoryBadge(game) },
             supportingContent = { Text(categoryLabel(game.category)) },
-            // The default container is the page's own surface color, which hides the segment shapes.
+            trailingContent = if (favorite && showFavoriteMarker) {
+                {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = stringResource(R.string.favorites_marker),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            } else {
+                null
+            },
             colors = ListItemDefaults.segmentedColors(
                 containerColor = if (hovered) {
                     MaterialTheme.colorScheme.surfaceContainerHigh
@@ -482,7 +486,6 @@ private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
                         if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
                             val position = event.changes.first().position
                             event.changes.forEach { it.consume() }
-                            // DropdownMenu offsets from the anchor's bottom-start, so lift it to the pointer.
                             showMenu(DpOffset(position.x.toDp(), (position.y - size.height).toDp()))
                         }
                     }
@@ -503,6 +506,9 @@ private fun GameItem(game: Game, shapes: ListItemShapes, actions: GameActions) {
             GameMenuItem(R.string.games_menu_open) { closeMenuThen(actions.open) }
             GameMenuItem(R.string.games_menu_copy_link) { closeMenuThen(actions.copyLink) }
             GameMenuItem(R.string.games_menu_share) { closeMenuThen(actions.share) }
+            GameMenuItem(if (favorite) R.string.favorites_remove else R.string.favorites_add) {
+                closeMenuThen(actions.toggleFavorite)
+            }
         }
     }
 }
@@ -512,10 +518,9 @@ private fun GameMenuItem(labelRes: Int, onClick: () -> Unit) {
     DropdownMenuItem(text = { Text(stringResource(labelRes)) }, onClick = onClick)
 }
 
-/** The shape tells the categories apart at a glance; the supporting text says it for screen readers. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun CategoryBadge(game: Game) {
+internal fun CategoryBadge(game: Game) {
     val colors = MaterialTheme.colorScheme
     val (polygon: RoundedPolygon, container: Color, content: Color) = when (game.category) {
         GameCategory.HTML -> Triple(MaterialShapes.Cookie4Sided, colors.primaryContainer, colors.onPrimaryContainer)
@@ -617,9 +622,34 @@ private fun FailedState(onRetry: () -> Unit) {
     }
 }
 
-// Keeps items a thumb's width off the crease rather than flush against it.
-private val HingeClearance = 12.dp
+@Composable
+private fun EmptyFilterState(favoritesOnly: Boolean) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+    ) {
+        Text(
+            text = stringResource(if (favoritesOnly) R.string.games_no_favorites_title else R.string.games_no_matches_title),
+            style = MaterialTheme.typography.titleLargeEmphasized,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
+        )
+        if (favoritesOnly) {
+            Text(
+                text = stringResource(R.string.favorites_how_to),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = HeaderMaxWidth),
+            )
+        }
+    }
+}
 
+private val HingeClearance = 12.dp
 
 internal fun hingeSplitCells(
     hinge: Rect,
@@ -640,12 +670,10 @@ internal fun hingeSplitCells(
     return HingeSplitCells(startEdge.roundToInt() - clearancePx, endEdge.roundToInt() + clearancePx)
 }
 
-
 internal data class HingeSplitCells(val startWidth: Int, val endOffset: Int) : GridCells {
     override fun Density.calculateCrossAxisCellSizes(availableSize: Int, spacing: Int): List<Int> =
         listOf(startWidth, (availableSize - endOffset).coerceAtLeast(0))
 }
-
 
 private object HingeSplitArrangement : Arrangement.Horizontal {
     override fun Density.arrange(
@@ -661,7 +689,7 @@ private object HingeSplitArrangement : Arrangement.Horizontal {
 }
 
 @Composable
-private fun categoryLabel(category: GameCategory): String = stringResource(
+internal fun categoryLabel(category: GameCategory): String = stringResource(
     when (category) {
         GameCategory.HTML -> R.string.games_category_html
         GameCategory.FLASH -> R.string.games_category_flash

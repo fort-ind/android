@@ -11,10 +11,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.graphics.shapes.Morph
 
-/**
- * A [Shape] for one frame of a [Morph]. material3 1.5.0-beta02 only offers `Morph.toPath`, with no
- * `Morph.toShape`, so this does the same scale-and-center step that `RoundedPolygon.toShape` does.
- */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 class MorphShape(private val morph: Morph, private val progress: Float) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {

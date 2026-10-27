@@ -23,7 +23,6 @@ class SettingsViewModel(
     private val iconSwitcher: AppIconSwitcher,
 ) : ViewModel() {
 
-    // Eager, so the saved values are already here when the page opens.
     val settings: StateFlow<AppSettings> = store.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
@@ -41,6 +40,10 @@ class SettingsViewModel(
 
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch { store.setDynamicColor(enabled) }
+    }
+
+    fun setShowHomeFavorites(show: Boolean) {
+        viewModelScope.launch { store.setShowHomeFavorites(show) }
     }
 
     companion object {

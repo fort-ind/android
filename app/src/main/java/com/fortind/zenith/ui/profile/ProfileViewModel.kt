@@ -20,14 +20,12 @@ import kotlinx.coroutines.launch
 sealed interface ProfileUiState {
     data class Loaded(val user: CurrentUser) : ProfileUiState
 
-    /** Signed in, but the profile couldn't be loaded (the app was restored while offline). */
     data object Unavailable : ProfileUiState
     data object Guest : ProfileUiState
 }
 
 class ProfileViewModel(private val session: UserSessionService) : ViewModel() {
 
-    // Restoring/SignedOut mean the screen is already on its way out, so keep showing the last state.
     val uiState: StateFlow<ProfileUiState> = session.state
         .mapNotNull { state ->
             when (state) {
@@ -54,7 +52,6 @@ class ProfileViewModel(private val session: UserSessionService) : ViewModel() {
         viewModelScope.launch { session.signOut() }
     }
 
-    /** From the guest profile: head back to the login screen. */
     fun logIn() = session.leaveGuest()
 
     companion object {
