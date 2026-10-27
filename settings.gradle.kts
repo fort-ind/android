@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "fort.android"
 include(":app")
+include(":baselineprofile")
