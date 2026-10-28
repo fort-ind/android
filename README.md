@@ -10,7 +10,7 @@ wanna test it out? grab one of the releases or bulid it
 - Internet access to download dependencies the first time
 Quick CLI build (Unix/macOS)
 ```bash
-git clone https://github.com/fort-ind/android.git
+git clone https://git.thesillysociety.net/fort.ind/android.git
 cd android
 # build an apk
 ./gradlew assembleDebug
@@ -21,7 +21,7 @@ cd android
 
 Quick CLI build (Windows)
 ```powershell
-git clone https://github.com/fort-ind/android.git
+git clone https://git.thesillysociety.net/fort.ind/android.git
 cd android
 # build an apk
 gradlew.bat assembleDebug
