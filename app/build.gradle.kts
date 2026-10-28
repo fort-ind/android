@@ -21,7 +21,7 @@ android {
         applicationId = "com.fortind.zenith"
         minSdk = 27
         targetSdk = 37
-        versionCode = 1
+        versionCode = providers.environmentVariable("BUILD_NUMBER").map(String::toInt).getOrElse(1)
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
