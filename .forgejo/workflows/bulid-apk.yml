@@ -31,6 +31,13 @@ jobs:
           distribution: temurin
           java-version: "25"
 
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/sdk
+          key: android-sdk-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'app/build.gradle.kts') }}
+          restore-keys: android-sdk-${{ runner.os }}-
+
       - name: Set up Android SDK
         uses: https://github.com/android-actions/setup-android@v3
         with:
@@ -46,6 +53,7 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - name: Restore signing keystore
+        if: forgejo.ref == 'refs/heads/master'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -78,14 +86,16 @@ jobs:
         run: rm -f release.keystore keystore.properties
 
       - name: Upload release APK
-        uses: actions/upload-artifact@v3
+        if: forgejo.ref == 'refs/heads/master'
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: fort-android-release-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload R8 mapping
-        uses: actions/upload-artifact@v3
+        if: forgejo.ref == 'refs/heads/master'
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: fort-android-r8-mapping
           path: app/build/outputs/mapping/release/mapping.txt
