@@ -6,6 +6,7 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -13,7 +14,29 @@ class HttpStatusException(val code: Int) : IOException("HTTP $code")
 
 class FortHttp(private val host: String = FortInstance.HOST) {
 
-    suspend fun postJson(path: String, body: JSONObject): JSONObject =
+    suspend fun postJson(path: String, body: JSONObject): JSONObject {
+        val text = post(path, body)
+        return try {
+            JSONObject(text)
+        } catch (e: JSONException) {
+            throw IOException("Malformed response", e)
+        }
+    }
+
+    suspend fun postJsonArray(path: String, body: JSONObject): JSONArray {
+        val text = post(path, body)
+        return try {
+            JSONArray(text)
+        } catch (e: JSONException) {
+            throw IOException("Malformed response", e)
+        }
+    }
+
+    suspend fun postDiscardingResponse(path: String, body: JSONObject) {
+        post(path, body)
+    }
+
+    private suspend fun post(path: String, body: JSONObject): String =
         withContext(NonCancellable + Dispatchers.IO) {
             val connection = URL("https://$host$path").openConnection() as HttpURLConnection
             try {
@@ -27,12 +50,7 @@ class FortHttp(private val host: String = FortInstance.HOST) {
 
                 val code = connection.responseCode
                 if (code !in 200..299) throw HttpStatusException(code)
-                val text = connection.inputStream.bufferedReader().use { it.readText() }
-                try {
-                    JSONObject(text)
-                } catch (e: JSONException) {
-                    throw IOException("Malformed response", e)
-                }
+                if (code == HttpURLConnection.HTTP_NO_CONTENT) "" else connection.inputStream.bufferedReader().use { it.readText() }
             } finally {
                 connection.disconnect()
             }

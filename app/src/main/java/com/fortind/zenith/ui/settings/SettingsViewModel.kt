@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.notifications.NotificationCategory
 import com.fortind.zenith.settings.AppIcon
 import com.fortind.zenith.settings.AppIconSwitcher
 import com.fortind.zenith.settings.AppSettings
@@ -46,11 +47,22 @@ class SettingsViewModel(
         viewModelScope.launch { store.setShowHomeFavorites(show) }
     }
 
+    fun setSystemNotifications(enabled: Boolean) {
+        viewModelScope.launch { store.setSystemNotifications(enabled) }
+    }
+
+    fun setNotificationCategory(category: NotificationCategory, enabled: Boolean) {
+        viewModelScope.launch { store.setNotificationCategory(category, enabled) }
+    }
+
     companion object {
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ZenithApplication
-                SettingsViewModel(app.container.settingsStore, app.container.appIconSwitcher)
+                SettingsViewModel(
+                    store = app.container.settingsStore,
+                    iconSwitcher = app.container.appIconSwitcher,
+                )
             }
         }
     }

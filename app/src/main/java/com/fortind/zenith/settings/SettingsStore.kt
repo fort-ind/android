@@ -7,7 +7,10 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.fortind.zenith.notifications.DefaultNotificationCategories
+import com.fortind.zenith.notifications.NotificationCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -18,6 +21,8 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val showHomeFavorites: Boolean = true,
     val homeFavoritesExpanded: Boolean = true,
+    val systemNotifications: Boolean = false,
+    val notificationCategories: Set<NotificationCategory> = DefaultNotificationCategories,
 )
 
 interface SettingsStore {
@@ -26,6 +31,8 @@ interface SettingsStore {
     suspend fun setDynamicColor(enabled: Boolean)
     suspend fun setShowHomeFavorites(show: Boolean)
     suspend fun setHomeFavoritesExpanded(expanded: Boolean)
+    suspend fun setSystemNotifications(enabled: Boolean)
+    suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean)
 }
 
 private val Context.settingsDataStore by preferencesDataStore(
@@ -44,6 +51,10 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
             dynamicColor = prefs[DynamicColorKey] ?: true,
             showHomeFavorites = prefs[ShowHomeFavoritesKey] ?: true,
             homeFavoritesExpanded = prefs[HomeFavoritesExpandedKey] ?: true,
+            systemNotifications = prefs[SystemNotificationsKey] ?: false,
+            notificationCategories = prefs[NotificationCategoriesKey]
+                ?.mapNotNullTo(mutableSetOf()) { saved -> NotificationCategory.entries.firstOrNull { it.name == saved } }
+                ?: DefaultNotificationCategories,
         )
     }
 
@@ -63,10 +74,23 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         dataStore.edit { it[HomeFavoritesExpandedKey] = expanded }
     }
 
+    override suspend fun setSystemNotifications(enabled: Boolean) {
+        dataStore.edit { it[SystemNotificationsKey] = enabled }
+    }
+
+    override suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean) {
+        dataStore.edit { prefs ->
+            val current = prefs[NotificationCategoriesKey] ?: DefaultNotificationCategories.map { it.name }.toSet()
+            prefs[NotificationCategoriesKey] = if (enabled) current + category.name else current - category.name
+        }
+    }
+
     private companion object {
         val ThemeModeKey = stringPreferencesKey("theme_mode")
         val DynamicColorKey = booleanPreferencesKey("dynamic_color")
         val ShowHomeFavoritesKey = booleanPreferencesKey("show_home_favorites")
         val HomeFavoritesExpandedKey = booleanPreferencesKey("home_favorites_expanded")
+        val SystemNotificationsKey = booleanPreferencesKey("system_notifications")
+        val NotificationCategoriesKey = stringSetPreferencesKey("notification_categories")
     }
 }

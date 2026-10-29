@@ -1,5 +1,6 @@
 package com.fortind.zenith
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -23,6 +26,7 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,23 +34,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
-import com.fortind.zenith.ui.ComingSoonPage
 import com.fortind.zenith.ui.games.GamesScreen
 import com.fortind.zenith.ui.games.GamesViewModel
 import com.fortind.zenith.ui.home.HomeScreen
 import com.fortind.zenith.ui.icons.GamesIcon
 import com.fortind.zenith.ui.login.LoginScreen
+import com.fortind.zenith.ui.notifications.NotificationsScreen
+import com.fortind.zenith.ui.notifications.NotificationsViewModel
 import com.fortind.zenith.ui.profile.ProfileScreen
 import com.fortind.zenith.ui.ZoomableContent
 import com.fortind.zenith.ui.settings.SettingsScreen
 import com.fortind.zenith.ui.theme.ZenithTheme
+import kotlinx.coroutines.launch
+
+private const val MAX_BADGE_COUNT = 99
 
 enum class AppDestination(
     @param:StringRes val labelRes: Int,
@@ -60,9 +70,14 @@ enum class AppDestination(
 }
 
 class MainActivity : ComponentActivity() {
+    private val requestedDestination = mutableStateOf<AppDestination?>(null)
+
+    private val container get() = (application as ZenithApplication).container
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) requestedDestination.value = destinationFrom(intent)
         setContent {
             val app = LocalContext.current.applicationContext as ZenithApplication
             val settings by app.container.settingsStore.settings
@@ -80,15 +95,49 @@ class MainActivity : ComponentActivity() {
                     },
                     dynamicColor = current.dynamicColor,
                 ) {
-                    ZenithRoot()
+                    ZenithRoot(
+                        requestedDestination = requestedDestination.value,
+                        onRequestedDestinationHandled = { requestedDestination.value = null },
+                    )
                 }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        destinationFrom(intent)?.let { requestedDestination.value = it }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        container.foregroundTracker.inForeground = true
+        container.systemNotifier.clearAll()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        container.foregroundTracker.inForeground = false
+        container.scope.launch { container.notificationSyncer.acknowledgeSeen() }
+    }
+
+    private fun destinationFrom(intent: Intent?): AppDestination? =
+        when (intent?.getStringExtra(EXTRA_DESTINATION)) {
+            DESTINATION_NOTIFICATIONS -> AppDestination.NOTIFICATIONS
+            else -> null
+        }
+
+    companion object {
+        const val EXTRA_DESTINATION = "com.fortind.zenith.extra.DESTINATION"
+        const val DESTINATION_NOTIFICATIONS = "notifications"
+    }
 }
 
 @Composable
-fun ZenithRoot() {
+fun ZenithRoot(
+    requestedDestination: AppDestination?,
+    onRequestedDestinationHandled: () -> Unit,
+) {
     val app = LocalContext.current.applicationContext as ZenithApplication
     val session by app.container.sessionService.state.collectAsStateWithLifecycle()
 
@@ -102,16 +151,36 @@ fun ZenithRoot() {
             SessionState.SignedOut -> LoginScreen(
                 onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
             )
-            is SessionState.SignedIn, SessionState.Guest -> ZenithApp()
+            is SessionState.SignedIn, SessionState.Guest -> ZenithApp(
+                requestedDestination = requestedDestination,
+                onRequestedDestinationHandled = onRequestedDestinationHandled,
+            )
         }
     }
 }
 
 @Composable
-fun ZenithApp() {
+fun ZenithApp(
+    requestedDestination: AppDestination?,
+    onRequestedDestinationHandled: () -> Unit,
+) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     val gamesViewModel: GamesViewModel = viewModel(factory = GamesViewModel.Factory)
+    val notificationsViewModel: NotificationsViewModel = viewModel(factory = NotificationsViewModel.Factory)
+    val unreadCount by notificationsViewModel.unreadCount.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
+
+    LaunchedEffect(requestedDestination) {
+        if (requestedDestination != null) {
+            currentDestination = requestedDestination
+            onRequestedDestinationHandled()
+        }
+    }
+
+    LifecycleStartEffect(notificationsViewModel) {
+        notificationsViewModel.setForeground(true)
+        onStopOrDispose { notificationsViewModel.setForeground(false) }
+    }
 
     val layoutType = if (
         adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(
@@ -138,10 +207,27 @@ fun ZenithApp() {
                     selected = currentDestination == destination,
                     onClick = { currentDestination = destination },
                     icon = {
-                        Icon(
-                            imageVector = destination.icon,
-                            contentDescription = stringResource(destination.labelRes)
-                        )
+                        if (destination == AppDestination.NOTIFICATIONS && unreadCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge {
+                                        Text(
+                                            if (unreadCount > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else unreadCount.toString()
+                                        )
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = pluralStringResource(R.plurals.nav_notifications_unread, unreadCount, unreadCount)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = destination.icon,
+                                contentDescription = stringResource(destination.labelRes)
+                            )
+                        }
                     },
                     label = { Text(text = stringResource(labelRes)) }
                 )
@@ -162,9 +248,8 @@ fun ZenithApp() {
                     modifier = Modifier.padding(innerPadding),
                     viewModel = gamesViewModel,
                 )
-                AppDestination.NOTIFICATIONS -> ComingSoonPage(
-                    title = stringResource(AppDestination.NOTIFICATIONS.labelRes),
-                    icon = AppDestination.NOTIFICATIONS.icon,
+                AppDestination.NOTIFICATIONS -> NotificationsScreen(
+                    viewModel = notificationsViewModel,
                     modifier = Modifier.padding(innerPadding),
                 )
                 AppDestination.PROFILE -> ProfileScreen(modifier = Modifier.padding(innerPadding))

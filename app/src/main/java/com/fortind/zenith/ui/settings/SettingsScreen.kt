@@ -6,7 +6,12 @@
 
 package com.fortind.zenith.ui.settings
 
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,11 +36,15 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ButtonGroupDefaults
@@ -77,6 +86,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +101,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -104,11 +115,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.BuildConfig
 import com.fortind.zenith.R
+import com.fortind.zenith.notifications.NotificationCategory
 import com.fortind.zenith.settings.AppIcon
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
@@ -122,6 +137,11 @@ private enum class SettingsPage(
 ) {
     APPEARANCE(R.string.settings_category_appearance, R.string.settings_appearance_supporting, Icons.Default.Palette),
     HOME(R.string.settings_category_home, R.string.settings_home_supporting, Icons.Default.Home),
+    NOTIFICATIONS(
+        R.string.settings_category_notifications,
+        R.string.settings_notifications_supporting,
+        Icons.Default.Notifications,
+    ),
     ABOUT(R.string.settings_category_about, R.string.settings_about_supporting, Icons.Default.Info),
 }
 
@@ -149,6 +169,23 @@ private enum class SettingsEntry(
         SettingsPage.HOME,
         R.string.settings_home_favorites_title,
         listOf(R.string.settings_home_favorites_supporting, R.string.home_favorites_title),
+    ),
+    SYSTEM_NOTIFICATIONS(
+        SettingsPage.NOTIFICATIONS,
+        R.string.settings_notifications_title,
+        listOf(
+            R.string.settings_notifications_switch_supporting,
+            R.string.settings_notifications_type_mentions,
+            R.string.settings_notifications_type_reactions,
+            R.string.settings_notifications_type_renotes,
+            R.string.settings_notifications_type_follows,
+            R.string.settings_notifications_type_other,
+        ),
+    ),
+    PUSH_DELIVERY(
+        SettingsPage.NOTIFICATIONS,
+        R.string.settings_notifications_delivery_section,
+        listOf(R.string.settings_notifications_delivery_title),
     ),
     VERSION(SettingsPage.ABOUT, R.string.settings_about_version),
     BUILD(SettingsPage.ABOUT, R.string.settings_about_build),
@@ -206,6 +243,8 @@ fun SettingsScreen(
                     onDynamicColor = viewModel::setDynamicColor,
                     onAppIcon = viewModel::setAppIcon,
                     onShowHomeFavorites = viewModel::setShowHomeFavorites,
+                    onSystemNotifications = viewModel::setSystemNotifications,
+                    onNotificationCategory = viewModel::setNotificationCategory,
                     onBack = { scope.launch { navigator.navigateBack() } },
                 )
             }
@@ -402,11 +441,13 @@ private fun IconBadge(page: SettingsPage) {
     val (container, content) = when (page) {
         SettingsPage.APPEARANCE -> colors.primaryContainer to colors.onPrimaryContainer
         SettingsPage.HOME -> colors.secondaryContainer to colors.onSecondaryContainer
+        SettingsPage.NOTIFICATIONS -> colors.primaryContainer to colors.onPrimaryContainer
         SettingsPage.ABOUT -> colors.tertiaryContainer to colors.onTertiaryContainer
     }
     val polygon = when (page) {
         SettingsPage.APPEARANCE -> MaterialShapes.Cookie9Sided
         SettingsPage.HOME -> MaterialShapes.Cookie4Sided
+        SettingsPage.NOTIFICATIONS -> MaterialShapes.Cookie7Sided
         SettingsPage.ABOUT -> MaterialShapes.Cookie6Sided
     }
     Box(
@@ -429,6 +470,8 @@ private fun SettingsDetail(
     onDynamicColor: (Boolean) -> Unit,
     onAppIcon: (AppIcon) -> Unit,
     onShowHomeFavorites: (Boolean) -> Unit,
+    onSystemNotifications: (Boolean) -> Unit,
+    onNotificationCategory: (NotificationCategory, Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -485,6 +528,11 @@ private fun SettingsDetail(
                         onAppIcon = onAppIcon,
                     )
                     SettingsPage.HOME -> HomeSettings(settings = settings, onShowFavorites = onShowHomeFavorites)
+                    SettingsPage.NOTIFICATIONS -> NotificationSettings(
+                        settings = settings,
+                        onSystemNotifications = onSystemNotifications,
+                        onCategory = onNotificationCategory,
+                    )
                     SettingsPage.ABOUT -> AboutSettings()
                 }
             }
@@ -532,13 +580,14 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     @StringRes titleRes: Int,
-    @StringRes supportingRes: Int,
+    @StringRes supportingRes: Int?,
+    shapes: ListItemShapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
 ) {
     SettingsRow(
-        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+        shapes = shapes,
         action = RowAction.Toggle(checked = checked, onCheckedChange = onCheckedChange),
         headline = { Text(stringResource(titleRes)) },
-        supporting = { Text(stringResource(supportingRes)) },
+        supporting = supportingRes?.let { { Text(stringResource(it)) } },
         trailing = {
             Switch(
                 checked = checked,
@@ -639,6 +688,99 @@ private fun ThemeModePicker(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) 
 }
 
 @Composable
+private fun NotificationSettings(
+    settings: AppSettings,
+    onSystemNotifications: (Boolean) -> Unit,
+    onCategory: (NotificationCategory, Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    var allowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+    var requestDenied by rememberSaveable { mutableStateOf(false) }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        allowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        allowed = granted
+        requestDenied = !granted
+        if (granted) onSystemNotifications(true)
+    }
+
+    val openSystemSettings = {
+        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+        try {
+            context.startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+        }
+    }
+
+    val onToggle = { enable: Boolean ->
+        when {
+            !enable -> onSystemNotifications(false)
+            allowed -> onSystemNotifications(true)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else -> {
+                requestDenied = true
+                onSystemNotifications(true)
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SwitchRow(
+            checked = settings.systemNotifications,
+            onCheckedChange = onToggle,
+            titleRes = R.string.settings_notifications_title,
+            supportingRes = R.string.settings_notifications_switch_supporting,
+        )
+        if (!allowed && (settings.systemNotifications || requestDenied)) {
+            SettingsRow(
+                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                action = RowAction.Click(openSystemSettings),
+                leading = { Icon(Icons.Default.NotificationsOff, contentDescription = null) },
+                headline = { Text(stringResource(R.string.settings_notifications_blocked_title)) },
+                supporting = { Text(stringResource(R.string.settings_notifications_blocked_body)) },
+                trailing = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = stringResource(R.string.settings_notifications_open_settings),
+                    )
+                },
+            )
+        }
+        if (settings.systemNotifications) {
+            SectionLabel(R.string.settings_notifications_types_section)
+            Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                NotificationCategory.entries.forEachIndexed { index, category ->
+                    SwitchRow(
+                        checked = category in settings.notificationCategories,
+                        onCheckedChange = { onCategory(category, it) },
+                        titleRes = category.labelRes,
+                        supportingRes = null,
+                        shapes = ListItemDefaults.segmentedShapes(index = index, count = NotificationCategory.entries.size),
+                    )
+                }
+            }
+            SectionLabel(R.string.settings_notifications_delivery_section)
+            DeliveryRow()
+        }
+    }
+}
+
+@Composable
+private fun DeliveryRow() {
+    SettingsRow(
+        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+        leading = { Icon(Icons.Default.Schedule, contentDescription = null) },
+        headline = { Text(stringResource(R.string.settings_notifications_delivery_title)) },
+        supporting = { Text(stringResource(R.string.settings_notifications_delivery_body)) },
+    )
+}
+
+@Composable
 private fun AboutSettings() {
     Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
         SettingsRow(
@@ -658,6 +800,7 @@ private sealed interface RowAction {
     data object None : RowAction
     data class Select(val selected: Boolean, val onClick: () -> Unit) : RowAction
     data class Toggle(val checked: Boolean, val onCheckedChange: (Boolean) -> Unit) : RowAction
+    data class Click(val onClick: () -> Unit) : RowAction
 }
 
 @Composable
@@ -694,6 +837,16 @@ private fun SettingsRow(
         )
         is RowAction.Select -> SegmentedListItem(
             selected = action.selected,
+            onClick = action.onClick,
+            shapes = shapes,
+            modifier = modifier,
+            colors = colors,
+            leadingContent = leading,
+            supportingContent = supporting,
+            trailingContent = trailing,
+            content = headline,
+        )
+        is RowAction.Click -> SegmentedListItem(
             onClick = action.onClick,
             shapes = shapes,
             modifier = modifier,

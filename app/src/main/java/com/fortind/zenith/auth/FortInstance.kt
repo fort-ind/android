@@ -5,5 +5,5 @@ object FortInstance {
     const val APP_NAME = "fort.android"
     const val SETTINGS_URL = "https://$HOST/settings"
 
-    val SCOPES = listOf("read:account")
+    val SCOPES = listOf("read:account", "read:notifications", "write:notifications", "write:following")
 }

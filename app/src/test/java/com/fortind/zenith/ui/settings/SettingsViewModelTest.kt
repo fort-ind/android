@@ -1,5 +1,7 @@
 package com.fortind.zenith.ui.settings
 
+import com.fortind.zenith.notifications.DefaultNotificationCategories
+import com.fortind.zenith.notifications.NotificationCategory
 import com.fortind.zenith.settings.AppIcon
 import com.fortind.zenith.settings.AppIconSwitcher
 import com.fortind.zenith.settings.AppSettings
@@ -76,6 +78,39 @@ class SettingsViewModelTest {
 
         assertEquals(false, store.current.showHomeFavorites)
         assertEquals(false, viewModel.settings.value.showHomeFavorites)
+    }
+
+    @Test
+    fun systemNotificationsAreOffByDefaultAndCanBeToggled() = runTest(dispatcher) {
+        val store = FakeSettingsStore()
+        val viewModel = SettingsViewModel(store, FakeIconSwitcher())
+        assertEquals(false, store.current.systemNotifications)
+
+        viewModel.setSystemNotifications(true)
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.settings.value.systemNotifications)
+    }
+
+    @Test
+    fun notificationCategoriesCanBeTurnedOnAndOff() = runTest(dispatcher) {
+        val store = FakeSettingsStore()
+        val viewModel = SettingsViewModel(store, FakeIconSwitcher())
+        assertEquals(DefaultNotificationCategories, store.current.notificationCategories)
+
+        viewModel.setNotificationCategory(NotificationCategory.Reactions, false)
+        viewModel.setNotificationCategory(NotificationCategory.Other, true)
+        advanceUntilIdle()
+
+        assertEquals(
+            setOf(
+                NotificationCategory.Mentions,
+                NotificationCategory.Renotes,
+                NotificationCategory.Follows,
+                NotificationCategory.Other,
+            ),
+            viewModel.settings.value.notificationCategories,
+        )
     }
 
     @Test

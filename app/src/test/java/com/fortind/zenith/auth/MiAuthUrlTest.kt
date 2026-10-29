@@ -12,7 +12,8 @@ class MiAuthUrlTest {
 
         assertEquals(
             "https://social.fort1nd.com/miauth/7f3c1d2e-0000-4000-8000-000000000001" +
-                "?name=fort.android&permission=read:account",
+                "?name=fort.android" +
+                "&permission=read:account,read:notifications,write:notifications,write:following",
             url,
         )
     }
@@ -40,7 +41,11 @@ class MiAuthUrlTest {
     fun appNameIsPercentEncoded() {
         val url = MiAuthUrl.authorize(session = "s", appName = "fort & friends")
 
-        assertEquals("https://social.fort1nd.com/miauth/s?name=fort%20%26%20friends&permission=read:account", url)
+        assertEquals(
+            "https://social.fort1nd.com/miauth/s?name=fort%20%26%20friends" +
+                "&permission=read:account,read:notifications,write:notifications,write:following",
+            url,
+        )
     }
 
     @Test

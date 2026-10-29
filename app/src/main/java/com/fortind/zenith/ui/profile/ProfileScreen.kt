@@ -67,6 +67,8 @@ import coil3.compose.AsyncImage
 import com.fortind.zenith.R
 import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.FortInstance
+import com.fortind.zenith.ui.PrimaryButton
+import com.fortind.zenith.ui.StatusMessage
 import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.rememberMorphingShape
 import com.fortind.zenith.ui.rememberReduceMotion
@@ -343,20 +345,6 @@ private fun LogOutButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val size = ButtonDefaults.MediumContainerHeight
-    Button(
-        onClick = onClick,
-        shapes = ButtonDefaults.shapes(),
-        contentPadding = ButtonDefaults.contentPaddingFor(size),
-        modifier = modifier.heightIn(min = size),
-    ) {
-        Text(label, style = MaterialTheme.typography.titleMedium)
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
 private fun RetryButton(refreshing: Boolean, onRetry: () -> Unit) {
     val label = stringResource(R.string.profile_retry)
     val size = ButtonDefaults.MediumContainerHeight
@@ -373,44 +361,6 @@ private fun RetryButton(refreshing: Boolean, onRetry: () -> Unit) {
         } else {
             Text(label, style = MaterialTheme.typography.titleMedium)
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun StatusMessage(
-    shape: RoundedPolygon,
-    title: String,
-    body: String,
-    actions: @Composable () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(shape.toShape())
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMediumEmphasized,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.size(8.dp))
-        actions()
     }
 }
 

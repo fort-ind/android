@@ -62,6 +62,20 @@ fun LoginScreen(
     viewModel: LoginViewModel = viewModel(factory = LoginViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    AuthPageEffects(viewModel)
+
+    LoginContent(
+        state = state,
+        onLogIn = viewModel::onSignInClick,
+        onCancel = viewModel::onCancel,
+        onBrowseWithoutSigningIn = onBrowseWithoutSigningIn,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun AuthPageEffects(viewModel: LoginViewModel) {
     val context = LocalContext.current
     val darkTheme = isThemeDark()
     val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
@@ -81,14 +95,6 @@ fun LoginScreen(
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onReturnedToApp() }
-
-    LoginContent(
-        state = state,
-        onLogIn = viewModel::onSignInClick,
-        onCancel = viewModel::onCancel,
-        onBrowseWithoutSigningIn = onBrowseWithoutSigningIn,
-        modifier = modifier,
-    )
 }
 
 @Composable
@@ -241,7 +247,7 @@ private fun Actions(
 }
 
 @Composable
-private fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
+internal fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
     val message = when (error) {
         LoginError.Cancelled -> stringResource(R.string.login_error_cancelled)
         LoginError.TimedOut -> stringResource(R.string.login_error_timed_out)

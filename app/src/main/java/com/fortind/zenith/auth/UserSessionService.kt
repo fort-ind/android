@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 sealed interface SessionState {
@@ -22,6 +23,9 @@ class UserSessionService(
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
     val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    private val _credentialsVersion = MutableStateFlow(0)
+    val credentialsVersion: StateFlow<Int> = _credentialsVersion.asStateFlow()
 
     suspend fun restore() {
         val token = withContext(Dispatchers.IO) { tokenStore.read() }
@@ -42,6 +46,7 @@ class UserSessionService(
     suspend fun signIn(token: String) {
         val user = userApi.fetchCurrentUser(token)
         withContext(Dispatchers.IO) { tokenStore.write(token) }
+        _credentialsVersion.update { it + 1 }
         _state.value = SessionState.SignedIn(user)
     }
 
