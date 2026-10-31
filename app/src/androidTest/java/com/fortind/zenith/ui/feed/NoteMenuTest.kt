@@ -1,12 +1,12 @@
 package com.fortind.zenith.ui.feed
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteUser
 import com.fortind.zenith.timeline.ReactionAcceptance
@@ -86,6 +86,7 @@ class NoteMenuTest {
         bookmarked: Set<String> = emptySet(),
         checking: Set<String> = emptySet(),
     ) {
+        val playback = FeedPlayback(InstrumentationRegistry.getInstrumentation().targetContext)
         rule.setContent {
             ZenithTheme(dynamicColor = false) {
                 val environment = NoteEnvironment(
@@ -100,7 +101,7 @@ class NoteMenuTest {
                     emojiUrl = { "" },
                     mfm = rememberMfmEnvironment({ "" }, animate = false),
                     selectedNoteId = null,
-                    playback = FeedPlayback(LocalContext.current),
+                    playback = playback,
                 )
                 Column { NoteMenuItems(note, environment, callbacks()) {} }
             }

@@ -26,7 +26,7 @@
     <string name="profile_logout_confirm_title">Log out of fort.android?</string>
     <string name="profile_logout_confirm_body">you wont be able to post, view your profile and a bunch of other really cool things :(</string>
     <string name="profile_logout_stay">Stay logged in</string>
-    <string name="profile_unavailable_title">ouch.. we cant load your profile</string>
+    <string name="profile_unavailable_title">ouch.. we can\'t load your profile</string>
     <string name="profile_unavailable_body">Check your connection and try again.</string>
     <string name="profile_retry">Retry</string>
     <string name="profile_guest_title">hey!!!</string>
@@ -151,7 +151,7 @@
     <string name="note_menu_delete">Delete</string>
     <string name="note_menu_redraft">Delete &amp; redraft</string>
     <string name="note_delete_title">Delete this post?</string>
-    <string name="note_delete_body">This can\'t be undone... the post will get murdered and not exist- ya sure?</string>
+    <string name="note_delete_body">This can\'t be undone… the post will get murdered and not exist- ya sure?</string>
     <string name="note_delete_confirm">Delete</string>
     <string name="note_redraft_title">Delete and redraft?</string>
     <string name="note_redraft_body">The post is deleted and its text and media open in a new post so you can fix and repost it. Reactions and renotes on it are DEAD however.</string>
