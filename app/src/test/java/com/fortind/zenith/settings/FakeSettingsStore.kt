@@ -31,6 +31,10 @@ class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
         state.update { it.copy(systemNotifications = enabled) }
     }
 
+    override suspend fun setCompressUploads(enabled: Boolean) {
+        state.update { it.copy(compressUploads = enabled) }
+    }
+
     override suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean) {
         state.update {
             it.copy(

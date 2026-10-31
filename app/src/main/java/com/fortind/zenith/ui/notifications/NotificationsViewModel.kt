@@ -10,7 +10,7 @@ import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.notifications.FortNotification
-import com.fortind.zenith.notifications.MissingPermissionException
+import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.notifications.NotificationStream
 import com.fortind.zenith.notifications.NotificationStreamEvent
 import com.fortind.zenith.notifications.NotificationType

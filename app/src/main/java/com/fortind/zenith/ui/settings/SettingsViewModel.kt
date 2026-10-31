@@ -12,10 +12,8 @@ import com.fortind.zenith.settings.AppIconSwitcher
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.SettingsStore
 import com.fortind.zenith.settings.ThemeMode
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -27,12 +25,10 @@ class SettingsViewModel(
     val settings: StateFlow<AppSettings> = store.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    private val _appIcon = MutableStateFlow(iconSwitcher.current())
-    val appIcon: StateFlow<AppIcon> = _appIcon.asStateFlow()
+    val appIcon: StateFlow<AppIcon> = iconSwitcher.selected
 
     fun setAppIcon(icon: AppIcon) {
         iconSwitcher.set(icon)
-        _appIcon.value = iconSwitcher.current()
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -45,6 +41,10 @@ class SettingsViewModel(
 
     fun setShowHomeFavorites(show: Boolean) {
         viewModelScope.launch { store.setShowHomeFavorites(show) }
+    }
+
+    fun setCompressUploads(enabled: Boolean) {
+        viewModelScope.launch { store.setCompressUploads(enabled) }
     }
 
     fun setSystemNotifications(enabled: Boolean) {

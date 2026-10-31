@@ -125,6 +125,7 @@ import com.fortind.zenith.BuildConfig
 import com.fortind.zenith.R
 import com.fortind.zenith.notifications.NotificationCategory
 import com.fortind.zenith.settings.AppIcon
+import androidx.compose.material.icons.filled.Edit
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
 import com.fortind.zenith.ui.pointerHover
@@ -137,6 +138,7 @@ private enum class SettingsPage(
 ) {
     APPEARANCE(R.string.settings_category_appearance, R.string.settings_appearance_supporting, Icons.Default.Palette),
     HOME(R.string.settings_category_home, R.string.settings_home_supporting, Icons.Default.Home),
+    POSTING(R.string.settings_category_posting, R.string.settings_posting_supporting, Icons.Default.Edit),
     NOTIFICATIONS(
         R.string.settings_category_notifications,
         R.string.settings_notifications_supporting,
@@ -169,6 +171,11 @@ private enum class SettingsEntry(
         SettingsPage.HOME,
         R.string.settings_home_favorites_title,
         listOf(R.string.settings_home_favorites_supporting, R.string.home_favorites_title),
+    ),
+    COMPRESS_UPLOADS(
+        SettingsPage.POSTING,
+        R.string.settings_compress_title,
+        listOf(R.string.settings_compress_supporting),
     ),
     SYSTEM_NOTIFICATIONS(
         SettingsPage.NOTIFICATIONS,
@@ -243,6 +250,7 @@ fun SettingsScreen(
                     onDynamicColor = viewModel::setDynamicColor,
                     onAppIcon = viewModel::setAppIcon,
                     onShowHomeFavorites = viewModel::setShowHomeFavorites,
+                    onCompressUploads = viewModel::setCompressUploads,
                     onSystemNotifications = viewModel::setSystemNotifications,
                     onNotificationCategory = viewModel::setNotificationCategory,
                     onBack = { scope.launch { navigator.navigateBack() } },
@@ -441,12 +449,14 @@ private fun IconBadge(page: SettingsPage) {
     val (container, content) = when (page) {
         SettingsPage.APPEARANCE -> colors.primaryContainer to colors.onPrimaryContainer
         SettingsPage.HOME -> colors.secondaryContainer to colors.onSecondaryContainer
+        SettingsPage.POSTING -> colors.tertiaryContainer to colors.onTertiaryContainer
         SettingsPage.NOTIFICATIONS -> colors.primaryContainer to colors.onPrimaryContainer
         SettingsPage.ABOUT -> colors.tertiaryContainer to colors.onTertiaryContainer
     }
     val polygon = when (page) {
         SettingsPage.APPEARANCE -> MaterialShapes.Cookie9Sided
         SettingsPage.HOME -> MaterialShapes.Cookie4Sided
+        SettingsPage.POSTING -> MaterialShapes.Cookie12Sided
         SettingsPage.NOTIFICATIONS -> MaterialShapes.Cookie7Sided
         SettingsPage.ABOUT -> MaterialShapes.Cookie6Sided
     }
@@ -470,6 +480,7 @@ private fun SettingsDetail(
     onDynamicColor: (Boolean) -> Unit,
     onAppIcon: (AppIcon) -> Unit,
     onShowHomeFavorites: (Boolean) -> Unit,
+    onCompressUploads: (Boolean) -> Unit,
     onSystemNotifications: (Boolean) -> Unit,
     onNotificationCategory: (NotificationCategory, Boolean) -> Unit,
     onBack: () -> Unit,
@@ -528,6 +539,7 @@ private fun SettingsDetail(
                         onAppIcon = onAppIcon,
                     )
                     SettingsPage.HOME -> HomeSettings(settings = settings, onShowFavorites = onShowHomeFavorites)
+                    SettingsPage.POSTING -> PostingSettings(settings = settings, onCompressUploads = onCompressUploads)
                     SettingsPage.NOTIFICATIONS -> NotificationSettings(
                         settings = settings,
                         onSystemNotifications = onSystemNotifications,
@@ -572,6 +584,16 @@ private fun HomeSettings(settings: AppSettings, onShowFavorites: (Boolean) -> Un
         onCheckedChange = onShowFavorites,
         titleRes = R.string.settings_home_favorites_title,
         supportingRes = R.string.settings_home_favorites_supporting,
+    )
+}
+
+@Composable
+private fun PostingSettings(settings: AppSettings, onCompressUploads: (Boolean) -> Unit) {
+    SwitchRow(
+        checked = settings.compressUploads,
+        onCheckedChange = onCompressUploads,
+        titleRes = R.string.settings_compress_title,
+        supportingRes = R.string.settings_compress_supporting,
     )
 }
 

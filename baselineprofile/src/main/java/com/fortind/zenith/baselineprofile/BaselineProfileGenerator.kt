@@ -29,6 +29,7 @@ class BaselineProfileGenerator {
             pressHome()
             startActivityAndWait()
             browseAsGuest()
+            browseFeed()
         }
     }
 }

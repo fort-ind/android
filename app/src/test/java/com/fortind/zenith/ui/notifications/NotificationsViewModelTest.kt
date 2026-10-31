@@ -3,12 +3,12 @@ package com.fortind.zenith.ui.notifications
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
-import com.fortind.zenith.auth.HttpStatusException
+import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.notifications.FakeNotificationStream
 import com.fortind.zenith.notifications.FakeNotificationsApi
 import com.fortind.zenith.notifications.FakeTokenStore
 import com.fortind.zenith.notifications.FakeUserApi
-import com.fortind.zenith.notifications.MissingPermissionException
+import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.notifications.NotificationStreamEvent
 import com.fortind.zenith.notifications.NotificationType
 import com.fortind.zenith.notifications.testNotification
@@ -16,7 +16,9 @@ import java.io.IOException
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -38,7 +40,11 @@ class NotificationsViewModelTest {
 
     @After
     fun tearDown() {
-        fixtures.filter { it.viewModelCreated.isInitialized() }.forEach { it.viewModel.viewModelScope.cancel() }
+        runBlocking {
+            fixtures.filter { it.viewModelCreated.isInitialized() }.forEach {
+                it.viewModel.viewModelScope.coroutineContext.job.cancelAndJoin()
+            }
+        }
         Dispatchers.resetMain()
     }
 

@@ -1,5 +1,6 @@
 package com.fortind.zenith.notifications
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -7,22 +8,14 @@ import org.junit.Test
 
 class NotificationStreamTest {
 
-    private fun channelMessage(channelId: String, type: String, body: String? = null) = buildString {
-        append("""{"type":"channel","body":{"id":"$channelId","type":"$type"""")
-        if (body != null) append(""","body":$body""")
-        append("}}")
-    }
-
     @Test
     fun notificationEventCarriesTheParsedNotification() {
-        val message = channelMessage(
-            "main",
-            "notification",
+        val body = JSONObject(
             """{"id":"n9","createdAt":"2025-10-28T10:00:00.000Z","type":"follow",
                "user":{"id":"u1","username":"alice"}}""",
         )
 
-        val event = parseStreamMessage(message)
+        val event = parseMainChannelEvent("notification", body)
 
         assertTrue(event is NotificationStreamEvent.Received)
         assertEquals("n9", (event as NotificationStreamEvent.Received).notification.id)
@@ -30,26 +23,17 @@ class NotificationStreamTest {
 
     @Test
     fun readAllNotificationsBecomesAllRead() {
-        assertEquals(
-            NotificationStreamEvent.AllRead,
-            parseStreamMessage(channelMessage("main", "readAllNotifications")),
-        )
+        assertEquals(NotificationStreamEvent.AllRead, parseMainChannelEvent("readAllNotifications", null))
     }
 
     @Test
     fun otherMainChannelEventsAreIgnored() {
-        assertNull(parseStreamMessage(channelMessage("main", "unreadMention")))
+        assertNull(parseMainChannelEvent("unreadMention", null))
     }
 
     @Test
-    fun otherChannelsAreIgnored() {
-        assertNull(parseStreamMessage(channelMessage("homeTimeline", "readAllNotifications")))
-    }
-
-    @Test
-    fun malformedMessagesAreIgnored() {
-        assertNull(parseStreamMessage("not json"))
-        assertNull(parseStreamMessage("""{"type":"channel"}"""))
-        assertNull(parseStreamMessage(channelMessage("main", "notification", "null")))
+    fun notificationsWithoutABodyAreIgnored() {
+        assertNull(parseMainChannelEvent("notification", null))
+        assertNull(parseMainChannelEvent("notification", JSONObject()))
     }
 }

@@ -1,5 +1,6 @@
-package com.fortind.zenith.auth
+package com.fortind.zenith.net
 
+import com.fortind.zenith.auth.FortInstance
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -9,8 +10,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-
-class HttpStatusException(val code: Int) : IOException("HTTP $code")
 
 class FortHttp(private val host: String = FortInstance.HOST) {
 
@@ -49,24 +48,25 @@ class FortHttp(private val host: String = FortInstance.HOST) {
                 connection.outputStream.use { it.write(body.toString().toByteArray()) }
 
                 val code = connection.responseCode
-                if (code !in 200..299) throw HttpStatusException(code)
+                if (code !in 200..299) throw HttpStatusException(code, parseApiErrorCode(readErrorBody(connection)))
                 if (code == HttpURLConnection.HTTP_NO_CONTENT) "" else connection.inputStream.bufferedReader().use { it.readText() }
             } finally {
                 connection.disconnect()
             }
         }
 
+    private fun readErrorBody(connection: HttpURLConnection): String? = try {
+        connection.errorStream?.bufferedReader()?.use { reader ->
+            val buffer = CharArray(MAX_ERROR_BODY_CHARS)
+            val read = reader.read(buffer)
+            if (read <= 0) null else String(buffer, 0, read)
+        }
+    } catch (_: IOException) {
+        null
+    }
+
     private companion object {
         const val TIMEOUT_MS = 10_000
+        const val MAX_ERROR_BODY_CHARS = 4_096
     }
-}
-
-fun parseCheckResponse(json: JSONObject): CheckResult {
-    val token = json.optString("token")
-    return if (json.optBoolean("ok") && token.isNotEmpty()) CheckResult.Approved(token) else CheckResult.Pending
-}
-
-class HttpMiAuthApi(private val http: FortHttp) : MiAuthApi {
-    override suspend fun check(session: String): CheckResult =
-        parseCheckResponse(http.postJson("/api/miauth/$session/check", JSONObject()))
 }

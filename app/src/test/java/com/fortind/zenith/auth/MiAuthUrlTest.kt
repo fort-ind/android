@@ -6,6 +6,9 @@ import org.junit.Test
 
 class MiAuthUrlTest {
 
+    private val defaultScopes = "read:account,read:notifications,write:notifications,write:following,write:reactions," +
+        "write:notes,write:drive,write:votes,read:favorites,write:favorites"
+
     @Test
     fun authorizeUrlTargetsTheFortInstanceWithAppNameAndScopes() {
         val url = MiAuthUrl.authorize(session = "7f3c1d2e-0000-4000-8000-000000000001")
@@ -13,7 +16,7 @@ class MiAuthUrlTest {
         assertEquals(
             "https://social.fort1nd.com/miauth/7f3c1d2e-0000-4000-8000-000000000001" +
                 "?name=fort.android" +
-                "&permission=read:account,read:notifications,write:notifications,write:following",
+                "&permission=$defaultScopes",
             url,
         )
     }
@@ -43,7 +46,7 @@ class MiAuthUrlTest {
 
         assertEquals(
             "https://social.fort1nd.com/miauth/s?name=fort%20%26%20friends" +
-                "&permission=read:account,read:notifications,write:notifications,write:following",
+                "&permission=$defaultScopes",
             url,
         )
     }

@@ -2,6 +2,7 @@ package com.fortind.zenith.notifications
 
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
+import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.FakeSettingsStore

@@ -1,5 +1,7 @@
 package com.fortind.zenith.auth
 
+import com.fortind.zenith.net.FortHttp
+import com.fortind.zenith.net.HttpStatusException
 import java.io.IOException
 import org.json.JSONObject
 

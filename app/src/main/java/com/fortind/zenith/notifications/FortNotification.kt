@@ -1,8 +1,8 @@
 package com.fortind.zenith.notifications
 
 import com.fortind.zenith.auth.FortInstance
-import java.time.Instant
-import java.time.format.DateTimeParseException
+import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.parseTimestamp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -107,12 +107,3 @@ private fun customEmojiUrl(reaction: String, note: JSONObject): String? {
     val key = reaction.substring(1, reaction.length - 1).removeSuffix("@.")
     return note.optJSONObject("reactionEmojis")?.optStringOrNull(key)
 }
-
-private fun parseTimestamp(text: String): Long = try {
-    Instant.parse(text).toEpochMilli()
-} catch (_: DateTimeParseException) {
-    0L
-}
-
-internal fun JSONObject.optStringOrNull(name: String): String? =
-    if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }

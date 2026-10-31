@@ -1,13 +1,9 @@
 package com.fortind.zenith.notifications
 
-import com.fortind.zenith.auth.FortHttp
-import com.fortind.zenith.auth.HttpStatusException
-import com.fortind.zenith.auth.TokenRejectedException
-import java.io.IOException
+import com.fortind.zenith.net.FortHttp
+import com.fortind.zenith.net.translatingAuthErrors
 import org.json.JSONArray
 import org.json.JSONObject
-
-class MissingPermissionException : IOException("The access token lacks a required permission")
 
 interface NotificationsApi {
     suspend fun fetch(token: String, types: List<NotificationType>?, untilId: String?, limit: Int): List<FortNotification>
@@ -53,15 +49,5 @@ class HttpNotificationsApi(private val http: FortHttp) : NotificationsApi {
     override suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean) {
         val path = if (accept) "/api/following/requests/accept" else "/api/following/requests/reject"
         translatingAuthErrors { http.postDiscardingResponse(path, JSONObject().put("i", token).put("userId", userId)) }
-    }
-
-    private suspend fun <T> translatingAuthErrors(request: suspend () -> T): T = try {
-        request()
-    } catch (e: HttpStatusException) {
-        when (e.code) {
-            401 -> throw TokenRejectedException(e.code)
-            403 -> throw MissingPermissionException()
-            else -> throw e
-        }
     }
 }

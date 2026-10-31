@@ -9,6 +9,8 @@ import com.fortind.zenith.settings.FakeSettingsStore
 import com.fortind.zenith.settings.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -131,11 +133,14 @@ class SettingsViewModelTest {
         assertEquals(AppIcon.FALL, viewModel.appIcon.value)
     }
 
-    private class FakeIconSwitcher(private var icon: AppIcon = AppIcon.DEFAULT) : AppIconSwitcher {
-        override fun current() = icon
+    private class FakeIconSwitcher(icon: AppIcon = AppIcon.DEFAULT) : AppIconSwitcher {
+        private val _selected = MutableStateFlow(icon)
+        override val selected: StateFlow<AppIcon> = _selected
+
+        override fun current() = _selected.value
 
         override fun set(icon: AppIcon) {
-            this.icon = icon
+            _selected.value = icon
         }
     }
 }

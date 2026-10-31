@@ -1,17 +1,14 @@
 package com.fortind.zenith.ui.notifications
 
-import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
@@ -55,17 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.isSecondaryPressed
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -77,7 +63,10 @@ import com.fortind.zenith.R
 import com.fortind.zenith.notifications.FortNotification
 import com.fortind.zenith.notifications.NotificationType
 import com.fortind.zenith.notifications.titleText
+import com.fortind.zenith.ui.Avatar
+import com.fortind.zenith.ui.contextMenuTrigger
 import com.fortind.zenith.ui.pointerHover
+import com.fortind.zenith.ui.relativeTime
 
 class NotificationActions(
     val open: (FortNotification) -> Unit,
@@ -136,26 +125,7 @@ internal fun NotificationItem(
     val interactions = Modifier
         .fillMaxWidth()
         .pointerHover { hovered = it }
-        .pointerInput(hasMenu) {
-            if (!hasMenu) return@pointerInput
-            awaitEachGesture {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                    val position = event.changes.first().position
-                    event.changes.forEach { it.consume() }
-                    showMenu(DpOffset(position.x.toDp(), (position.y - size.height).toDp()))
-                }
-            }
-        }
-        .onKeyEvent { event ->
-            val isMenuKey = event.key == Key.Menu || (event.isShiftPressed && event.key == Key.F10)
-            if (event.type == KeyEventType.KeyDown && isMenuKey && hasMenu) {
-                showMenu(DpOffset.Zero)
-                true
-            } else {
-                false
-            }
-        }
+        .contextMenuTrigger(enabled = hasMenu, onOpen = showMenu)
 
     Box(modifier = modifier) {
         if (notification.webUrl != null) {
@@ -330,28 +300,7 @@ private fun NotificationAvatar(notification: FortNotification) {
     val badge = notification.type.badgeColors()
     Box(modifier = Modifier.size(48.dp).clearAndSetSemantics {}) {
         if (actor != null) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .align(Alignment.TopStart)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = actor.displayName.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-                if (actor.avatarUrl != null) {
-                    AsyncImage(
-                        model = actor.avatarUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
+            Avatar(name = actor.displayName, url = actor.avatarUrl, modifier = Modifier.align(Alignment.TopStart))
             Box(
                 modifier = Modifier
                     .size(24.dp)
@@ -422,11 +371,3 @@ private fun NotificationType.icon(): ImageVector = when (this) {
     NotificationType.ScheduledNoteFailed -> Icons.Default.Warning
     NotificationType.Test, NotificationType.App, NotificationType.Other -> Icons.Default.Notifications
 }
-
-private fun relativeTime(createdAtMillis: Long, now: Long): String =
-    DateUtils.getRelativeTimeSpanString(
-        createdAtMillis,
-        maxOf(now, createdAtMillis),
-        DateUtils.MINUTE_IN_MILLIS,
-        DateUtils.FORMAT_ABBREV_RELATIVE,
-    ).toString()

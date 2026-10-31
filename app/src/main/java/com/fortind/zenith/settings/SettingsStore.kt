@@ -23,6 +23,7 @@ data class AppSettings(
     val homeFavoritesExpanded: Boolean = true,
     val systemNotifications: Boolean = false,
     val notificationCategories: Set<NotificationCategory> = DefaultNotificationCategories,
+    val compressUploads: Boolean = false,
 )
 
 interface SettingsStore {
@@ -33,6 +34,7 @@ interface SettingsStore {
     suspend fun setHomeFavoritesExpanded(expanded: Boolean)
     suspend fun setSystemNotifications(enabled: Boolean)
     suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean)
+    suspend fun setCompressUploads(enabled: Boolean)
 }
 
 private val Context.settingsDataStore by preferencesDataStore(
@@ -55,7 +57,12 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
             notificationCategories = prefs[NotificationCategoriesKey]
                 ?.mapNotNullTo(mutableSetOf()) { saved -> NotificationCategory.entries.firstOrNull { it.name == saved } }
                 ?: DefaultNotificationCategories,
+            compressUploads = prefs[CompressUploadsKey] ?: false,
         )
+    }
+
+    override suspend fun setCompressUploads(enabled: Boolean) {
+        dataStore.edit { it[CompressUploadsKey] = enabled }
     }
 
     override suspend fun setThemeMode(mode: ThemeMode) {
@@ -92,5 +99,6 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         val HomeFavoritesExpandedKey = booleanPreferencesKey("home_favorites_expanded")
         val SystemNotificationsKey = booleanPreferencesKey("system_notifications")
         val NotificationCategoriesKey = stringSetPreferencesKey("notification_categories")
+        val CompressUploadsKey = booleanPreferencesKey("compress_uploads")
     }
 }

@@ -1,9 +1,11 @@
 package com.fortind.zenith.auth
 
+import com.fortind.zenith.net.FortHttp
 import java.io.IOException
 import java.net.URLEncoder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 
 object MiAuthUrl {
     private val SCOPE_FORMAT = Regex("[a-z-]+:[a-z-]+(:[a-z-]+)?")
@@ -30,6 +32,16 @@ sealed interface CheckResult {
 
 interface MiAuthApi {
     suspend fun check(session: String): CheckResult
+}
+
+fun parseCheckResponse(json: JSONObject): CheckResult {
+    val token = json.optString("token")
+    return if (json.optBoolean("ok") && token.isNotEmpty()) CheckResult.Approved(token) else CheckResult.Pending
+}
+
+class HttpMiAuthApi(private val http: FortHttp) : MiAuthApi {
+    override suspend fun check(session: String): CheckResult =
+        parseCheckResponse(http.postJson("/api/miauth/$session/check", JSONObject()))
 }
 
 sealed interface PollOutcome {

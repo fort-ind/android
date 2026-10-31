@@ -1,6 +1,7 @@
 package com.fortind.zenith.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +20,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -49,15 +53,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,6 +82,7 @@ private val AvatarRing = 8.dp
 
 @Composable
 fun ProfileScreen(
+    onOpenBookmarks: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory),
 ) {
@@ -106,6 +109,7 @@ fun ProfileScreen(
             onLogOut = { confirmingLogout = true },
             onRetry = viewModel::refresh,
             onLogIn = viewModel::logIn,
+            onOpenBookmarks = onOpenBookmarks,
         )
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
@@ -130,6 +134,7 @@ fun ProfileContent(
     onLogOut: () -> Unit,
     onRetry: () -> Unit,
     onLogIn: () -> Unit,
+    onOpenBookmarks: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val wide = currentWindowAdaptiveInfoV2().windowSizeClass
@@ -151,7 +156,7 @@ fun ProfileContent(
             when (state) {
                 is ProfileUiState.Loaded -> {
                     ProfileHeader(state.user, wide = wide)
-                    ProfileActions(onManageOnWeb = onManageOnWeb, onLogOut = onLogOut)
+                    ProfileActions(onOpenBookmarks = onOpenBookmarks, onManageOnWeb = onManageOnWeb, onLogOut = onLogOut)
                 }
                 ProfileUiState.Unavailable -> StatusMessage(
                     shape = MaterialShapes.Sunny,
@@ -296,30 +301,38 @@ private fun Avatar(user: CurrentUser, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProfileActions(onManageOnWeb: () -> Unit, onLogOut: () -> Unit) {
+private fun ProfileActions(onOpenBookmarks: () -> Unit, onManageOnWeb: () -> Unit, onLogOut: () -> Unit) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ManageOnWebButton(onClick = onManageOnWeb, modifier = Modifier.weight(1f))
-        LogOutButton(onClick = onLogOut, modifier = Modifier.weight(1f))
+        ProfileActionButton(Icons.Default.Bookmarks, R.string.profile_bookmarks, onOpenBookmarks)
+        ProfileActionButton(Icons.Default.Settings, R.string.profile_manage_on_web, onManageOnWeb)
+        ProfileActionButton(
+            icon = Icons.AutoMirrored.Filled.ExitToApp,
+            label = R.string.profile_log_out,
+            onClick = onLogOut,
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            ),
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ManageOnWebButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val size = ButtonDefaults.MediumContainerHeight
-    Button(
-        onClick = onClick,
-        shapes = ButtonDefaults.shapes(),
-        contentPadding = ButtonDefaults.contentPaddingFor(size),
-        modifier = modifier.heightIn(min = size),
-    ) {
-        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(ButtonDefaults.iconSizeFor(size)))
-        Spacer(Modifier.size(ButtonDefaults.iconSpacingFor(size)))
-        Text(stringResource(R.string.profile_manage_on_web), style = MaterialTheme.typography.titleMedium)
+private fun ProfileActionButton(
+    icon: ImageVector,
+    @StringRes label: Int,
+    onClick: () -> Unit,
+    colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(),
+) {
+    FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes(), colors = colors) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+        Text(stringResource(label), maxLines = 1)
     }
 }
 

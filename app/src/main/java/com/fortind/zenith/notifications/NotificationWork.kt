@@ -14,7 +14,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.fortind.zenith.ZenithApplication
-import com.fortind.zenith.auth.HttpStatusException
+import com.fortind.zenith.net.HttpStatusException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 

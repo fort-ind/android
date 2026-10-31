@@ -10,8 +10,20 @@
         android:name="android.hardware.type.pc"
         android:required="false" />
 
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".ZenithApplication"
@@ -28,6 +40,7 @@
             android:exported="true"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Zenith"
+            android:windowSoftInputMode="adjustResize"
             tools:targetApi="24" />
 
         <receiver

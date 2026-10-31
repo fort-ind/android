@@ -50,7 +50,6 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -86,16 +85,15 @@ import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.login.AuthPageEffects
 import com.fortind.zenith.ui.login.ErrorMessage
 import com.fortind.zenith.ui.login.LoginViewModel
+import com.fortind.zenith.ui.rememberNow
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.theme.isThemeDark
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 private val ContentMaxWidth = 720.dp
 private const val LOAD_MORE_THRESHOLD = 5
-private const val CLOCK_TICK_MS = 60_000L
 
 @Composable
 fun NotificationsScreen(
@@ -365,12 +363,7 @@ private fun NotificationList(
     val listState = rememberLazyListState()
     val reduceMotion = rememberReduceMotion()
     val currentOnLoadMore by rememberUpdatedState(onLoadMore)
-    val now by produceState(initialValue = System.currentTimeMillis()) {
-        while (true) {
-            delay(CLOCK_TICK_MS)
-            value = System.currentTimeMillis()
-        }
-    }
+    val now by rememberNow()
     val items = state.items
 
     LaunchedEffect(listState, state.filter) {
