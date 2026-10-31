@@ -33,6 +33,8 @@ fun ZenithTheme(
         else -> paletteFor(appIcon).scheme(darkTheme, contrast)
     }
 
+    SyncCaptionBar(darkTheme)
+
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
         motionScheme = MotionScheme.expressive(),
