@@ -19,7 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "com.fortind.zenith"
-        minSdk = 27
+        minSdk = 24
         targetSdk = 37
         versionCode = providers.environmentVariable("BUILD_NUMBER").map(String::toInt).getOrElse(1)
         versionName = "1.0"
