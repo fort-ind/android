@@ -34,6 +34,11 @@ android {
             apiLevel = 27
             systemImageSource = "aosp"
         }
+        create<com.android.build.api.dsl.ManagedVirtualDevice>("pixel2Api24") {
+            device = "Pixel 2"
+            apiLevel = 24
+            systemImageSource = "aosp"
+        }
     }
 }
 
