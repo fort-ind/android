@@ -36,6 +36,7 @@ fun testNote(
     visibility: Visibility = Visibility.Public,
     reactionAcceptance: ReactionAcceptance = ReactionAcceptance.All,
     poll: Poll? = null,
+    repliesCount: Int = 0,
 ) = Note(
     id = id,
     createdAtMillis = createdAt,
@@ -55,7 +56,7 @@ fun testNote(
     reactions = reactions,
     reactionEmojis = emptyMap(),
     renoteCount = renoteCount,
-    repliesCount = 0,
+    repliesCount = repliesCount,
     myReaction = myReaction,
     reactionAcceptance = reactionAcceptance,
     remoteUrl = null,
@@ -71,6 +72,8 @@ class FakeNotesApi : NotesApi {
     val notes = mutableMapOf<String, Note>()
     var ancestors: List<Note> = emptyList()
     var replies: List<Note> = emptyList()
+    val branchReplies = mutableMapOf<String, List<Note>>()
+    var branchFailure: IOException? = null
     var reactFailure: IOException? = null
     var unreactFailure: IOException? = null
     var renoteFailure: IOException? = null
@@ -111,6 +114,11 @@ class FakeNotesApi : NotesApi {
     override suspend fun conversation(token: String?, noteId: String, limit: Int): List<Note> = ancestors
 
     override suspend fun children(token: String?, noteId: String, untilId: String?, limit: Int): List<Note> {
+        branchReplies[noteId]?.let { branch ->
+            branchFailure?.let { throw it }
+            val older = if (untilId == null) branch else branch.dropWhile { it.id != untilId }.drop(1)
+            return older.take(limit)
+        }
         val older = if (untilId == null) replies else replies.dropWhile { it.id != untilId }.drop(1)
         return older.take(limit)
     }

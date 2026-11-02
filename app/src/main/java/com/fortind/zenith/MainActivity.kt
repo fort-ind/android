@@ -1,8 +1,11 @@
 package com.fortind.zenith
 
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.StringRes
@@ -31,6 +34,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +74,8 @@ import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.launch
 
 private const val MAX_BADGE_COUNT = 99
+private val DEFAULT_LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+private val DEFAULT_DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
 enum class AppDestination(
     @param:StringRes val labelRes: Int,
@@ -84,13 +90,14 @@ enum class AppDestination(
 
 class MainActivity : ComponentActivity() {
     private val requestedDestination = mutableStateOf<AppDestination?>(null)
+    private val requestedThreadId = mutableStateOf<String?>(null)
 
     private val container get() = (application as ZenithApplication).container
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) requestedDestination.value = destinationFrom(intent)
+        if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val app = LocalContext.current.applicationContext as ZenithApplication
             val settings by app.container.settingsStore.settings
@@ -101,27 +108,47 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize())
             } else {
                 val systemDark = isSystemInDarkTheme()
+                val darkTheme = when (current.themeMode) {
+                    ThemeMode.SYSTEM -> systemDark
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                }
+                DisposableEffect(darkTheme) {
+                    applySystemBarStyle(darkTheme)
+                    onDispose {}
+                }
                 ZenithTheme(
-                    darkTheme = when (current.themeMode) {
-                        ThemeMode.SYSTEM -> systemDark
-                        ThemeMode.LIGHT -> false
-                        ThemeMode.DARK -> true
-                    },
+                    darkTheme = darkTheme,
                     dynamicColor = current.dynamicColor,
                     appIcon = appIcon,
                 ) {
                     ZenithRoot(
                         requestedDestination = requestedDestination.value,
                         onRequestedDestinationHandled = { requestedDestination.value = null },
+                        requestedThreadId = requestedThreadId.value,
+                        onRequestedThreadHandled = { requestedThreadId.value = null },
                     )
                 }
             }
         }
     }
 
+    private fun applySystemBarStyle(darkTheme: Boolean) {
+        val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme }
+        val navigationStyle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O || darkTheme) {
+            style
+        } else {
+            SystemBarStyle.auto(DEFAULT_LIGHT_SCRIM, DEFAULT_DARK_SCRIM) { darkTheme }
+        }
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = navigationStyle)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        destinationFrom(intent)?.let { requestedDestination.value = it }
+        handleIntent(intent)
     }
 
     override fun onStart() {
@@ -136,6 +163,16 @@ class MainActivity : ComponentActivity() {
         container.scope.launch { container.notificationSyncer.acknowledgeSeen() }
     }
 
+    private fun handleIntent(intent: Intent?) {
+        val noteId = intent?.getStringExtra(EXTRA_THREAD_NOTE_ID)
+        if (noteId != null) {
+            requestedThreadId.value = noteId
+            requestedDestination.value = AppDestination.HOME
+        } else {
+            destinationFrom(intent)?.let { requestedDestination.value = it }
+        }
+    }
+
     private fun destinationFrom(intent: Intent?): AppDestination? =
         when (intent?.getStringExtra(EXTRA_DESTINATION)) {
             DESTINATION_NOTIFICATIONS -> AppDestination.NOTIFICATIONS
@@ -144,6 +181,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_DESTINATION = "com.fortind.zenith.extra.DESTINATION"
+        const val EXTRA_THREAD_NOTE_ID = "com.fortind.zenith.extra.THREAD_NOTE_ID"
         const val DESTINATION_NOTIFICATIONS = "notifications"
     }
 }
@@ -152,6 +190,8 @@ class MainActivity : ComponentActivity() {
 fun ZenithRoot(
     requestedDestination: AppDestination?,
     onRequestedDestinationHandled: () -> Unit,
+    requestedThreadId: String?,
+    onRequestedThreadHandled: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as ZenithApplication
     val session by app.container.sessionService.state.collectAsStateWithLifecycle()
@@ -181,6 +221,8 @@ fun ZenithRoot(
                 is SessionState.SignedIn, SessionState.Guest -> ZenithApp(
                     requestedDestination = requestedDestination,
                     onRequestedDestinationHandled = onRequestedDestinationHandled,
+                    pendingThreadId = requestedThreadId,
+                    onPendingThreadHandled = onRequestedThreadHandled,
                 )
             }
         }
@@ -191,9 +233,12 @@ fun ZenithRoot(
 fun ZenithApp(
     requestedDestination: AppDestination?,
     onRequestedDestinationHandled: () -> Unit,
+    pendingThreadId: String?,
+    onPendingThreadHandled: () -> Unit,
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     var bookmarksOpen by rememberSaveable { mutableStateOf(false) }
+    var requestedThreadId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(currentDestination) { if (currentDestination != AppDestination.PROFILE) bookmarksOpen = false }
     val destinationState = rememberSaveableStateHolder()
     val navigationState = rememberNavigationSuiteScaffoldState()
@@ -208,6 +253,13 @@ fun ZenithApp(
         if (requestedDestination != null) {
             currentDestination = requestedDestination
             onRequestedDestinationHandled()
+        }
+    }
+
+    LaunchedEffect(pendingThreadId) {
+        if (pendingThreadId != null) {
+            requestedThreadId = pendingThreadId
+            onPendingThreadHandled()
         }
     }
 
@@ -278,6 +330,8 @@ fun ZenithApp(
                         },
                         onImmersiveChange = { immersive = it },
                         modifier = Modifier.padding(innerPadding),
+                        requestedThreadId = requestedThreadId,
+                        onRequestedThreadHandled = { requestedThreadId = null },
                     )
                     AppDestination.GAMES -> GamesScreen(
                         modifier = Modifier.padding(innerPadding),
@@ -285,6 +339,10 @@ fun ZenithApp(
                     )
                     AppDestination.NOTIFICATIONS -> NotificationsScreen(
                         viewModel = notificationsViewModel,
+                        onOpenNote = { noteId ->
+                            requestedThreadId = noteId
+                            currentDestination = AppDestination.HOME
+                        },
                         modifier = Modifier.padding(innerPadding),
                     )
                     AppDestination.PROFILE -> if (bookmarksOpen) {
@@ -300,7 +358,7 @@ fun ZenithApp(
                             onCloseBookmarks = { bookmarksOpen = false },
                         )
                     } else {
-                        ProfileScreen(onOpenBookmarks = { bookmarksOpen = true }, modifier = Modifier.padding(innerPadding))
+                        ProfileScreen(onOpenBookmarks = { bookmarksOpen = true }, contentPadding = innerPadding)
                     }
                     AppDestination.SETTINGS -> SettingsScreen(modifier = Modifier.padding(innerPadding))
                 }

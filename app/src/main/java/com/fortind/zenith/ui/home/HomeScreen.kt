@@ -151,6 +151,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     showBookmarks: Boolean = false,
     onCloseBookmarks: () -> Unit = {},
+    requestedThreadId: String? = null,
+    onRequestedThreadHandled: () -> Unit = {},
     viewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory),
     feedViewModel: FeedViewModel = viewModel(factory = FeedViewModel.Factory),
     composerViewModel: ComposerViewModel = viewModel(factory = ComposerViewModel.Factory),
@@ -185,6 +187,12 @@ fun HomeScreen(
         ?.contentKey
     LaunchedEffect(selectedNoteId) {
         if (selectedNoteId != null) feedViewModel.openThread(selectedNoteId) else feedViewModel.closeThread()
+    }
+    LaunchedEffect(requestedThreadId) {
+        requestedThreadId?.let { noteId ->
+            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, noteId)
+            onRequestedThreadHandled()
+        }
     }
     val immersive = !twoPane && selectedNoteId != null
     val currentImmersiveChange by rememberUpdatedState(onImmersiveChange)
@@ -340,6 +348,8 @@ fun HomeScreen(
                             onBack = { scope.launch { navigator.navigateBack() } },
                             onRetry = { feedViewModel.openThread(selectedNoteId) },
                             onLoadMoreReplies = feedViewModel::loadMoreReplies,
+                            onToggleBranch = feedViewModel::toggleBranch,
+                            onLoadMoreBranch = feedViewModel::loadMoreBranch,
                         )
                         twoPane && showFavorites -> FavoritesPane(
                             state = ready,

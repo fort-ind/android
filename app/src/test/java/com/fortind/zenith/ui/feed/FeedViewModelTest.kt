@@ -779,6 +779,73 @@ class FeedViewModelTest {
     }
 
     @Test
+    fun branchesLoadNestedRepliesOnDemandAndToggle() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = listOf(testNote("n6", repliesCount = 2))
+        f.api.branchReplies["n6"] = listOf(testNote("n7"), testNote("n8"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+
+        f.viewModel.toggleBranch("n6")
+        val loaded = f.viewModel.uiState.first { it.thread?.branches?.get("n6")?.loading == false }.thread!!
+        val branch = loaded.branches.getValue("n6")
+        assertEquals(listOf("n7", "n8"), branch.children.map { it.id })
+        assertTrue(branch.expanded)
+        assertTrue(branch.end)
+
+        f.viewModel.toggleBranch("n6")
+        assertFalse(f.viewModel.uiState.value.thread!!.branches.getValue("n6").expanded)
+
+        f.viewModel.toggleBranch("n6")
+        assertTrue(f.viewModel.uiState.value.thread!!.branches.getValue("n6").expanded)
+        assertEquals(2, f.viewModel.uiState.value.thread!!.branches.getValue("n6").children.size)
+    }
+
+    @Test
+    fun aFailedBranchLoadCanBeRetried() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = listOf(testNote("n6", repliesCount = 1))
+        f.api.branchReplies["n6"] = listOf(testNote("n7"))
+        f.api.branchFailure = java.io.IOException("offline")
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+
+        f.viewModel.toggleBranch("n6")
+        f.viewModel.uiState.first { it.thread?.branches?.get("n6")?.failed == true }
+
+        f.api.branchFailure = null
+        f.viewModel.toggleBranch("n6")
+        val loaded = f.viewModel.uiState.first { it.thread?.branches?.get("n6")?.children?.isNotEmpty() == true }.thread!!
+        assertFalse(loaded.branches.getValue("n6").failed)
+    }
+
+    @Test
+    fun aReplyToANestedReplyJoinsItsBranch() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = listOf(testNote("n6", repliesCount = 1))
+        f.api.branchReplies["n6"] = listOf(testNote("n7"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+        f.viewModel.toggleBranch("n6")
+        f.viewModel.uiState.first { it.thread?.branches?.get("n6")?.children?.isNotEmpty() == true }
+
+        f.viewModel.noteCreated(testNote("n9", user = testUser("me"), reply = testNote("n6")))
+
+        val thread = f.viewModel.uiState.value.thread!!
+        assertEquals(listOf("n9", "n7"), thread.branches.getValue("n6").children.map { it.id })
+        assertEquals(listOf("n6"), thread.replies.map { it.id })
+    }
+
+    @Test
     fun aNewPostLandsAtTheTopOfHomeAndScrollsThere() = runTest {
         val f = fixture()
         f.api.timelines[TimelineKind.Home] = page(2, 1)

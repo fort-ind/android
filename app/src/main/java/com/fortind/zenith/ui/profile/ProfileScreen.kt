@@ -7,16 +7,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
@@ -53,13 +58,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,6 +91,7 @@ private val AvatarRing = 8.dp
 @Composable
 fun ProfileScreen(
     onOpenBookmarks: () -> Unit,
+    contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory),
 ) {
@@ -97,9 +106,19 @@ fun ProfileScreen(
     val scope = rememberCoroutineScope()
     val noBrowserMessage = stringResource(R.string.login_error_no_browser)
 
-    Box(modifier = modifier.fillMaxSize()) {
+    val layoutDirection = LocalLayoutDirection.current
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(
+                start = contentPadding.calculateStartPadding(layoutDirection),
+                end = contentPadding.calculateEndPadding(layoutDirection),
+                bottom = contentPadding.calculateBottomPadding(),
+            ),
+    ) {
         ProfileContent(
             state = state,
+            topInset = contentPadding.calculateTopPadding(),
             refreshing = refreshing,
             onManageOnWeb = {
                 if (!launchCustomTab(context, FortInstance.SETTINGS_URL, darkTheme, toolbarColor)) {
@@ -129,6 +148,7 @@ fun ProfileScreen(
 @Composable
 fun ProfileContent(
     state: ProfileUiState,
+    topInset: Dp,
     refreshing: Boolean,
     onManageOnWeb: () -> Unit,
     onLogOut: () -> Unit,
@@ -139,12 +159,14 @@ fun ProfileContent(
 ) {
     val wide = currentWindowAdaptiveInfoV2().windowSizeClass
         .isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
+    val gutter = if (wide) 32.dp else 16.dp
+    val fullBleedBanner = state is ProfileUiState.Loaded && !wide
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = if (wide) 32.dp else 16.dp, vertical = 16.dp),
+            .padding(top = if (fullBleedBanner) 0.dp else topInset + 16.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(
@@ -155,27 +177,41 @@ fun ProfileContent(
         ) {
             when (state) {
                 is ProfileUiState.Loaded -> {
-                    ProfileHeader(state.user, wide = wide)
-                    ProfileActions(onOpenBookmarks = onOpenBookmarks, onManageOnWeb = onManageOnWeb, onLogOut = onLogOut)
-                }
-                ProfileUiState.Unavailable -> StatusMessage(
-                    shape = MaterialShapes.Sunny,
-                    title = stringResource(R.string.profile_unavailable_title),
-                    body = stringResource(R.string.profile_unavailable_body),
-                ) {
-                    RetryButton(refreshing = refreshing, onRetry = onRetry)
-                    LogOutButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth())
-                }
-                ProfileUiState.Guest -> StatusMessage(
-                    shape = MaterialShapes.Cookie9Sided,
-                    title = stringResource(R.string.profile_guest_title),
-                    body = stringResource(R.string.profile_guest_body),
-                ) {
-                    PrimaryButton(
-                        label = stringResource(R.string.profile_guest_log_in),
-                        onClick = onLogIn,
-                        modifier = Modifier.fillMaxWidth(),
+                    ProfileHeader(
+                        user = state.user,
+                        wide = wide,
+                        gutter = gutter,
+                        bannerTopInset = if (fullBleedBanner) topInset else 0.dp,
                     )
+                    ProfileActions(
+                        onOpenBookmarks = onOpenBookmarks,
+                        onManageOnWeb = onManageOnWeb,
+                        onLogOut = onLogOut,
+                        modifier = Modifier.padding(horizontal = gutter),
+                    )
+                }
+                ProfileUiState.Unavailable -> Box(Modifier.padding(horizontal = gutter)) {
+                    StatusMessage(
+                        shape = MaterialShapes.Sunny,
+                        title = stringResource(R.string.profile_unavailable_title),
+                        body = stringResource(R.string.profile_unavailable_body),
+                    ) {
+                        RetryButton(refreshing = refreshing, onRetry = onRetry)
+                        LogOutButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                ProfileUiState.Guest -> Box(Modifier.padding(horizontal = gutter)) {
+                    StatusMessage(
+                        shape = MaterialShapes.Cookie9Sided,
+                        title = stringResource(R.string.profile_guest_title),
+                        body = stringResource(R.string.profile_guest_body),
+                    ) {
+                        PrimaryButton(
+                            label = stringResource(R.string.profile_guest_log_in),
+                            onClick = onLogIn,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
@@ -184,26 +220,35 @@ fun ProfileContent(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ProfileHeader(user: CurrentUser, wide: Boolean) {
+private fun ProfileHeader(user: CurrentUser, wide: Boolean, gutter: Dp, bannerTopInset: Dp) {
+    val fullBleed = !wide
+    val bannerShape = if (fullBleed) {
+        MaterialTheme.shapes.extraExtraLarge.copy(topStart = ZeroCornerSize, topEnd = ZeroCornerSize)
+    } else {
+        MaterialTheme.shapes.extraExtraLarge
+    }
+    val bannerGutter = if (fullBleed) 0.dp else gutter
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = bannerGutter)
             .padding(bottom = (AvatarSize + AvatarRing * 2) / 2)) {
             Banner(
                 url = user.bannerUrl,
+                aspectRatio = if (wide) 3f else 16f / 9f,
+                topInset = bannerTopInset,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(if (wide) 3f else 16f / 9f)
-                    .clip(MaterialTheme.shapes.extraExtraLarge),
+                    .clip(bannerShape),
             )
             Avatar(
                 user = user,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .offset(x = 24.dp, y = (AvatarSize + AvatarRing * 2) / 2),
+                    .offset(x = 24.dp + (gutter - bannerGutter), y = (AvatarSize + AvatarRing * 2) / 2),
             )
         }
-        Column(modifier = Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(horizontal = gutter + 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = user.displayName,
                 style = MaterialTheme.typography.displaySmallEmphasized,
@@ -220,8 +265,14 @@ private fun ProfileHeader(user: CurrentUser, wide: Boolean) {
 }
 
 @Composable
-private fun Banner(url: String?, modifier: Modifier = Modifier) {
+private fun Banner(url: String?, aspectRatio: Float, topInset: Dp, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
+        Spacer(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = topInset)
+                .aspectRatio(aspectRatio),
+        )
         BannerArt(Modifier.matchParentSize())
         if (url != null) {
             AsyncImage(
@@ -229,6 +280,15 @@ private fun Banner(url: String?, modifier: Modifier = Modifier) {
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
+            )
+        }
+        if (topInset > 0.dp) {
+            val scrim = MaterialTheme.colorScheme.surface
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(topInset + 24.dp)
+                    .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0.7f), Color.Transparent))),
             )
         }
     }
@@ -301,9 +361,14 @@ private fun Avatar(user: CurrentUser, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProfileActions(onOpenBookmarks: () -> Unit, onManageOnWeb: () -> Unit, onLogOut: () -> Unit) {
+private fun ProfileActions(
+    onOpenBookmarks: () -> Unit,
+    onManageOnWeb: () -> Unit,
+    onLogOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     FlowRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

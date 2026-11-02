@@ -214,7 +214,7 @@ class FeedViewModel(
         if (existing?.noteId == noteId && !existing.failed) return
         threadJob?.cancel()
         val cached = threadCache[noteId]
-        val seed = cached ?: ThreadState(noteId = noteId, note = findAnywhere(noteId), loading = true)
+        val seed = cached?.settled() ?: ThreadState(noteId = noteId, note = findAnywhere(noteId), loading = true)
         _uiState.update { it.copy(thread = seed.copy(loading = true, failed = false)) }
         val currentAuth = auth
         threadJob = viewModelScope.launch {
@@ -279,6 +279,65 @@ class FeedViewModel(
             }
         }
     }
+
+    fun toggleBranch(parentId: String) {
+        val thread = _uiState.value.thread ?: return
+        val branch = thread.branches[parentId]
+        when {
+            branch == null || branch.failed || (branch.children.isEmpty() && !branch.end && !branch.loading) -> loadBranch(thread.noteId, parentId, untilId = null)
+            branch.loading -> Unit
+            else -> updateBranch(thread.noteId, parentId) { it.copy(expanded = !it.expanded) }
+        }
+    }
+
+    fun loadMoreBranch(parentId: String) {
+        val thread = _uiState.value.thread ?: return
+        val branch = thread.branches[parentId] ?: return
+        val last = branch.children.lastOrNull() ?: return
+        if (branch.loading || branch.loadingMore || branch.end) return
+        loadBranch(thread.noteId, parentId, untilId = last.id)
+    }
+
+    private fun loadBranch(threadId: String, parentId: String, untilId: String?) {
+        val first = untilId == null
+        updateBranch(threadId, parentId, persist = false) {
+            it.copy(expanded = true, loading = first, loadingMore = !first, failed = false, moreFailed = false)
+        }
+        viewModelScope.launch {
+            try {
+                val page = api.children(token, parentId, untilId = untilId, limit = PAGE_SIZE)
+                updateBranch(threadId, parentId) {
+                    it.copy(
+                        children = mergeOlder(it.children, page),
+                        loading = false,
+                        loadingMore = false,
+                        end = page.size < PAGE_SIZE,
+                    )
+                }
+            } catch (e: IOException) {
+                handleFailure(e) {
+                    updateBranch(threadId, parentId) {
+                        it.copy(loading = false, loadingMore = false, failed = first, moreFailed = !first)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateBranch(threadId: String, parentId: String, persist: Boolean = true, transform: (ReplyBranch) -> ReplyBranch) {
+        val apply = { thread: ThreadState ->
+            thread.copy(branches = thread.branches + (parentId to transform(thread.branches[parentId] ?: ReplyBranch())))
+        }
+        _uiState.update { state ->
+            val thread = state.thread
+            if (thread?.noteId == threadId) state.copy(thread = apply(thread)) else state
+        }
+        if (persist) threadCache[threadId]?.let { threadCache[threadId] = apply(it) }
+    }
+
+    private fun ThreadState.settled(): ThreadState = copy(
+        branches = branches.mapValues { (_, branch) -> branch.copy(loading = false, loadingMore = false) },
+    )
 
     fun toggleReaction(noteId: String, reaction: String) {
         val note = findAnywhere(noteId) ?: return
@@ -560,11 +619,8 @@ class FeedViewModel(
         val parent = note.reply
         if (parent != null) {
             mutateEverywhere(parent.id) { it.copy(repliesCount = it.repliesCount + 1) }
-            _uiState.update { state ->
-                val thread = state.thread
-                if (thread?.noteId == parent.id) state.copy(thread = thread.withReply(note)) else state
-            }
-            threadCache[parent.id]?.let { threadCache[parent.id] = it.withReply(note) }
+            _uiState.update { state -> state.copy(thread = state.thread?.withReply(note, parent.id)) }
+            threadCache.entries.forEach { entry -> entry.setValue(entry.value.withReply(note, parent.id)) }
             return
         }
         note.renote?.let { quoted -> mutateEverywhere(quoted.id) { it.copy(renoteCount = it.renoteCount + 1) } }
@@ -884,13 +940,13 @@ class FeedViewModel(
                     val pending = timeline.pending.mapNote(noteId, transform)
                     if (items === timeline.items && pending === timeline.pending) timeline else timeline.copy(items = items, pending = pending)
                 },
-                thread = state.thread?.mapThread { it.mapNote(noteId, transform) },
+                thread = state.thread?.mapNotes { it.mapNote(noteId, transform) },
                 bookmarks = state.bookmarks.items.mapNote(noteId, transform).let { items ->
                     if (items === state.bookmarks.items) state.bookmarks else state.bookmarks.copy(items = items)
                 },
             )
         }
-        threadCache.entries.forEach { entry -> entry.setValue(entry.value.mapThread { it.mapNote(noteId, transform) }) }
+        threadCache.entries.forEach { entry -> entry.setValue(entry.value.mapNotes { it.mapNote(noteId, transform) }) }
     }
 
     private fun removeEverywhere(noteId: String) {
@@ -899,18 +955,11 @@ class FeedViewModel(
                 timelines = state.timelines.mapValues { (_, timeline) ->
                     timeline.copy(items = timeline.items.removeNote(noteId), pending = timeline.pending.removeNote(noteId))
                 },
-                thread = state.thread?.mapThread { it.removeNote(noteId) },
+                thread = state.thread?.mapNotes { it.removeNote(noteId) },
                 bookmarks = state.bookmarks.copy(items = state.bookmarks.items.removeNote(noteId)),
             )
         }
         threadCache.remove(noteId)
-    }
-
-    private fun ThreadState.mapThread(transform: (List<Note>) -> List<Note>): ThreadState {
-        val ancestors = transform(ancestors)
-        val note = note?.let { transform(listOf(it)).firstOrNull() ?: it.copy(deleted = true) }
-        val replies = transform(replies)
-        return copy(ancestors = ancestors, note = note, replies = replies)
     }
 
     private fun updateTimeline(kind: TimelineKind, transform: (TimelineState) -> TimelineState) {

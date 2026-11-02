@@ -84,7 +84,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             .setAutoCancel(true)
             .setGroup(GROUP_KEY)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
-            .setContentIntent(openAppIntent())
+            .setContentIntent(openAppIntent(notification))
         if (text != null) builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
         addActions(builder, notification)
         notifyIfAllowed(notification.id.hashCode(), builder.build())
@@ -128,7 +128,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             .setGroupSummary(true)
             .setAutoCancel(true)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
-            .setContentIntent(openAppIntent())
+            .setContentIntent(openAppIntent(notification = null))
             .build()
         notifyIfAllowed(SUMMARY_ID, summary)
     }
@@ -142,13 +142,23 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         manager.notify(id, notification)
     }
 
-    private fun openAppIntent(): PendingIntent {
+    private fun openAppIntent(notification: FortNotification?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra(MainActivity.EXTRA_DESTINATION, MainActivity.DESTINATION_NOTIFICATIONS)
+        val noteId = notification?.noteId
+        if (noteId != null) {
+            intent.putExtra(MainActivity.EXTRA_THREAD_NOTE_ID, noteId)
+        } else {
+            intent.putExtra(MainActivity.EXTRA_DESTINATION, MainActivity.DESTINATION_NOTIFICATIONS)
+        }
+        val requestCode = if (notification == null) {
+            OPEN_APP_REQUEST_CODE
+        } else {
+            Objects.hash(notification.id, OPEN_ACTION)
+        }
         return PendingIntent.getActivity(
             context,
-            OPEN_APP_REQUEST_CODE,
+            requestCode,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -202,6 +212,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         const val SUMMARY_ID = 0
         const val MIN_FOR_SUMMARY = 2
         const val OPEN_APP_REQUEST_CODE = 1
+        const val OPEN_ACTION = "open"
         const val AVATAR_PX = 128
         const val AVATAR_TIMEOUT_MS = 5_000L
     }

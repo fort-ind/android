@@ -20,6 +20,16 @@ data class TimelineState(
     val hasPending: Boolean get() = pending.isNotEmpty() || gap
 }
 
+data class ReplyBranch(
+    val children: List<Note> = emptyList(),
+    val expanded: Boolean = false,
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val failed: Boolean = false,
+    val moreFailed: Boolean = false,
+    val end: Boolean = false,
+)
+
 data class ThreadState(
     val noteId: String,
     val ancestors: List<Note> = emptyList(),
@@ -29,10 +39,27 @@ data class ThreadState(
     val failed: Boolean = false,
     val repliesLoadingMore: Boolean = false,
     val repliesEnd: Boolean = false,
+    val branches: Map<String, ReplyBranch> = emptyMap(),
 ) {
-    val notes: List<Note> get() = ancestors + listOfNotNull(note) + replies
+    val notes: List<Note> get() = ancestors + listOfNotNull(note) + replies + branches.values.flatMap { it.children }
 
-    fun withReply(reply: Note): ThreadState = copy(replies = mergeNewer(replies, listOf(reply)))
+    fun withReply(reply: Note, parentId: String): ThreadState = when {
+        parentId == noteId -> copy(replies = mergeNewer(replies, listOf(reply)))
+        parentId in branches -> copy(
+            branches = branches + (parentId to branches.getValue(parentId).let { it.copy(children = mergeNewer(it.children, listOf(reply)), expanded = true) }),
+        )
+        else -> this
+    }
+
+    fun mapNotes(transform: (List<Note>) -> List<Note>): ThreadState {
+        val nextNote = note?.let { transform(listOf(it)).firstOrNull() ?: it.copy(deleted = true) }
+        return copy(
+            ancestors = transform(ancestors),
+            note = nextNote,
+            replies = transform(replies),
+            branches = branches.mapValues { (_, branch) -> branch.copy(children = transform(branch.children)) },
+        )
+    }
 }
 
 data class FeedUiState(

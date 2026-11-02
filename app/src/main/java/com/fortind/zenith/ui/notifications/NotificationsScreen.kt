@@ -56,7 +56,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -66,7 +65,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -81,13 +79,11 @@ import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.notifications.FortNotification
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
-import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.login.AuthPageEffects
 import com.fortind.zenith.ui.login.ErrorMessage
 import com.fortind.zenith.ui.login.LoginViewModel
 import com.fortind.zenith.ui.rememberNow
 import com.fortind.zenith.ui.rememberReduceMotion
-import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -98,6 +94,7 @@ private const val LOAD_MORE_THRESHOLD = 5
 @Composable
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
+    onOpenNote: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -115,7 +112,7 @@ fun NotificationsScreen(
         }
     }
 
-    val actions = rememberNotificationActions(snackbarHostState, viewModel)
+    val actions = rememberNotificationActions(snackbarHostState, viewModel, onOpenNote)
 
     Box(modifier = modifier.fillMaxSize()) {
         when (val current = state) {
@@ -141,23 +138,16 @@ fun NotificationsScreen(
 private fun rememberNotificationActions(
     snackbarHostState: SnackbarHostState,
     viewModel: NotificationsViewModel,
+    onOpenNote: (String) -> Unit,
 ): NotificationActions {
-    val context = LocalContext.current
     val clipboard = LocalClipboard.current
-    val darkTheme = isThemeDark()
-    val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
     val scope = rememberCoroutineScope()
-    val noBrowserMessage = stringResource(R.string.login_error_no_browser)
     val linkCopiedMessage = stringResource(R.string.notifications_link_copied)
 
-    return remember(context, clipboard, darkTheme, toolbarColor, noBrowserMessage, linkCopiedMessage, viewModel) {
+    return remember(clipboard, linkCopiedMessage, viewModel, onOpenNote) {
         NotificationActions(
             open = { notification ->
-                notification.webUrl?.let { url ->
-                    if (!launchCustomTab(context, url, darkTheme, toolbarColor)) {
-                        scope.launch { snackbarHostState.showSnackbar(noBrowserMessage) }
-                    }
-                }
+                notification.noteId?.let(onOpenNote)
             },
             copyLink = { notification ->
                 notification.webUrl?.let { url ->

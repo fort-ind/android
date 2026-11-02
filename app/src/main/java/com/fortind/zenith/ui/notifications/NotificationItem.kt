@@ -128,7 +128,7 @@ internal fun NotificationItem(
         .contextMenuTrigger(enabled = hasMenu, onOpen = showMenu)
 
     Box(modifier = modifier) {
-        if (notification.webUrl != null) {
+        if (notification.noteId != null) {
             SegmentedListItem(
                 onClick = { actions.open(notification) },
                 shapes = shapes,
@@ -153,11 +153,13 @@ internal fun NotificationItem(
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, offset = menuOffset) {
-            if (notification.webUrl != null) {
+            if (notification.noteId != null) {
                 MenuItem(R.string.notifications_menu_open) {
                     menuOpen = false
                     actions.open(notification)
                 }
+            }
+            if (notification.webUrl != null) {
                 MenuItem(R.string.notifications_menu_copy_link) {
                     menuOpen = false
                     actions.copyLink(notification)

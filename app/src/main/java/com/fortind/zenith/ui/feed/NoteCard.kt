@@ -87,6 +87,7 @@ fun NoteCard(
     callbacks: NoteCallbacks,
     modifier: Modifier = Modifier,
     focal: Boolean = false,
+    showReplyContext: Boolean = true,
 ) {
     val target = note.target
     var hovered by remember { mutableStateOf(false) }
@@ -154,7 +155,7 @@ fun NoteCard(
                 } else if (target.isHidden) {
                     DeletedStub(R.string.note_hidden)
                 } else {
-                    NoteMain(target, environment, callbacks, focal)
+                    NoteMain(target, environment, callbacks, focal, showReplyContext)
                 }
             }
         }
@@ -170,7 +171,7 @@ fun NoteCard(
 }
 
 @Composable
-private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean) {
+private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean, showReplyContext: Boolean) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Avatar(
             name = note.user.displayName,
@@ -182,7 +183,7 @@ private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCa
         )
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             NoteHeader(note, environment)
-            note.reply?.let { ReplyContext(it) }
+            if (showReplyContext) note.reply?.let { ReplyContext(it) }
             NoteContent(note, environment, callbacks, focal)
             if (note.reactions.isNotEmpty()) ReactionChips(note, environment, callbacks)
             NoteActionRow(note, environment, callbacks)

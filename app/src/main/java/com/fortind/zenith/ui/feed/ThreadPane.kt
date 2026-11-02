@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,24 +22,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +69,8 @@ fun ThreadPane(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onLoadMoreReplies: () -> Unit,
+    onToggleBranch: (String) -> Unit,
+    onLoadMoreBranch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -88,7 +101,7 @@ fun ThreadPane(
                 thread == null -> Unit
                 thread.note == null && thread.loading -> FeedLoading()
                 thread.note == null -> ThreadFailed(onRetry)
-                else -> ThreadContent(thread, thread.note, environment, callbacks, onLoadMoreReplies)
+                else -> ThreadContent(thread, thread.note, environment, callbacks, onLoadMoreReplies, onToggleBranch, onLoadMoreBranch)
             }
         }
     }
@@ -101,8 +114,12 @@ private fun ThreadContent(
     environment: NoteEnvironment,
     callbacks: NoteCallbacks,
     onLoadMoreReplies: () -> Unit,
+    onToggleBranch: (String) -> Unit,
+    onLoadMoreBranch: (String) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val rows = remember(thread.replies, thread.branches) { thread.replyRows() }
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
     val focalIndex = thread.ancestors.size
     LaunchedEffect(thread.noteId, thread.loading) {
         if (!thread.loading && focalIndex > 0) listState.requestScrollToItem(focalIndex)
@@ -137,21 +154,136 @@ private fun ThreadContent(
         if (thread.loading && thread.replies.isEmpty()) {
             item(key = "replies:loading", contentType = "loading") { FeedLoading() }
         }
-        items(thread.replies, key = { "reply:${it.id}" }, contentType = { "reply" }) { note ->
+        items(rows, key = { it.key }, contentType = { it::class }) { row ->
             Column(modifier = itemModifier) {
-                NoteCard(note, environment, callbacks)
-                ThreadDivider()
+                when (row) {
+                    is ReplyRow.Item -> NoteCard(
+                        note = row.note,
+                        environment = environment,
+                        callbacks = callbacks,
+                        modifier = Modifier.threadIndent(row.depth, lineColor),
+                        showReplyContext = false,
+                    )
+                    is ReplyRow.Toggle -> BranchToggle(row, lineColor) { onToggleBranch(row.parentId) }
+                    is ReplyRow.More -> BranchMore(row, lineColor) { onLoadMoreBranch(row.parentId) }
+                    is ReplyRow.Continue -> BranchContinue(row, lineColor) { callbacks.openThread(row.note) }
+                    is ReplyRow.Divider -> ThreadDivider()
+                }
             }
         }
         if (!thread.repliesEnd && thread.replies.isNotEmpty()) {
             item(key = "replies:more", contentType = "more") {
-                if (thread.repliesLoadingMore) {
-                    FeedLoading()
-                } else {
-                    TextButton(onClick = onLoadMoreReplies) { Text(stringResource(R.string.thread_load_more_replies)) }
-                }
+                val loadMore by rememberUpdatedState(onLoadMoreReplies)
+                LaunchedEffect(thread.repliesLoadingMore, thread.replies.size) { if (!thread.repliesLoadingMore) loadMore() }
+                FeedLoading()
             }
         }
+    }
+}
+
+private val ThreadIndent = 16.dp
+private val ThreadLineOffset = 36.dp
+private val BranchLabelStart = 68.dp
+
+private fun Modifier.threadIndent(depth: Int, lineColor: Color): Modifier =
+    if (depth == 0) {
+        this
+    } else {
+        this
+            .drawBehind {
+                val strokeWidth = 2.dp.toPx()
+                repeat(depth) { level ->
+                    val x = ThreadIndent.toPx() * level + ThreadLineOffset.toPx()
+                    drawLine(lineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth)
+                }
+            }
+            .padding(start = ThreadIndent * depth)
+    }
+
+@Composable
+private fun BranchRow(
+    depth: Int,
+    lineColor: Color,
+    onClick: () -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RectangleShape,
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth().threadIndent(depth, lineColor),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.heightIn(min = 48.dp).padding(start = BranchLabelStart - ThreadIndent, end = 16.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun BranchToggle(row: ReplyRow.Toggle, lineColor: Color, onClick: () -> Unit) {
+    val onClickState by rememberUpdatedState(onClick)
+    if (row.auto) LaunchedEffect(row.parentId) { onClickState() }
+    val color = if (row.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    BranchRow(row.depth, lineColor, onClick) {
+        if (row.loading) {
+            LoadingIndicator(modifier = Modifier.size(24.dp))
+        } else {
+            Icon(
+                imageVector = Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Text(
+            text = when {
+                row.failed -> stringResource(R.string.thread_branch_failed)
+                row.loading -> pluralStringResource(R.plurals.thread_loading_replies, row.count, row.count)
+                else -> pluralStringResource(R.plurals.thread_show_replies, row.count, row.count)
+            },
+            style = MaterialTheme.typography.labelLarge,
+            color = color,
+        )
+    }
+}
+
+@Composable
+private fun BranchMore(row: ReplyRow.More, lineColor: Color, onClick: () -> Unit) {
+    val onClickState by rememberUpdatedState(onClick)
+    if (!row.failed) {
+        LaunchedEffect(row.parentId, row.loading) { if (!row.loading) onClickState() }
+    }
+    BranchRow(row.depth, lineColor, onClick) {
+        if (row.failed) {
+            Icon(Icons.Default.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+        } else {
+            LoadingIndicator(modifier = Modifier.size(24.dp))
+        }
+        Text(
+            text = stringResource(if (row.failed) R.string.thread_branch_failed else R.string.thread_more_branch_replies),
+            style = MaterialTheme.typography.labelLarge,
+            color = if (row.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun BranchContinue(row: ReplyRow.Continue, lineColor: Color, onClick: () -> Unit) {
+    BranchRow(row.depth, lineColor, onClick) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = stringResource(R.string.thread_continue),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
