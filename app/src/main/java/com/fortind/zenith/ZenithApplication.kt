@@ -8,6 +8,10 @@ import coil3.SingletonImageLoader
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.fortind.zenith.account.AccountApi
+import com.fortind.zenith.account.HttpAccountApi
+import com.fortind.zenith.account.HttpModerationApi
+import com.fortind.zenith.account.ModerationApi
 import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.auth.HttpMiAuthApi
 import com.fortind.zenith.auth.HttpUserApi
@@ -78,6 +82,8 @@ class AppContainer(application: Application) {
     val notificationStream: NotificationStream = StreamingNotificationStream(streaming)
     val notesApi: NotesApi = HttpNotesApi(http)
     val draftStore: DraftStore = DataStoreDraftStore(application)
+    val accountApi: AccountApi = HttpAccountApi(http)
+    val moderationApi: ModerationApi = HttpModerationApi(http)
     val suggestionsApi: SuggestionsApi = HttpSuggestionsApi(http)
     val mediaReader: MediaReader = ContentResolverMediaReader(application.contentResolver, File(application.cacheDir, "staged"))
     val driveApi: DriveApi = HttpDriveApi(http, okHttpClient, mediaReader)

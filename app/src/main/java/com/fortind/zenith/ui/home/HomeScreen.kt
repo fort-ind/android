@@ -111,7 +111,9 @@ import com.fortind.zenith.timeline.acceptsOnlyLike
 import com.fortind.zenith.ui.feed.FeedEvent
 import com.fortind.zenith.ui.feed.FeedMaxWidth
 import com.fortind.zenith.ui.feed.FeedUiState
+import com.fortind.zenith.ui.feed.ConfirmBlockDialog
 import com.fortind.zenith.ui.feed.ConfirmDeleteDialog
+import com.fortind.zenith.ui.feed.MuteDurationDialog
 import com.fortind.zenith.ui.feed.FeedViewModel
 import com.fortind.zenith.ui.feed.FullscreenVideo
 import com.fortind.zenith.ui.feed.ImageViewer
@@ -212,6 +214,8 @@ fun HomeScreen(
     val mfm = rememberMfmEnvironment(emojiUrl, animate = !reduceMotion)
     var deleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var redraftTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var muteTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var blockTarget by rememberSaveable { mutableStateOf<String?>(null) }
     val environment = remember(
         now,
         feed.myUserId,
@@ -258,6 +262,8 @@ fun HomeScreen(
         onEdit = { note -> composerViewModel.open(ComposerTarget.Edit(note.id), note) },
         onDelete = { note -> deleteTarget = note.id },
         onRedraft = { note -> redraftTarget = note.id },
+        onMuteAuthor = { note -> muteTarget = note.id },
+        onBlockAuthor = { note -> blockTarget = note.id },
     )
     val startNewPost = {
         if (feed.signedIn) composerViewModel.open(ComposerTarget.NewPost, null) else feedViewModel.promptSignIn()
@@ -412,6 +418,36 @@ fun HomeScreen(
             onDismiss = { redraftTarget = null },
         )
     }
+    muteTarget?.let { id ->
+        val author = feed.findNote(id)?.user
+        if (author == null) {
+            muteTarget = null
+        } else {
+            MuteDurationDialog(
+                name = author.displayName,
+                onSelect = { duration ->
+                    muteTarget = null
+                    feedViewModel.muteAuthor(id, duration.millis)
+                },
+                onDismiss = { muteTarget = null },
+            )
+        }
+    }
+    blockTarget?.let { id ->
+        val author = feed.findNote(id)?.user
+        if (author == null) {
+            blockTarget = null
+        } else {
+            ConfirmBlockDialog(
+                name = author.displayName,
+                onConfirm = {
+                    blockTarget = null
+                    feedViewModel.blockAuthor(id)
+                },
+                onDismiss = { blockTarget = null },
+            )
+        }
+    }
     if (playback.fullscreen && playback.current != null) {
         FullscreenVideo(playback = playback, onDismiss = playback::exitFullscreen)
     }
@@ -480,6 +516,10 @@ private fun FeedEventsEffect(
                 is FeedEvent.Redraft -> redraft(event.note)
                 FeedEvent.PollVoteFailed -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_poll_vote_failed)) }
                 FeedEvent.PollEnded -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_poll_ended)) }
+                is FeedEvent.UserMuted -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_user_muted, event.name)) }
+                is FeedEvent.RenotesHidden -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_renotes_hidden, event.name)) }
+                is FeedEvent.UserBlocked -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_user_blocked, event.name)) }
+                FeedEvent.ModerationFailed -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_moderation_failed)) }
                 FeedEvent.RateLimited -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_rate_limited)) }
                 FeedEvent.NoteUnavailable -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_note_unavailable)) }
             }
@@ -532,6 +572,8 @@ private fun rememberNoteCallbacks(
     onEdit: (Note) -> Unit,
     onDelete: (Note) -> Unit,
     onRedraft: (Note) -> Unit,
+    onMuteAuthor: (Note) -> Unit,
+    onBlockAuthor: (Note) -> Unit,
 ): NoteCallbacks {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -547,6 +589,8 @@ private fun rememberNoteCallbacks(
     val edit by rememberUpdatedState(onEdit)
     val delete by rememberUpdatedState(onDelete)
     val redraft by rememberUpdatedState(onRedraft)
+    val muteAuthor by rememberUpdatedState(onMuteAuthor)
+    val blockAuthor by rememberUpdatedState(onBlockAuthor)
     val isSignedIn by rememberUpdatedState(signedIn)
     return remember(feedViewModel, context, clipboard, uriHandler) {
         fun copy(label: String, text: String, message: String) {
@@ -576,6 +620,9 @@ private fun rememberNoteCallbacks(
             edit = { edit(it) },
             delete = { delete(it) },
             redraft = { redraft(it) },
+            muteAuthor = { muteAuthor(it) },
+            hideAuthorRenotes = { feedViewModel.hideAuthorRenotes(it.id) },
+            blockAuthor = { blockAuthor(it) },
             toggleBookmark = { feedViewModel.toggleBookmark(it.id) },
             checkBookmarked = { feedViewModel.checkBookmarked(it.id) },
             openMedia = { note, index -> openMedia(note, index) },

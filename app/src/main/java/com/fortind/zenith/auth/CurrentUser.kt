@@ -2,8 +2,12 @@ package com.fortind.zenith.auth
 
 import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.net.HttpStatusException
+import com.fortind.zenith.net.objects
+import com.fortind.zenith.net.optStringOrNull
 import java.io.IOException
 import org.json.JSONObject
+
+data class ProfileField(val name: String, val value: String)
 
 data class CurrentUser(
     val id: String,
@@ -11,6 +15,10 @@ data class CurrentUser(
     val name: String?,
     val avatarUrl: String?,
     val bannerUrl: String?,
+    val description: String? = null,
+    val location: String? = null,
+    val birthday: String? = null,
+    val fields: List<ProfileField> = emptyList(),
 ) {
     val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: username
 
@@ -30,9 +38,16 @@ fun parseCurrentUser(json: JSONObject): CurrentUser {
     return CurrentUser(
         id = id,
         username = username,
-        name = json.optString("name").takeIf { it.isNotEmpty() },
-        avatarUrl = json.optString("avatarUrl").takeIf { it.isNotEmpty() },
-        bannerUrl = json.optString("bannerUrl").takeIf { it.isNotEmpty() },
+        name = json.optStringOrNull("name"),
+        avatarUrl = json.optStringOrNull("avatarUrl"),
+        bannerUrl = json.optStringOrNull("bannerUrl"),
+        description = json.optStringOrNull("description"),
+        location = json.optStringOrNull("location"),
+        birthday = json.optStringOrNull("birthday"),
+        fields = json.optJSONArray("fields")?.objects().orEmpty().mapNotNull { entry ->
+            val name = entry.optStringOrNull("name") ?: return@mapNotNull null
+            ProfileField(name, entry.optStringOrNull("value").orEmpty())
+        },
     )
 }
 

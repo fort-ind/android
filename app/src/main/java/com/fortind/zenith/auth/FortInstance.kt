@@ -16,5 +16,10 @@ object FortInstance {
         "write:votes",
         "read:favorites",
         "write:favorites",
+        "write:account",
+        "read:mutes",
+        "write:mutes",
+        "read:blocks",
+        "write:blocks",
     )
 }

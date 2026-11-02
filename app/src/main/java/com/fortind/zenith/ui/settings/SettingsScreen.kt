@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
@@ -136,6 +137,7 @@ private enum class SettingsPage(
     @param:StringRes val supportingRes: Int,
     val icon: ImageVector,
 ) {
+    ACCOUNT(R.string.settings_category_account, R.string.settings_account_supporting, Icons.Default.AccountCircle),
     APPEARANCE(R.string.settings_category_appearance, R.string.settings_appearance_supporting, Icons.Default.Palette),
     HOME(R.string.settings_category_home, R.string.settings_home_supporting, Icons.Default.Home),
     POSTING(R.string.settings_category_posting, R.string.settings_posting_supporting, Icons.Default.Edit),
@@ -152,6 +154,31 @@ private enum class SettingsEntry(
     @param:StringRes val titleRes: Int,
     val alsoMatches: List<Int> = emptyList(),
 ) {
+    ACCOUNT_EDIT_PROFILE(
+        SettingsPage.ACCOUNT,
+        R.string.account_edit_profile_title,
+        listOf(
+            R.string.account_edit_profile_supporting,
+            R.string.account_field_name,
+            R.string.account_field_bio,
+            R.string.account_field_location,
+            R.string.account_field_birthday,
+            R.string.account_fields_section,
+            R.string.account_change_avatar,
+            R.string.account_change_banner,
+        ),
+    ),
+    ACCOUNT_MODERATION(
+        SettingsPage.ACCOUNT,
+        R.string.account_moderation_title,
+        listOf(
+            R.string.account_moderation_supporting,
+            R.string.moderation_tab_muted,
+            R.string.moderation_tab_renotes,
+            R.string.moderation_tab_blocked,
+            R.string.moderation_action_unblock,
+        ),
+    ),
     THEME(
         SettingsPage.APPEARANCE,
         R.string.settings_theme_section,
@@ -198,10 +225,12 @@ private enum class SettingsEntry(
     BUILD(SettingsPage.ABOUT, R.string.settings_about_build),
 }
 
-private val ContentMaxWidth = 640.dp
+internal val ContentMaxWidth = 640.dp
 
 @Composable
 fun SettingsScreen(
+    editProfileRequested: Boolean,
+    onEditProfileHandled: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
 ) {
@@ -211,6 +240,10 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val searchBarState = rememberSearchBarState()
     var searchRequested by remember { mutableStateOf(false) }
+
+    LaunchedEffect(editProfileRequested) {
+        if (editProfileRequested) navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, SettingsPage.ACCOUNT)
+    }
 
     NavigableListDetailPaneScaffold(
         navigator = navigator,
@@ -253,6 +286,8 @@ fun SettingsScreen(
                     onCompressUploads = viewModel::setCompressUploads,
                     onSystemNotifications = viewModel::setSystemNotifications,
                     onNotificationCategory = viewModel::setNotificationCategory,
+                    editProfileRequested = editProfileRequested,
+                    onEditProfileHandled = onEditProfileHandled,
                     onBack = { scope.launch { navigator.navigateBack() } },
                 )
             }
@@ -447,6 +482,7 @@ private fun SearchResults(query: String, results: List<SettingsEntry>, onOpen: (
 private fun IconBadge(page: SettingsPage) {
     val colors = MaterialTheme.colorScheme
     val (container, content) = when (page) {
+        SettingsPage.ACCOUNT -> colors.secondaryContainer to colors.onSecondaryContainer
         SettingsPage.APPEARANCE -> colors.primaryContainer to colors.onPrimaryContainer
         SettingsPage.HOME -> colors.secondaryContainer to colors.onSecondaryContainer
         SettingsPage.POSTING -> colors.tertiaryContainer to colors.onTertiaryContainer
@@ -454,6 +490,7 @@ private fun IconBadge(page: SettingsPage) {
         SettingsPage.ABOUT -> colors.tertiaryContainer to colors.onTertiaryContainer
     }
     val polygon = when (page) {
+        SettingsPage.ACCOUNT -> MaterialShapes.Flower
         SettingsPage.APPEARANCE -> MaterialShapes.Cookie9Sided
         SettingsPage.HOME -> MaterialShapes.Cookie4Sided
         SettingsPage.POSTING -> MaterialShapes.Cookie12Sided
@@ -483,8 +520,14 @@ private fun SettingsDetail(
     onCompressUploads: (Boolean) -> Unit,
     onSystemNotifications: (Boolean) -> Unit,
     onNotificationCategory: (NotificationCategory, Boolean) -> Unit,
+    editProfileRequested: Boolean,
+    onEditProfileHandled: () -> Unit,
     onBack: () -> Unit,
 ) {
+    if (page == SettingsPage.ACCOUNT) {
+        AccountPage(editProfileRequested = editProfileRequested, onEditProfileHandled = onEditProfileHandled, onBack = onBack)
+        return
+    }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -531,6 +574,7 @@ private fun SettingsDetail(
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 when (page) {
+                    SettingsPage.ACCOUNT -> Unit
                     SettingsPage.APPEARANCE -> AppearanceSettings(
                         settings = settings,
                         appIcon = appIcon,
@@ -818,7 +862,7 @@ private fun AboutSettings() {
     }
 }
 
-private sealed interface RowAction {
+internal sealed interface RowAction {
     data object None : RowAction
     data class Select(val selected: Boolean, val onClick: () -> Unit) : RowAction
     data class Toggle(val checked: Boolean, val onCheckedChange: (Boolean) -> Unit) : RowAction
@@ -826,7 +870,7 @@ private sealed interface RowAction {
 }
 
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     shapes: ListItemShapes,
     headline: @Composable () -> Unit,
     action: RowAction = RowAction.None,
@@ -893,7 +937,7 @@ private fun SettingsRow(
 }
 
 @Composable
-private fun SectionLabel(@StringRes textRes: Int) {
+internal fun SectionLabel(@StringRes textRes: Int) {
     Text(
         text = stringResource(textRes),
         style = MaterialTheme.typography.titleSmall,

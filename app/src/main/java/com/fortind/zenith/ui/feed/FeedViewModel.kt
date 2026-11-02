@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.account.ModerationApi
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
@@ -22,6 +23,7 @@ import com.fortind.zenith.net.isRateLimited
 import com.fortind.zenith.timeline.Bookmark
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteUpdate
+import com.fortind.zenith.timeline.NoteUser
 import com.fortind.zenith.timeline.NotesApi
 import com.fortind.zenith.timeline.Reactions
 import com.fortind.zenith.timeline.TimelineKind
@@ -36,7 +38,9 @@ import com.fortind.zenith.timeline.isRenoteOf
 import com.fortind.zenith.timeline.mapNote
 import com.fortind.zenith.timeline.mergeNewer
 import com.fortind.zenith.timeline.mergeOlder
+import com.fortind.zenith.timeline.removeAuthoredBy
 import com.fortind.zenith.timeline.removeNote
+import com.fortind.zenith.timeline.removePureRenotesBy
 import com.fortind.zenith.timeline.withMyReaction
 import com.fortind.zenith.timeline.withOtherVote
 import com.fortind.zenith.timeline.withReactionCount
@@ -77,7 +81,9 @@ class FeedViewModel(
     private val instance: InstanceInfo,
     private val recents: RecentReactionsStore,
     private val unicode: UnicodeEmojiSource,
+    private val moderation: ModerationApi,
     private val reactionDebounceMs: Long = REACTION_DEBOUNCE_MS,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -107,6 +113,7 @@ class FeedViewModel(
     private val reactionMutex = Mutex()
     private val voting = HashSet<String>()
     private val deleting = HashSet<String>()
+    private val moderating = HashSet<String>()
     private var bookmarksJob: Job? = null
     private var bookmarkCursor: String? = null
     private var auth: FeedAuth = FeedAuth.Pending
@@ -593,6 +600,66 @@ class FeedViewModel(
         }
     }
 
+    fun muteAuthor(noteId: String, durationMillis: Long?) {
+        moderate(noteId) { token, user ->
+            moderation.mute(token, user.id, durationMillis?.let { clock() + it })
+            removeAuthorEverywhere(user.id)
+            FeedEvent.UserMuted(user.displayName)
+        }
+    }
+
+    fun hideAuthorRenotes(noteId: String) {
+        moderate(noteId) { token, user ->
+            moderation.hideRenotes(token, user.id)
+            removeRenotesEverywhere(user.id)
+            FeedEvent.RenotesHidden(user.displayName)
+        }
+    }
+
+    fun blockAuthor(noteId: String) {
+        moderate(noteId) { token, user ->
+            moderation.block(token, user.id)
+            removeAuthorEverywhere(user.id)
+            FeedEvent.UserBlocked(user.displayName)
+        }
+    }
+
+    private fun moderate(noteId: String, action: suspend (String, NoteUser) -> FeedEvent) {
+        val token = token ?: return requireSignIn()
+        val user = findAnywhere(noteId)?.user ?: return
+        if (user.id == myUserId || !moderating.add(user.id)) return
+        viewModelScope.launch {
+            try {
+                _events.trySend(action(token, user))
+            } catch (e: IOException) {
+                handleFailure(e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.ModerationFailed) }
+            } finally {
+                moderating.remove(user.id)
+            }
+        }
+    }
+
+    private fun removeAuthorEverywhere(userId: String) {
+        _uiState.update { state ->
+            state.copy(
+                timelines = state.timelines.mapValues { (_, timeline) ->
+                    timeline.copy(items = timeline.items.removeAuthoredBy(userId), pending = timeline.pending.removeAuthoredBy(userId))
+                },
+                bookmarks = state.bookmarks.copy(items = state.bookmarks.items.removeAuthoredBy(userId)),
+            )
+        }
+    }
+
+    private fun removeRenotesEverywhere(userId: String) {
+        _uiState.update { state ->
+            state.copy(
+                timelines = state.timelines.mapValues { (_, timeline) ->
+                    timeline.copy(items = timeline.items.removePureRenotesBy(userId), pending = timeline.pending.removePureRenotesBy(userId))
+                },
+            )
+        }
+    }
+
     private suspend fun bookmarkTolerant(token: String, noteId: String) {
         try {
             api.bookmark(token, noteId)
@@ -993,6 +1060,7 @@ class FeedViewModel(
                     instance = app.container.emojiRepository,
                     recents = app.container.recentReactions,
                     unicode = app.container.unicodeEmoji,
+                    moderation = app.container.moderationApi,
                 )
             }
         }

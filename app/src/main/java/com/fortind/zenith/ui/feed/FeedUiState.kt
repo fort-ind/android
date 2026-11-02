@@ -103,6 +103,14 @@ sealed interface FeedEvent {
 
     data class Redraft(val note: Note) : FeedEvent
 
+    data class UserMuted(val name: String) : FeedEvent
+
+    data class RenotesHidden(val name: String) : FeedEvent
+
+    data class UserBlocked(val name: String) : FeedEvent
+
+    data object ModerationFailed : FeedEvent
+
     data object PollVoteFailed : FeedEvent
 
     data object PollEnded : FeedEvent

@@ -1,6 +1,7 @@
 package com.fortind.zenith.ui.feed
 
 import androidx.lifecycle.viewModelScope
+import com.fortind.zenith.account.FakeModerationApi
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
@@ -54,6 +55,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+private const val NOW_MILLIS = 1_000_000L
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FeedViewModelTest {
 
@@ -102,7 +105,10 @@ class FeedViewModelTest {
         val api = FakeNotesApi()
         val stream = FakeTimelineStream()
         val recents = FakeRecents()
-        val viewModelCreated = lazy { FeedViewModel(session, api, stream, FakeInstance(), recents, FakeUnicode(), debounceMs) }
+        val moderation = FakeModerationApi()
+        val viewModelCreated = lazy {
+            FeedViewModel(session, api, stream, FakeInstance(), recents, FakeUnicode(), moderation, debounceMs, clock = { NOW_MILLIS })
+        }
         val viewModel by viewModelCreated
     }
 
@@ -730,6 +736,91 @@ class FeedViewModelTest {
 
         assertTrue(f.viewModel.uiState.value.current.items.isEmpty())
         assertEquals(listOf<FeedEvent>(FeedEvent.NoteDeleted), events)
+    }
+
+    @Test
+    fun mutingAnAuthorSendsTheEndTimeAndDropsTheirPostsAndRenotesOfThem() = runTest {
+        val f = fixture()
+        val bob = testUser("bob")
+        val alice = testUser("alice")
+        f.api.timelines[TimelineKind.Home] = listOf(
+            testNote("n4", user = bob),
+            testNote("n3", user = alice, text = null, renote = testNote("n9", user = bob)),
+            testNote("n2", user = alice),
+            testNote("n1", user = alice),
+        )
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val events = collectEvents(f.viewModel)
+
+        f.viewModel.muteAuthor("n4", durationMillis = 60_000L)
+
+        assertEquals(listOf("mute:bob:${NOW_MILLIS + 60_000L}"), f.moderation.calls)
+        assertEquals(listOf("n2", "n1"), f.viewModel.uiState.value.current.items.map { it.id })
+        assertEquals(listOf<FeedEvent>(FeedEvent.UserMuted(bob.displayName)), events)
+    }
+
+    @Test
+    fun mutingForeverSendsNoEndTime() = runTest {
+        val f = fixture().withPoll(testNote("n1", user = testUser("bob")))
+
+        f.viewModel.muteAuthor("n1", durationMillis = null)
+
+        assertEquals(listOf("mute:bob:forever"), f.moderation.calls)
+    }
+
+    @Test
+    fun hidingRenotesOnlyDropsTheirRenotes() = runTest {
+        val f = fixture()
+        val bob = testUser("bob")
+        f.api.timelines[TimelineKind.Home] = listOf(
+            testNote("n3", user = bob, text = null, renote = testNote("n9", user = testUser("alice"))),
+            testNote("n2", user = bob),
+        )
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.hideAuthorRenotes("n2")
+
+        assertEquals(listOf("hideRenotes:bob"), f.moderation.calls)
+        assertEquals(listOf("n2"), f.viewModel.uiState.value.current.items.map { it.id })
+    }
+
+    @Test
+    fun blockingDropsThePersonAndSaysSo() = runTest {
+        val f = fixture()
+        val bob = testUser("bob")
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n2", user = bob), testNote("n1", user = testUser("alice")))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val events = collectEvents(f.viewModel)
+
+        f.viewModel.blockAuthor("n2")
+
+        assertEquals(listOf("block:bob"), f.moderation.calls)
+        assertEquals(listOf("n1"), f.viewModel.uiState.value.current.items.map { it.id })
+        assertEquals(listOf<FeedEvent>(FeedEvent.UserBlocked(bob.displayName)), events)
+    }
+
+    @Test
+    fun aFailedBlockKeepsTheFeedAndReports() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", user = testUser("bob")))
+        f.moderation.failure = IOException("offline")
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val events = collectEvents(f.viewModel)
+
+        f.viewModel.blockAuthor("n1")
+
+        assertEquals(1, f.viewModel.uiState.value.current.items.size)
+        assertEquals(listOf<FeedEvent>(FeedEvent.ModerationFailed), events)
+    }
+
+    @Test
+    fun youCannotMuteOrBlockYourself() = runTest {
+        val f = fixture().withPoll(testNote("n1", user = testUser("me")))
+
+        f.viewModel.muteAuthor("n1", durationMillis = null)
+        f.viewModel.blockAuthor("n1")
+
+        assertTrue(f.moderation.calls.isEmpty())
     }
 
     @Test

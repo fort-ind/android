@@ -77,6 +77,9 @@ class NoteMenuTest {
         copyLink = {},
         copyText = {},
         share = {},
+        muteAuthor = { calls += "mute" },
+        hideAuthorRenotes = { calls += "hideRenotes" },
+        blockAuthor = { calls += "block" },
     )
 
     private fun show(

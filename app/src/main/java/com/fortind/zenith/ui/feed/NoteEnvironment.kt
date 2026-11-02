@@ -43,6 +43,9 @@ class NoteCallbacks(
     val copyLink: (Note) -> Unit,
     val copyText: (Note) -> Unit,
     val share: (Note) -> Unit,
+    val muteAuthor: (Note) -> Unit,
+    val hideAuthorRenotes: (Note) -> Unit,
+    val blockAuthor: (Note) -> Unit,
 )
 
 class NoteEnvironment(

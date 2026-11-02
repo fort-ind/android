@@ -238,6 +238,7 @@ fun ZenithApp(
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     var bookmarksOpen by rememberSaveable { mutableStateOf(false) }
+    var editProfileRequested by rememberSaveable { mutableStateOf(false) }
     var requestedThreadId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(currentDestination) { if (currentDestination != AppDestination.PROFILE) bookmarksOpen = false }
     val destinationState = rememberSaveableStateHolder()
@@ -358,9 +359,20 @@ fun ZenithApp(
                             onCloseBookmarks = { bookmarksOpen = false },
                         )
                     } else {
-                        ProfileScreen(onOpenBookmarks = { bookmarksOpen = true }, contentPadding = innerPadding)
+                        ProfileScreen(
+                            onOpenBookmarks = { bookmarksOpen = true },
+                            onEditProfile = {
+                                editProfileRequested = true
+                                currentDestination = AppDestination.SETTINGS
+                            },
+                            contentPadding = innerPadding,
+                        )
                     }
-                    AppDestination.SETTINGS -> SettingsScreen(modifier = Modifier.padding(innerPadding))
+                    AppDestination.SETTINGS -> SettingsScreen(
+                        editProfileRequested = editProfileRequested,
+                        onEditProfileHandled = { editProfileRequested = false },
+                        modifier = Modifier.padding(innerPadding),
+                    )
                 }
             }
         }

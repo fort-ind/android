@@ -26,7 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
@@ -39,8 +39,6 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -49,8 +47,6 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,10 +55,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -76,14 +70,10 @@ import androidx.window.core.layout.WindowSizeClass
 import coil3.compose.AsyncImage
 import com.fortind.zenith.R
 import com.fortind.zenith.auth.CurrentUser
-import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
-import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.rememberMorphingShape
 import com.fortind.zenith.ui.rememberReduceMotion
-import com.fortind.zenith.ui.theme.isThemeDark
-import kotlinx.coroutines.launch
 
 private val AvatarSize = 112.dp
 private val AvatarRing = 8.dp
@@ -91,6 +81,7 @@ private val AvatarRing = 8.dp
 @Composable
 fun ProfileScreen(
     onOpenBookmarks: () -> Unit,
+    onEditProfile: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory),
@@ -98,13 +89,6 @@ fun ProfileScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     var confirmingLogout by rememberSaveable { mutableStateOf(false) }
-
-    val context = LocalContext.current
-    val darkTheme = isThemeDark()
-    val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val noBrowserMessage = stringResource(R.string.login_error_no_browser)
 
     val layoutDirection = LocalLayoutDirection.current
     Box(
@@ -120,17 +104,12 @@ fun ProfileScreen(
             state = state,
             topInset = contentPadding.calculateTopPadding(),
             refreshing = refreshing,
-            onManageOnWeb = {
-                if (!launchCustomTab(context, FortInstance.SETTINGS_URL, darkTheme, toolbarColor)) {
-                    scope.launch { snackbarHostState.showSnackbar(noBrowserMessage) }
-                }
-            },
+            onEditProfile = onEditProfile,
             onLogOut = { confirmingLogout = true },
             onRetry = viewModel::refresh,
             onLogIn = viewModel::logIn,
             onOpenBookmarks = onOpenBookmarks,
         )
-        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
     if (confirmingLogout) {
@@ -150,7 +129,7 @@ fun ProfileContent(
     state: ProfileUiState,
     topInset: Dp,
     refreshing: Boolean,
-    onManageOnWeb: () -> Unit,
+    onEditProfile: () -> Unit,
     onLogOut: () -> Unit,
     onRetry: () -> Unit,
     onLogIn: () -> Unit,
@@ -185,7 +164,7 @@ fun ProfileContent(
                     )
                     ProfileActions(
                         onOpenBookmarks = onOpenBookmarks,
-                        onManageOnWeb = onManageOnWeb,
+                        onEditProfile = onEditProfile,
                         onLogOut = onLogOut,
                         modifier = Modifier.padding(horizontal = gutter),
                     )
@@ -363,7 +342,7 @@ private fun Avatar(user: CurrentUser, modifier: Modifier = Modifier) {
 @Composable
 private fun ProfileActions(
     onOpenBookmarks: () -> Unit,
-    onManageOnWeb: () -> Unit,
+    onEditProfile: () -> Unit,
     onLogOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -373,7 +352,7 @@ private fun ProfileActions(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ProfileActionButton(Icons.Default.Bookmarks, R.string.profile_bookmarks, onOpenBookmarks)
-        ProfileActionButton(Icons.Default.Settings, R.string.profile_manage_on_web, onManageOnWeb)
+        ProfileActionButton(Icons.Default.Edit, R.string.profile_edit_profile, onEditProfile)
         ProfileActionButton(
             icon = Icons.AutoMirrored.Filled.ExitToApp,
             label = R.string.profile_log_out,

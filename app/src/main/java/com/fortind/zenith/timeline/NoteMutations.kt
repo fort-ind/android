@@ -49,6 +49,16 @@ fun List<Note>.removeNote(id: String): List<Note> {
     return kept.mapNote(id) { it.asDeleted() }.let { if (it === kept && kept.size == size) this else it }
 }
 
+fun List<Note>.removeAuthoredBy(userId: String): List<Note> {
+    val kept = filterNot { it.user.id == userId || (it.isPureRenote && it.renote?.user?.id == userId) }
+    return if (kept.size == size) this else kept
+}
+
+fun List<Note>.removePureRenotesBy(userId: String): List<Note> {
+    val kept = filterNot { it.isPureRenote && it.user.id == userId }
+    return if (kept.size == size) this else kept
+}
+
 fun List<Note>.findNote(id: String): Note? {
     forEach { note ->
         if (note.id == id) return note

@@ -63,6 +63,10 @@ class UserSessionService(
         }
     }
 
+    fun applyUpdatedUser(user: CurrentUser) {
+        if (_state.value is SessionState.SignedIn) _state.value = SessionState.SignedIn(user)
+    }
+
     fun browseAsGuest() {
         _state.value = SessionState.Guest
     }

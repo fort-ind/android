@@ -499,6 +499,21 @@ fun NoteMenuItems(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
             callbacks.openUrl(url)
         }
     }
+    if (signedIn && !mine && !note.deleted) {
+        val name = note.user.displayName
+        MenuItem(stringResource(R.string.note_menu_mute, name)) {
+            onDismiss()
+            callbacks.muteAuthor(note)
+        }
+        MenuItem(stringResource(R.string.note_menu_hide_renotes, name)) {
+            onDismiss()
+            callbacks.hideAuthorRenotes(note)
+        }
+        MenuItem(stringResource(R.string.note_menu_block, name), destructive = true) {
+            onDismiss()
+            callbacks.blockAuthor(note)
+        }
+    }
     if (mine) {
         if (note.visibility != Visibility.Specified) {
             MenuItem(R.string.note_menu_redraft, destructive = true) {
@@ -515,8 +530,13 @@ fun NoteMenuItems(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
 
 @Composable
 private fun MenuItem(labelRes: Int, enabled: Boolean = true, destructive: Boolean = false, onClick: () -> Unit) {
+    MenuItem(stringResource(labelRes), enabled, destructive, onClick)
+}
+
+@Composable
+private fun MenuItem(label: String, enabled: Boolean = true, destructive: Boolean = false, onClick: () -> Unit) {
     val colors = if (destructive) MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error) else MenuDefaults.itemColors()
-    DropdownMenuItem(text = { Text(stringResource(labelRes)) }, onClick = onClick, enabled = enabled, colors = colors)
+    DropdownMenuItem(text = { Text(label) }, onClick = onClick, enabled = enabled, colors = colors)
 }
 
 fun absoluteTime(context: Context, millis: Long): String =
