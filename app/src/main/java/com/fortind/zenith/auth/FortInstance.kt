@@ -21,5 +21,8 @@ object FortInstance {
         "write:mutes",
         "read:blocks",
         "write:blocks",
+        "write:report-abuse",
+        "read:following",
+        "read:drive",
     )
 }

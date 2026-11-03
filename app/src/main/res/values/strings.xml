@@ -106,6 +106,8 @@
     <string name="feed_permission_body">to react and renote, fort.android needs your OK on %1$s. you\'ll hop over there and right back.</string>
     <string name="feed_permission_grant">Grant access</string>
     <string name="feed_permission_dismiss">Not now</string>
+    <string name="feed_new_permissions_title">a few new permissions..</string>
+    <string name="feed_new_permissions_body">new features need your OK on %1$s. you\'ll hop over there and right back.</string>
     <string name="feed_reaction_failed">Couldn\'t react, try again</string>
     <string name="feed_renote_failed">Couldn\'t renote, try again</string>
     <string name="feed_rate_limited">slow down a little :3 try again in a moment</string>
@@ -279,6 +281,7 @@
     <string name="notifications_scheduled_failed">A scheduled post failed</string>
     <string name="notifications_test">Test notification</string>
     <string name="notifications_generic">New notification</string>
+    <string name="notifications_direct_body">Sent you a direct note</string>
     <string name="notification_action_mark_read">Mark all as read</string>
     <string name="notification_summary">New activity on fort.social</string>
 
@@ -362,6 +365,8 @@
     <string name="composer_visibility_specified">Direct</string>
     <string name="composer_visibility_specified_body">kinda like a DM but if it was a post</string>
     <string name="composer_local_only">Local only</string>
+    <string name="composer_local_only_locked">Local only can\'t change after posting</string>
+    <string name="composer_poll_ended_warning">This poll has ended. Saving removes the poll and its results.</string>
     <string name="composer_counter">%1$d / %2$d</string>
     <string name="composer_counter_over">Over by %1$d</string>
     <string name="composer_discard_title">Keep this draft?</string>
@@ -376,6 +381,7 @@
     <string name="composer_failed">Couldn\'t post, try again</string>
     <string name="composer_failed_blocked">You can\'t post this, the author blocked you</string>
     <string name="composer_failed_mentions">Too many mentions in this post</string>
+    <string name="composer_failed_too_long">This post is too long</string>
     <string name="composer_failed_prohibited">This post contains words the server doesn\'t allow</string>
     <string name="composer_failed_gone">The post you\'re responding to isn\'t available anymore</string>
     <string name="composer_failed_permission">fort.android needs one more permission to post</string>

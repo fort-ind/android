@@ -383,8 +383,8 @@ private fun ComposerContent(
     val hasText by remember(viewModel) { derivedStateOf { viewModel.text.text.isNotBlank() } }
     val overLimit by remember(viewModel, state.textLimit, state.cwLimit, state.cwEnabled) {
         derivedStateOf {
-            codePointLength(viewModel.text.text) > state.textLimit ||
-                (state.cwEnabled && codePointLength(viewModel.cw.text) > state.cwLimit)
+            viewModel.text.text.length > state.textLimit ||
+                (state.cwEnabled && viewModel.cw.text.length > state.cwLimit)
         }
     }
     LaunchedEffect(promptOpen) { if (!promptOpen) focusRequester.requestFocus() }
@@ -437,6 +437,7 @@ private fun ComposerContent(
             ) {
                 val context = state.contextNote
                 if (context != null && state.target !is ComposerTarget.Edit) ContextCard(context, environment)
+                if (state.dropsEndedPoll) EndedPollWarning()
                 AnimatedVisibility(
                     visible = state.cwEnabled,
                     enter = expandVertically() + fadeIn(),
@@ -472,7 +473,7 @@ private fun ComposerContent(
             }
             ComposerToolbar(
                 state = state,
-                length = { codePointLength(viewModel.text.text) },
+                length = { viewModel.text.text.length },
                 onCwChange = viewModel::setCwEnabled,
                 onOpenVisibility = onOpenVisibility,
                 onLocalOnlyChange = viewModel::setLocalOnly,
@@ -562,6 +563,25 @@ private fun transparentFieldColors() = TextFieldDefaults.colors(
 )
 
 @Composable
+private fun EndedPollWarning() {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp),
+        ) {
+            Icon(Icons.Default.WarningAmber, contentDescription = null)
+            Text(stringResource(R.string.composer_poll_ended_warning), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
 private fun ContextCard(note: Note, environment: NoteEnvironment) {
     val textEnvironment = remember(note.id, environment.mfm) { environment.mfm.withEmoji(environment.noteEmoji(note)) }
     Surface(
@@ -620,10 +640,11 @@ private fun ComposerToolbar(
         )
         VisibilityChip(state.visibility, enabled = state.visibilityOptions.size > 1, onClick = onOpenVisibility)
         ToggleTooltipButton(
-            label = stringResource(R.string.composer_local_only),
+            label = stringResource(if (state.settingsLocked) R.string.composer_local_only_locked else R.string.composer_local_only),
             icon = Icons.Default.PublicOff,
             checked = state.localOnly,
             onCheckedChange = onLocalOnlyChange,
+            enabled = !state.settingsLocked,
         )
         TooltipIconButton(
             label = stringResource(R.string.composer_attach),
@@ -696,7 +717,13 @@ private fun Counter(length: () -> Int, limit: Int) {
 }
 
 @Composable
-private fun ToggleTooltipButton(label: String, icon: ImageVector, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun ToggleTooltipButton(
+    label: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
+) {
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(label) } },
@@ -705,6 +732,7 @@ private fun ToggleTooltipButton(label: String, icon: ImageVector, checked: Boole
         IconToggleButton(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = IconButtonDefaults.iconToggleButtonColors(
                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                 checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -810,6 +838,7 @@ private fun ComposerFailure.messageRes(): Int = when (this) {
     ComposerFailure.TooManyMentions -> R.string.composer_failed_mentions
     ComposerFailure.ProhibitedWords -> R.string.composer_failed_prohibited
     ComposerFailure.TargetGone -> R.string.composer_failed_gone
+    ComposerFailure.TooLong -> R.string.composer_failed_too_long
     ComposerFailure.MissingPermission -> R.string.composer_failed_permission
     ComposerFailure.SignInRequired -> R.string.composer_failed_sign_in
     ComposerFailure.TooManyAttachments -> R.string.composer_failed_attachments

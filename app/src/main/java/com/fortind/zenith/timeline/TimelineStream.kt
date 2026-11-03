@@ -22,7 +22,7 @@ sealed interface NoteUpdate {
 
     data class PollVoted(override val noteId: String, val choice: Int, val userId: String?) : NoteUpdate
 
-    data class Updated(override val noteId: String, val text: String?, val cw: String?, val hasContent: Boolean) : NoteUpdate
+    data class Updated(override val noteId: String) : NoteUpdate
 }
 
 sealed interface TimelineStreamEvent {
@@ -54,12 +54,7 @@ fun parseNoteUpdate(noteId: String, type: String, body: JSONObject?): NoteUpdate
     "unreacted" -> body?.optStringOrNull("reaction")?.let { NoteUpdate.Unreacted(noteId, it, body.optStringOrNull("userId")) }
     "deleted" -> NoteUpdate.Deleted(noteId)
     "pollVoted" -> body?.optIntOrNull("choice")?.let { NoteUpdate.PollVoted(noteId, it, body.optStringOrNull("userId")) }
-    "updated" -> NoteUpdate.Updated(
-        noteId = noteId,
-        text = body?.optStringOrNull("text"),
-        cw = body?.optStringOrNull("cw"),
-        hasContent = body != null && (body.has("text") || body.has("cw")),
-    )
+    "updated" -> NoteUpdate.Updated(noteId)
     else -> null
 }
 

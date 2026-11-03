@@ -45,17 +45,26 @@ class MisskeyStreamingTest {
     private class FakeTransport : StreamTransport {
         val sockets = CopyOnWriteArrayList<FakeSocket>()
         val urls = CopyOnWriteArrayList<String>()
+        val tokens = CopyOnWriteArrayList<String?>()
 
         val latest: FakeSocket get() = sockets.last()
 
-        override fun open(url: String, listener: StreamListener): StreamSocket {
+        override fun open(url: String, token: String?, listener: StreamListener): StreamSocket {
             urls += url
+            tokens += token
             return FakeSocket(listener).also { sockets += it }
         }
     }
 
-    private fun TestScope.streaming(transport: FakeTransport) =
-        MisskeyStreaming(transport, CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)), host = "example.social", initialBackoffMs = 10)
+    private fun TestScope.streaming(transport: FakeTransport, clock: () -> Long = { testScheduler.currentTime }) = MisskeyStreaming(
+        transport,
+        CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+        host = "example.social",
+        initialBackoffMs = 10,
+        maxBackoffMs = 40,
+        stableConnectionMs = 100,
+        clock = clock,
+    )
 
     private fun channelFrame(id: String, type: String, body: String = "{}") =
         """{"type":"channel","body":{"id":"$id","type":"$type","body":$body}}"""
@@ -75,7 +84,8 @@ class MisskeyStreamingTest {
         transport.latest.receive(channelFrame(id, "note", """{"id":"n1"}"""))
         transport.latest.receive(channelFrame("other", "note", """{"id":"n2"}"""))
 
-        assertEquals("https://example.social/streaming?i=tok", transport.urls.single())
+        assertEquals("https://example.social/streaming", transport.urls.single())
+        assertEquals("tok", transport.tokens.single())
         assertEquals("localTimeline", connect.getString("channel"))
         assertTrue(connect.getJSONObject("params").getBoolean("withRenotes"))
         assertEquals(ChannelEvent.Connected, events[0])
@@ -90,6 +100,100 @@ class MisskeyStreamingTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("globalTimeline").collect {} }
 
         assertEquals("https://example.social/streaming", transport.urls.single())
+        assertNull(transport.tokens.single())
+    }
+
+    @Test
+    fun aRefusedHandshakeStopsReconnecting() = runTest {
+        val transport = FakeTransport()
+        val connection = streaming(transport).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+
+        transport.latest.listener.onClosed(StreamRejectedException(401))
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(1, transport.sockets.size)
+    }
+
+    @Test
+    fun backoffGrowsToItsCapWhileConnectionsKeepFailing() = runTest {
+        val transport = FakeTransport()
+        val connection = streaming(transport).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+
+        transport.latest.drop()
+        advanceTimeBy(9)
+        runCurrent()
+        assertEquals(1, transport.sockets.size)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(2, transport.sockets.size)
+
+        transport.latest.drop()
+        advanceTimeBy(19)
+        runCurrent()
+        assertEquals(2, transport.sockets.size)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(3, transport.sockets.size)
+
+        transport.latest.drop()
+        advanceTimeBy(41)
+        runCurrent()
+        assertEquals(4, transport.sockets.size)
+
+        transport.latest.drop()
+        advanceTimeBy(39)
+        runCurrent()
+        assertEquals(4, transport.sockets.size)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(5, transport.sockets.size)
+    }
+
+    @Test
+    fun aConnectionThatDropsRightAfterOpeningDoesNotResetBackoff() = runTest {
+        val transport = FakeTransport()
+        val connection = streaming(transport).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+
+        transport.latest.open()
+        transport.latest.drop()
+        advanceTimeBy(11)
+        runCurrent()
+        assertEquals(2, transport.sockets.size)
+
+        transport.latest.open()
+        transport.latest.drop()
+        advanceTimeBy(11)
+        runCurrent()
+
+        assertEquals(2, transport.sockets.size)
+    }
+
+    @Test
+    fun aStableConnectionResetsBackoff() = runTest {
+        val transport = FakeTransport()
+        val connection = streaming(transport).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+
+        transport.latest.drop()
+        advanceTimeBy(11)
+        runCurrent()
+        transport.latest.drop()
+        advanceTimeBy(21)
+        runCurrent()
+        assertEquals(3, transport.sockets.size)
+
+        transport.latest.open()
+        advanceTimeBy(100)
+        runCurrent()
+        transport.latest.drop()
+        advanceTimeBy(11)
+        runCurrent()
+
+        assertEquals(4, transport.sockets.size)
     }
 
     @Test

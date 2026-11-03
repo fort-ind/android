@@ -34,9 +34,27 @@ interface DraftStore {
     suspend fun save(key: String, draft: ComposerDraft)
 
     suspend fun clear(key: String)
+
+    suspend fun adopt(userId: String)
+
+    suspend fun forget(userId: String)
 }
 
 const val MAX_STORED_DRAFTS = 24
+
+private const val ACCOUNT_SEPARATOR = '/'
+
+fun draftStorageKey(userId: String?, slot: String): String = if (userId == null) slot else "$userId$ACCOUNT_SEPARATOR$slot"
+
+fun adoptDrafts(drafts: Map<String, StoredDraft>, userId: String): Map<String, StoredDraft> {
+    if (drafts.keys.all { ACCOUNT_SEPARATOR in it }) return drafts
+    val (unowned, owned) = drafts.entries.partition { ACCOUNT_SEPARATOR !in it.key }
+    val adopted = unowned.associate { draftStorageKey(userId, it.key) to it.value }
+    return adopted + owned.associate { it.key to it.value }
+}
+
+fun forgetDrafts(drafts: Map<String, StoredDraft>, userId: String): Map<String, StoredDraft> =
+    drafts.filterKeys { ACCOUNT_SEPARATOR in it && !it.startsWith(draftStorageKey(userId, "")) }
 
 fun putDraft(drafts: Map<String, StoredDraft>, key: String, draft: ComposerDraft, nowMillis: Long): Map<String, StoredDraft> {
     if (draft.isBlank) return drafts - key
@@ -148,6 +166,20 @@ class DataStoreDraftStore(
     override suspend fun clear(key: String) {
         dataStore.edit { prefs ->
             prefs[DraftsKey] = encodeDrafts(decodeDrafts(prefs[DraftsKey]) - key)
+        }
+    }
+
+    override suspend fun adopt(userId: String) {
+        dataStore.edit { prefs ->
+            val current = decodeDrafts(prefs[DraftsKey])
+            val adopted = adoptDrafts(current, userId)
+            if (adopted != current) prefs[DraftsKey] = encodeDrafts(adopted)
+        }
+    }
+
+    override suspend fun forget(userId: String) {
+        dataStore.edit { prefs ->
+            prefs[DraftsKey] = encodeDrafts(forgetDrafts(decodeDrafts(prefs[DraftsKey]), userId))
         }
     }
 

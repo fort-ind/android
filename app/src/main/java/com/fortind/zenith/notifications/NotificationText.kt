@@ -31,8 +31,11 @@ fun FortNotification.titleText(resources: Resources): String {
 
 fun FortNotification.previewText(): String? = notePreview ?: body
 
-fun FortNotification.bodyText(): String? {
-    val preview = previewText()
+fun FortNotification.bodyText(): String? = bodyWith(previewText())
+
+fun FortNotification.systemBodyText(directBody: String): String? = bodyWith(if (isDirect) directBody else previewText())
+
+private fun FortNotification.bodyWith(preview: String?): String? {
     val emoji = reaction?.takeIf { type == NotificationType.Reaction }
     return when {
         emoji != null && preview != null -> "$emoji $preview"

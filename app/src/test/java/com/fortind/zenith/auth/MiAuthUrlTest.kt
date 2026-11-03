@@ -8,7 +8,7 @@ class MiAuthUrlTest {
 
     private val defaultScopes = "read:account,read:notifications,write:notifications,write:following,write:reactions," +
         "write:notes,write:drive,write:votes,read:favorites,write:favorites,write:account,read:mutes,write:mutes," +
-        "read:blocks,write:blocks"
+        "read:blocks,write:blocks,write:report-abuse,read:following,read:drive"
 
     @Test
     fun authorizeUrlTargetsTheFortInstanceWithAppNameAndScopes() {

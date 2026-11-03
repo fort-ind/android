@@ -228,7 +228,12 @@ fun FeedFooter(timeline: TimelineState, onRetry: () -> Unit, modifier: Modifier 
 }
 
 @Composable
-fun PermissionBanner(onGrant: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun PermissionBanner(
+    onGrant: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    newPermissions: Boolean = false,
+) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -236,8 +241,14 @@ fun PermissionBanner(onGrant: () -> Unit, onDismiss: () -> Unit, modifier: Modif
         modifier = modifier,
     ) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.feed_permission_title), style = MaterialTheme.typography.titleMediumEmphasized)
-            Text(stringResource(R.string.feed_permission_body, FortInstance.HOST), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(if (newPermissions) R.string.feed_new_permissions_title else R.string.feed_permission_title),
+                style = MaterialTheme.typography.titleMediumEmphasized,
+            )
+            Text(
+                stringResource(if (newPermissions) R.string.feed_new_permissions_body else R.string.feed_permission_body, FortInstance.HOST),
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.feed_permission_dismiss)) }
                 FilledTonalButton(onClick = onGrant) { Text(stringResource(R.string.feed_permission_grant)) }

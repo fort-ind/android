@@ -84,7 +84,8 @@ fun Note.acceptsSensitiveReactions(): Boolean =
 
 fun Note.canRenote(myUserId: String?): Boolean = myUserId != null && !deleted && when (visibility) {
     Visibility.Public, Visibility.Home -> true
-    Visibility.Followers, Visibility.Specified -> user.id == myUserId
+    Visibility.Followers -> user.id == myUserId
+    Visibility.Specified -> false
 }
 
 fun Note.isRenoteOf(noteId: String, userId: String): Boolean = isPureRenote && user.id == userId && renote?.id == noteId

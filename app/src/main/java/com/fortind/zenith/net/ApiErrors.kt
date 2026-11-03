@@ -17,6 +17,8 @@ object ApiErrorCodes {
     const val ALREADY_REACTED = "ALREADY_REACTED"
     const val NOT_REACTED = "NOT_REACTED"
     const val RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+    const val MAX_LENGTH = "MAX_LENGTH"
+    const val MAX_CW_LENGTH = "MAX_CW_LENGTH"
     const val NO_SUCH_NOTE = "NO_SUCH_NOTE"
     const val NO_SUCH_REPLY_TARGET = "NO_SUCH_REPLY_TARGET"
     const val NO_SUCH_RENOTE_TARGET = "NO_SUCH_RENOTE_TARGET"

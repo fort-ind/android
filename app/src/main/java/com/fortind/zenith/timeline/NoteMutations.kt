@@ -44,6 +44,21 @@ fun Note.asDeleted(): Note = copy(
     deleted = true,
 )
 
+fun Note.withEditFrom(fresh: Note, editedAtMillis: Long?): Note = copy(
+    text = fresh.text,
+    textMfm = fresh.textMfm,
+    cw = fresh.cw,
+    cwMfm = fresh.cwMfm,
+    visibility = fresh.visibility,
+    localOnly = fresh.localOnly,
+    files = fresh.files,
+    poll = fresh.poll,
+    renote = fresh.renote,
+    reactionAcceptance = fresh.reactionAcceptance,
+    visibleUserIds = fresh.visibleUserIds,
+    editedAtMillis = editedAtMillis,
+)
+
 fun List<Note>.removeNote(id: String): List<Note> {
     val kept = filterNot { it.id == id || (it.isPureRenote && it.renote?.id == id) }
     return kept.mapNote(id) { it.asDeleted() }.let { if (it === kept && kept.size == size) this else it }

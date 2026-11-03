@@ -54,6 +54,40 @@ class DraftStoreTest {
     }
 
     @Test
+    fun storageKeysCarryTheAccountWhenItIsKnown() {
+        assertEquals("u1/new", draftStorageKey("u1", "new"))
+        assertEquals("new", draftStorageKey(null, "new"))
+    }
+
+    @Test
+    fun oldDraftsMoveToTheAccountThatFirstOpensTheComposer() {
+        val old = StoredDraft(ComposerDraft(text = "old"), 1L)
+        val other = StoredDraft(ComposerDraft(text = "other"), 2L)
+
+        val adopted = adoptDrafts(mapOf("new" to old, "reply:n1" to old, "u2/new" to other), "u1")
+
+        assertEquals(setOf("u1/new", "u1/reply:n1", "u2/new"), adopted.keys)
+        assertEquals(other, adopted["u2/new"])
+    }
+
+    @Test
+    fun anAccountsOwnDraftWinsOverAnOldOne() {
+        val old = StoredDraft(ComposerDraft(text = "old"), 1L)
+        val mine = StoredDraft(ComposerDraft(text = "mine"), 2L)
+
+        assertEquals(mine, adoptDrafts(mapOf("new" to old, "u1/new" to mine), "u1")["u1/new"])
+    }
+
+    @Test
+    fun forgettingRemovesThatAccountAndUnownedDraftsOnly() {
+        val draft = StoredDraft(ComposerDraft(text = "x"), 1L)
+
+        val kept = forgetDrafts(mapOf("new" to draft, "u1/new" to draft, "u1/quote:n" to draft, "u10/new" to draft), "u1")
+
+        assertEquals(setOf("u10/new"), kept.keys)
+    }
+
+    @Test
     fun corruptOrMissingDataDecodesToNothing() {
         assertTrue(decodeDrafts(null).isEmpty())
         assertTrue(decodeDrafts("").isEmpty())

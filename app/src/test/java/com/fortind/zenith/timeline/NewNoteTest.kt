@@ -67,6 +67,56 @@ class NewNoteTest {
     }
 
     @Test
+    fun editingAQuoteKeepsTheQuotedNote() {
+        val json = NewNote(text = "fixed", renoteId = "q1").toEditRequest("tok", "n9")
+
+        assertEquals("q1", json.getString("renoteId"))
+    }
+
+    @Test
+    fun editingWithoutAQuoteSendsNoRenoteId() {
+        val json = NewNote(text = "fixed").toEditRequest("tok", "n9")
+
+        assertFalse(json.has("renoteId"))
+        assertFalse(json.has("replyId"))
+    }
+
+    @Test
+    fun editingAPollResendsItUnchanged() {
+        val poll = PollBody(choices = listOf("a", "b"), multiple = true, expiresAtMillis = 1_800_000_000_123L)
+
+        val json = NewNote(text = "fixed", poll = poll).toEditRequest("tok", "n9").getJSONObject("poll")
+
+        assertEquals(listOf("a", "b"), json.getJSONArray("choices").let { array -> List(array.length(), array::getString) })
+        assertTrue(json.getBoolean("multiple"))
+        assertEquals(1_800_000_000_123L, json.getLong("expiresAt"))
+    }
+
+    @Test
+    fun aPollWithNoEndSendsNullExpiry() {
+        val poll = PollBody(choices = listOf("a", "b"), multiple = false, expiresAtMillis = null)
+
+        val json = NewNote(text = "fixed", poll = poll).toEditRequest("tok", "n9").getJSONObject("poll")
+
+        assertTrue(json.isNull("expiresAt"))
+    }
+
+    @Test
+    fun editingWithoutAPollOmitsIt() {
+        assertFalse(NewNote(text = "fixed").toEditRequest("tok", "n9").has("poll"))
+    }
+
+    @Test
+    fun editingSendsTheReactionLimitEvenWhenThereIsNone() {
+        val limited = NewNote(text = "fixed", reactionAcceptance = ReactionAcceptance.LikeOnly).toEditRequest("tok", "n9")
+        val open = NewNote(text = "fixed").toEditRequest("tok", "n9")
+
+        assertEquals("likeOnly", limited.getString("reactionAcceptance"))
+        assertTrue(open.has("reactionAcceptance"))
+        assertTrue(open.isNull("reactionAcceptance"))
+    }
+
+    @Test
     fun blankTextIsOmittedFromCreateButNulledInEdit() {
         val create = NewNote(text = "   ", fileIds = listOf("f1")).toCreateRequest("tok")
         val edit = NewNote(text = "   ", fileIds = listOf("f1")).toEditRequest("tok", "n9")

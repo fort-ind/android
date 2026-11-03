@@ -72,7 +72,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
 
     private fun post(notification: FortNotification, avatar: Bitmap?) {
         val resources = context.resources
-        val text = notification.bodyText()
+        val text = notification.systemBodyText(context.getString(R.string.notifications_direct_body))
         val builder = NotificationCompat.Builder(context, notification.type.category().channelId)
             .setSmallIcon(R.drawable.ic_stat_notification)
             .setContentTitle(notification.titleText(resources))

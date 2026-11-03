@@ -53,6 +53,38 @@ class NotificationParsingTest {
     }
 
     @Test
+    fun aDirectNoteIsRedactedOnlyInSystemNotifications() {
+        val json = base("mention").put("user", user()).put("note", note(text = "secret").put("visibility", "specified"))
+
+        val parsed = parseNotification(json)!!
+
+        assertEquals(true, parsed.isDirect)
+        assertEquals("secret", parsed.bodyText())
+        assertEquals("neutral", parsed.systemBodyText("neutral"))
+    }
+
+    @Test
+    fun aReactionToADirectNoteKeepsItsEmojiButNotTheText() {
+        val json = base("reaction").put("user", user()).put("note", note(text = "secret").put("visibility", "specified")).put("reaction", "👍")
+
+        assertEquals("👍 neutral", parseNotification(json)!!.systemBodyText("neutral"))
+    }
+
+    @Test
+    fun otherVisibilitiesKeepTheirTextInSystemNotifications() {
+        val followers = base("mention").put("user", user()).put("note", note(text = "hi").put("visibility", "followers"))
+
+        assertEquals("hi", parseNotification(followers)!!.systemBodyText("neutral"))
+    }
+
+    @Test
+    fun aDirectNotesContentWarningIsRedactedToo() {
+        val json = base("mention").put("user", user()).put("note", note(text = "secret", cw = "cw").put("visibility", "specified"))
+
+        assertEquals("neutral", parseNotification(json)!!.systemBodyText("neutral"))
+    }
+
+    @Test
     fun contentWarningIsPreferredOverTheNoteText() {
         val json = base("mention").put("user", user()).put("note", note(text = "secret", cw = "spoilers"))
 

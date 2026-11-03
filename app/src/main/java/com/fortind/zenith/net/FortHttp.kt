@@ -11,7 +11,12 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-class FortHttp(private val host: String = FortInstance.HOST) {
+class FortHttp(
+    private val host: String = FortInstance.HOST,
+    private val rateLimits: RateLimitGate = RateLimitGate(),
+) {
+    @Volatile
+    var onPermissionDenied: (() -> Unit)? = null
 
     suspend fun postJson(path: String, body: JSONObject): JSONObject {
         val text = post(path, body)
@@ -37,18 +42,27 @@ class FortHttp(private val host: String = FortInstance.HOST) {
 
     private suspend fun post(path: String, body: JSONObject): String =
         withContext(NonCancellable + Dispatchers.IO) {
+            if (rateLimits.isHeld(path)) throw HttpStatusException(HTTP_TOO_MANY_REQUESTS, ApiErrorCodes.RATE_LIMIT_EXCEEDED)
             val connection = URL("https://$host$path").openConnection() as HttpURLConnection
             try {
+                val timeout = timeoutFor(path)
                 connection.requestMethod = "POST"
-                connection.connectTimeout = TIMEOUT_MS
-                connection.readTimeout = TIMEOUT_MS
+                connection.connectTimeout = timeout
+                connection.readTimeout = timeout
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("Accept", "application/json")
                 connection.outputStream.use { it.write(body.toString().toByteArray()) }
 
                 val code = connection.responseCode
-                if (code !in 200..299) throw HttpStatusException(code, parseApiErrorCode(readErrorBody(connection)))
+                if (code !in 200..299) {
+                    val apiCode = parseApiErrorCode(readErrorBody(connection))
+                    if (code == HTTP_TOO_MANY_REQUESTS) {
+                        rateLimits.hold(path, connection.getHeaderField("Retry-After"), connection.getHeaderField("X-RateLimit-Clear"))
+                    }
+                    if (code == HttpURLConnection.HTTP_FORBIDDEN && apiCode == ApiErrorCodes.PERMISSION_DENIED) onPermissionDenied?.invoke()
+                    throw HttpStatusException(code, apiCode)
+                }
                 if (code == HttpURLConnection.HTTP_NO_CONTENT) "" else connection.inputStream.bufferedReader().use { it.readText() }
             } finally {
                 connection.disconnect()
@@ -65,8 +79,14 @@ class FortHttp(private val host: String = FortInstance.HOST) {
         null
     }
 
+    private fun timeoutFor(path: String): Int =
+        if (path == PATH_ME || path.startsWith(PATH_MIAUTH)) SESSION_TIMEOUT_MS else TIMEOUT_MS
+
     private companion object {
-        const val TIMEOUT_MS = 10_000
+        const val TIMEOUT_MS = 20_000
+        const val SESSION_TIMEOUT_MS = 30_000
+        const val PATH_ME = "/api/i"
+        const val PATH_MIAUTH = "/api/miauth/"
         const val MAX_ERROR_BODY_CHARS = 4_096
     }
 }

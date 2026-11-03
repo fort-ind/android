@@ -27,6 +27,7 @@ import com.fortind.zenith.composer.ComposerDraft
 import com.fortind.zenith.composer.DraftAttachment
 import com.fortind.zenith.composer.DraftStore
 import com.fortind.zenith.composer.MAX_ATTACHMENTS
+import com.fortind.zenith.composer.draftStorageKey
 import com.fortind.zenith.composer.toAttachment
 import com.fortind.zenith.composer.toDraft
 import com.fortind.zenith.composer.toExistingAttachment
@@ -49,8 +50,10 @@ import com.fortind.zenith.timeline.NewNote
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.timeline.NotesApi
+import com.fortind.zenith.timeline.ReactionAcceptance
 import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.timeline.canRenote
+import com.fortind.zenith.timeline.toBody
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
@@ -104,6 +107,7 @@ enum class ComposerFailure {
     TooManyMentions,
     ProhibitedWords,
     TargetGone,
+    TooLong,
     MissingPermission,
     SignInRequired,
     TooManyAttachments,
@@ -124,12 +128,22 @@ data class ComposerUiState(
     val maxAltLength: Int = DEFAULT_MAX_ALT_TEXT_LENGTH,
     val posting: Boolean = false,
     val failure: ComposerFailure? = null,
+    val dropsEndedPoll: Boolean = false,
 ) {
+    val settingsLocked: Boolean get() = target is ComposerTarget.Edit
+
     val visibilityLocked: Boolean
-        get() = contextNote?.visibility == Visibility.Specified && target !is ComposerTarget.Quote
+        get() = settingsLocked || (contextNote?.visibility == Visibility.Specified && target !is ComposerTarget.Quote)
 
     val visibilityOptions: List<Visibility>
-        get() = if (visibilityLocked) listOf(Visibility.Specified) else listOf(Visibility.Public, Visibility.Home, Visibility.Followers)
+        get() = if (visibilityLocked) {
+            listOf(contextNote?.visibility ?: visibility)
+        } else {
+            listOf(Visibility.Public, Visibility.Home, Visibility.Followers)
+        }
+
+    fun pollHasEnded(nowMillis: Long): Boolean =
+        settingsLocked && contextNote?.poll?.expiresAtMillis?.let { it <= nowMillis } == true
 
     val needsContext: Boolean get() = target !is ComposerTarget.NewPost
 
@@ -156,6 +170,7 @@ class ComposerViewModel(
     private val sanitizer: MediaSanitizer,
     private val suggestionEngine: SuggestionEngine,
     private val draftDebounceMs: Long = DRAFT_DEBOUNCE_MS,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
     val text = TextFieldState()
@@ -191,7 +206,8 @@ class ComposerViewModel(
     fun open(target: ComposerTarget, note: Note?, seed: Note? = null) {
         if (seed == null && _uiState.value?.target == target) return
         viewModelScope.launch {
-            val stored = if (seed == null) target.draftKey?.let { drafts.load(it) } else null
+            myUserId?.let { drafts.adopt(it) }
+            val stored = if (seed == null) target.draftKey?.let { drafts.load(storageKey(it)) } else null
             baseline = initialDraft(target, note)
             val draft = when {
                 seed != null -> seedDraft(seed)
@@ -209,7 +225,7 @@ class ComposerViewModel(
             text.setTextAndPlaceCursorAtEnd(draft.text)
             text.undoState.clearHistory()
             cw.setTextAndPlaceCursorAtEnd(draft.cw.orEmpty())
-            _uiState.value = ComposerUiState(
+            val opened = ComposerUiState(
                 target = target,
                 contextNote = note,
                 visibility = draft.visibility,
@@ -222,6 +238,7 @@ class ComposerViewModel(
                 maxFileSizeBytes = limits?.maxFileSizeBytes ?: DEFAULT_MAX_FILE_SIZE_BYTES,
                 maxAltLength = limits?.maxAltTextLength ?: DEFAULT_MAX_ALT_TEXT_LENGTH,
             )
+            _uiState.value = opened.copy(dropsEndedPoll = opened.pollHasEnded(clock()))
         }
     }
 
@@ -240,7 +257,7 @@ class ComposerViewModel(
     }
 
     fun setLocalOnly(localOnly: Boolean) {
-        _uiState.update { it?.copy(localOnly = localOnly) }
+        _uiState.update { state -> if (state?.settingsLocked == true) state else state?.copy(localOnly = localOnly) }
     }
 
     fun setCwEnabled(enabled: Boolean) {
@@ -327,7 +344,7 @@ class ComposerViewModel(
         _uiState.value = null
         _suggestions.value = null
         cancelUploads()
-        val key = state.target.draftKey
+        val key = state.target.draftKey?.let(::storageKey)
         val draft = currentDraft(state).takeUnless { it == baseline } ?: ComposerDraft()
         viewModelScope.launch {
             if (key != null) {
@@ -340,6 +357,10 @@ class ComposerViewModel(
     fun submit() {
         val state = _uiState.value ?: return
         if (state.posting) return
+        if (!state.dropsEndedPoll && state.pollHasEnded(clock())) {
+            _uiState.update { it?.copy(dropsEndedPoll = true) }
+            return
+        }
         val note = buildNote(state) ?: return
         _uiState.update { it?.copy(posting = true, failure = null) }
         viewModelScope.launch {
@@ -356,7 +377,7 @@ class ComposerViewModel(
                     is ComposerTarget.Edit -> api.edit(token, target.noteId, note)
                     else -> api.create(token, note)
                 }
-                state.target.draftKey?.let { drafts.clear(it) }
+                state.target.draftKey?.let { drafts.clear(storageKey(it)) }
                 _events.trySend(ComposerEvent.Posted(result, state.target))
                 _uiState.value = null
             } catch (_: TokenRejectedException) {
@@ -486,19 +507,24 @@ class ComposerViewModel(
         val warning = if (state.cwEnabled) cw.text.toString() else null
         val fileIds = state.attachments.mapNotNull { it.remote?.id }
         if (body.isBlank() && fileIds.isEmpty()) return null
-        if (codePointLength(body) > state.textLimit) return null
-        if (warning != null && codePointLength(warning) > state.cwLimit) return null
+        if (body.length > state.textLimit) return null
+        if (warning != null && warning.length > state.cwLimit) return null
+        val edited = state.contextNote?.takeIf { state.target is ComposerTarget.Edit }
         return NewNote(
             text = body.takeIf { it.isNotBlank() },
             cw = warning,
-            visibility = state.visibility,
-            localOnly = state.localOnly,
+            visibility = edited?.visibility ?: state.visibility,
+            localOnly = edited?.localOnly ?: state.localOnly,
             replyId = (state.target as? ComposerTarget.Reply)?.noteId,
-            renoteId = (state.target as? ComposerTarget.Quote)?.noteId,
+            renoteId = (state.target as? ComposerTarget.Quote)?.noteId ?: edited?.renote?.id,
             fileIds = fileIds,
             visibleUserIds = state.visibleUserIds,
+            poll = edited?.poll?.takeUnless { state.dropsEndedPoll }?.toBody(),
+            reactionAcceptance = edited?.reactionAcceptance ?: ReactionAcceptance.All,
         )
     }
+
+    private fun storageKey(slot: String): String = draftStorageKey(myUserId, slot)
 
     private fun initialDraft(target: ComposerTarget, note: Note?): ComposerDraft = when {
         note == null -> ComposerDraft()
@@ -551,7 +577,7 @@ class ComposerViewModel(
                 .collect {
                     val state = _uiState.value ?: return@collect
                     val key = state.target.draftKey ?: return@collect
-                    if (!state.posting) drafts.save(key, currentDraft(state).takeUnless { it == baseline } ?: ComposerDraft())
+                    if (!state.posting) drafts.save(storageKey(key), currentDraft(state).takeUnless { it == baseline } ?: ComposerDraft())
                 }
         }
     }
@@ -564,6 +590,7 @@ class ComposerViewModel(
             ApiErrorCodes.CONTAINS_TOO_MANY_MENTIONS -> ComposerFailure.TooManyMentions
             ApiErrorCodes.CONTAINS_PROHIBITED_WORDS -> ComposerFailure.ProhibitedWords
             ApiErrorCodes.NO_SUCH_REPLY_TARGET, ApiErrorCodes.NO_SUCH_RENOTE_TARGET, ApiErrorCodes.NO_SUCH_NOTE -> ComposerFailure.TargetGone
+            ApiErrorCodes.MAX_LENGTH, ApiErrorCodes.MAX_CW_LENGTH -> ComposerFailure.TooLong
             else -> ComposerFailure.Generic
         }
         else -> ComposerFailure.Generic

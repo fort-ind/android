@@ -13,6 +13,7 @@ import com.fortind.zenith.account.HttpAccountApi
 import com.fortind.zenith.account.HttpModerationApi
 import com.fortind.zenith.account.ModerationApi
 import com.fortind.zenith.net.FortHttp
+import com.fortind.zenith.auth.DataStoreScopeStampStore
 import com.fortind.zenith.auth.HttpMiAuthApi
 import com.fortind.zenith.auth.HttpUserApi
 import com.fortind.zenith.auth.KeystoreTokenStore
@@ -74,7 +75,7 @@ import okhttp3.OkHttpClient
 class AppContainer(application: Application) {
     private val http = FortHttp()
     val miAuthApi: MiAuthApi = HttpMiAuthApi(http)
-    val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http))
+    val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http), DataStoreScopeStampStore(application))
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val okHttpClient = OkHttpClient()
     private val streaming = MisskeyStreaming(OkHttpStreamTransport(okHttpClient), scope)
@@ -116,6 +117,10 @@ class AppContainer(application: Application) {
         syncStore = notificationSyncStore,
         notifier = systemNotifier,
     )
+
+    init {
+        http.onPermissionDenied = { scope.launch { sessionService.markScopesStale() } }
+    }
 }
 
 class ZenithApplication : Application(), SingletonImageLoader.Factory {

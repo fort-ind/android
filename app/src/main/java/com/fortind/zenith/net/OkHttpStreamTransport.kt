@@ -12,9 +12,12 @@ class OkHttpStreamTransport(client: OkHttpClient) : StreamTransport {
         .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
         .build()
 
-    override fun open(url: String, listener: StreamListener): StreamSocket {
+    override fun open(url: String, token: String?, listener: StreamListener): StreamSocket {
+        val request = Request.Builder().url(url).apply {
+            token?.let { header("Authorization", "Bearer $it") }
+        }.build()
         val socket = client.newWebSocket(
-            Request.Builder().url(url).build(),
+            request,
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     listener.onOpen(OkHttpStreamSocket(webSocket))
@@ -30,7 +33,8 @@ class OkHttpStreamTransport(client: OkHttpClient) : StreamTransport {
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    listener.onClosed(t)
+                    val refused = response?.code?.takeIf { it == HTTP_UNAUTHORIZED || it == HTTP_FORBIDDEN }
+                    listener.onClosed(refused?.let(::StreamRejectedException) ?: t)
                 }
             },
         )
@@ -45,6 +49,8 @@ class OkHttpStreamTransport(client: OkHttpClient) : StreamTransport {
 
     private companion object {
         const val NORMAL_CLOSURE = 1000
+        const val HTTP_UNAUTHORIZED = 401
+        const val HTTP_FORBIDDEN = 403
         const val PING_INTERVAL_SECONDS = 30L
     }
 }

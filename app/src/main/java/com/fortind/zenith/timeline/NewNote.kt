@@ -3,6 +3,19 @@ package com.fortind.zenith.timeline
 import org.json.JSONArray
 import org.json.JSONObject
 
+data class PollBody(
+    val choices: List<String>,
+    val multiple: Boolean,
+    val expiresAtMillis: Long?,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("choices", JSONArray(choices))
+        .put("multiple", multiple)
+        .put("expiresAt", expiresAtMillis ?: JSONObject.NULL)
+}
+
+fun Poll.toBody(): PollBody = PollBody(choices.map { it.text }, multiple, expiresAtMillis)
+
 data class NewNote(
     val text: String?,
     val cw: String? = null,
@@ -12,6 +25,8 @@ data class NewNote(
     val renoteId: String? = null,
     val fileIds: List<String> = emptyList(),
     val visibleUserIds: List<String> = emptyList(),
+    val poll: PollBody? = null,
+    val reactionAcceptance: ReactionAcceptance = ReactionAcceptance.All,
 )
 
 fun NewNote.toCreateRequest(token: String): JSONObject = JSONObject().apply {
@@ -24,6 +39,8 @@ fun NewNote.toCreateRequest(token: String): JSONObject = JSONObject().apply {
     renoteId?.let { put("renoteId", it) }
     if (fileIds.isNotEmpty()) put("fileIds", JSONArray(fileIds))
     if (visibility == Visibility.Specified) put("visibleUserIds", JSONArray(visibleUserIds))
+    poll?.let { put("poll", it.toJson()) }
+    reactionAcceptance.apiName?.let { put("reactionAcceptance", it) }
 }
 
 fun NewNote.toEditRequest(token: String, noteId: String): JSONObject = JSONObject().apply {
@@ -35,4 +52,7 @@ fun NewNote.toEditRequest(token: String, noteId: String): JSONObject = JSONObjec
     put("localOnly", localOnly)
     put("fileIds", JSONArray(fileIds))
     if (visibility == Visibility.Specified) put("visibleUserIds", JSONArray(visibleUserIds))
+    renoteId?.let { put("renoteId", it) }
+    poll?.let { put("poll", it.toJson()) }
+    put("reactionAcceptance", reactionAcceptance.apiName ?: JSONObject.NULL)
 }

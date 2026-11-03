@@ -15,7 +15,6 @@ import com.fortind.zenith.emoji.InstanceInfo
 import com.fortind.zenith.emoji.RecentReactionsStore
 import com.fortind.zenith.emoji.UnicodeEmojiGroup
 import com.fortind.zenith.emoji.UnicodeEmojiSource
-import com.fortind.zenith.mfm.MfmParser
 import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
@@ -44,10 +43,10 @@ import com.fortind.zenith.timeline.removePureRenotesBy
 import com.fortind.zenith.timeline.withMyReaction
 import com.fortind.zenith.timeline.withOtherVote
 import com.fortind.zenith.timeline.withReactionCount
+import com.fortind.zenith.timeline.withEditFrom
 import com.fortind.zenith.timeline.withVotes
 import com.fortind.zenith.timeline.withoutVotes
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -95,6 +94,7 @@ class FeedViewModel(
     val emojis = instance.emojis
     val meta = instance.meta
     val recentReactions: Flow<List<String>> = recents.recent
+    val scopesOutdated: Flow<Boolean> = session.scopesOutdated
 
     private val _unicodeEmoji = MutableStateFlow<List<UnicodeEmojiGroup>>(emptyList())
     val unicodeEmoji: StateFlow<List<UnicodeEmojiGroup>> = _unicodeEmoji.asStateFlow()
@@ -700,22 +700,15 @@ class FeedViewModel(
     }
 
     fun noteEdited(note: Note) {
-        mutateEverywhere(note.id) {
-            it.copy(
-                text = note.text,
-                textMfm = note.textMfm,
-                cw = note.cw,
-                cwMfm = note.cwMfm,
-                visibility = note.visibility,
-                localOnly = note.localOnly,
-                files = note.files,
-                editedAtMillis = note.editedAtMillis ?: System.currentTimeMillis(),
-            )
-        }
+        mutateEverywhere(note.id) { it.withEditFrom(note, note.editedAtMillis ?: clock()) }
     }
 
     fun requestPermission() {
         _uiState.update { it.copy(needsPermission = true) }
+    }
+
+    fun dismissScopeBanner() {
+        viewModelScope.launch { session.dismissScopeBanner() }
     }
 
     fun loadUnicodeEmoji() {
@@ -904,29 +897,11 @@ class FeedViewModel(
             is NoteUpdate.PollVoted -> if (update.userId != me || me == null) {
                 mutateEverywhere(update.noteId) { note -> note.copy(poll = note.poll?.withOtherVote(update.choice)) }
             }
-            is NoteUpdate.Updated -> if (update.hasContent) {
-                val textMfm = withContext(Dispatchers.Default) { update.text?.let(MfmParser::parse).orEmpty() }
-                val cwMfm = withContext(Dispatchers.Default) { update.cw?.let(MfmParser::parse) }
-                mutateEverywhere(update.noteId) {
-                    it.copy(text = update.text, textMfm = textMfm, cw = update.cw, cwMfm = cwMfm, editedAtMillis = System.currentTimeMillis())
-                }
-            } else {
-                try {
-                    val fresh = api.show(token, update.noteId)
-                    mutateEverywhere(update.noteId) {
-                        it.copy(
-                            text = fresh.text,
-                            textMfm = fresh.textMfm,
-                            cw = fresh.cw,
-                            cwMfm = fresh.cwMfm,
-                            files = fresh.files,
-                            poll = fresh.poll,
-                            editedAtMillis = fresh.editedAtMillis,
-                        )
-                    }
-                } catch (e: IOException) {
-                    handleFailure(e) {}
-                }
+            is NoteUpdate.Updated -> try {
+                val fresh = api.show(token, update.noteId)
+                mutateEverywhere(update.noteId) { it.withEditFrom(fresh, fresh.editedAtMillis) }
+            } catch (e: IOException) {
+                handleFailure(e) {}
             }
         }
     }
@@ -959,8 +934,7 @@ class FeedViewModel(
         }
         try {
             withContext(NonCancellable) {
-                if (confirmed != null) unreactTolerant(token, noteId)
-                if (apiReaction != null) reactTolerant(token, noteId, apiReaction)
+                if (apiReaction != null) reactTolerant(token, noteId, apiReaction) else unreactTolerant(token, noteId)
             }
             confirmedReactions[noteId] = desired
             if (Reactions.sameReaction(findAnywhere(noteId)?.myReaction, desired)) confirmedReactions.remove(noteId)
@@ -984,8 +958,6 @@ class FeedViewModel(
             api.react(token, noteId, reaction)
         } catch (e: HttpStatusException) {
             if (e.apiErrorCode != ApiErrorCodes.ALREADY_REACTED) throw e
-            api.unreact(token, noteId)
-            api.react(token, noteId, reaction)
         }
     }
 

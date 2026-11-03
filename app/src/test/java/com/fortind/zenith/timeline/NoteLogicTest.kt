@@ -111,6 +111,8 @@ class NoteLogicTest {
         assertFalse(testNote("c", visibility = Visibility.Followers).canRenote("me"))
         assertTrue(testNote("d", visibility = Visibility.Followers, user = mine).canRenote("me"))
         assertFalse(testNote("e").canRenote(null))
+        assertFalse(testNote("f", visibility = Visibility.Specified).canRenote("me"))
+        assertFalse(testNote("g", visibility = Visibility.Specified, user = mine).canRenote("me"))
     }
 
     @Test
@@ -134,8 +136,8 @@ class NoteLogicTest {
         assertEquals(NoteUpdate.Unreacted("n1", "❤", "u2"), parseNoteUpdate("n1", "unreacted", JSONObject().put("reaction", "❤").put("userId", "u2")))
         assertEquals(NoteUpdate.Deleted("n1"), parseNoteUpdate("n1", "deleted", JSONObject().put("deletedAt", "x")))
         assertEquals(NoteUpdate.PollVoted("n1", 1, "u2"), parseNoteUpdate("n1", "pollVoted", JSONObject().put("choice", 1).put("userId", "u2")))
-        assertEquals(NoteUpdate.Updated("n1", "new", null, true), parseNoteUpdate("n1", "updated", JSONObject().put("text", "new")))
-        assertEquals(NoteUpdate.Updated("n1", null, null, false), parseNoteUpdate("n1", "updated", null))
+        assertEquals(NoteUpdate.Updated("n1"), parseNoteUpdate("n1", "updated", JSONObject().put("text", "new")))
+        assertEquals(NoteUpdate.Updated("n1"), parseNoteUpdate("n1", "updated", null))
         assertNull(parseNoteUpdate("n1", "reacted", null))
         assertNull(parseNoteUpdate("n1", "mystery", null))
     }

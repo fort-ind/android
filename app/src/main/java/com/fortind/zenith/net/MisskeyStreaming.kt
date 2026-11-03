@@ -65,22 +65,25 @@ interface StreamListener {
 }
 
 interface StreamTransport {
-    fun open(url: String, listener: StreamListener): StreamSocket
+    fun open(url: String, token: String?, listener: StreamListener): StreamSocket
 }
+
+class StreamRejectedException(val code: Int) : IOException("Stream handshake refused (HTTP $code)")
 
 class MisskeyStreaming(
     private val transport: StreamTransport,
     private val scope: CoroutineScope,
     private val host: String = FortInstance.HOST,
-    private val initialBackoffMs: Long = 1_000,
-    private val maxBackoffMs: Long = 30_000,
+    private val initialBackoffMs: Long = 10_000,
+    private val maxBackoffMs: Long = 300_000,
+    private val stableConnectionMs: Long = 60_000,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val connections = LinkedHashMap<String?, StreamConnection>()
 
     fun connection(token: String?): StreamConnection = synchronized(connections) {
         connections.getOrPut(token) {
-            val url = if (token == null) "https://$host/streaming" else "https://$host/streaming?i=$token"
-            StreamConnection(transport, url, scope, initialBackoffMs, maxBackoffMs)
+            StreamConnection(transport, "https://$host/streaming", token, scope, initialBackoffMs, maxBackoffMs, stableConnectionMs, clock)
         }.also {
             while (connections.size > MAX_CACHED_CONNECTIONS) connections.remove(connections.keys.first())
         }
@@ -94,9 +97,12 @@ class MisskeyStreaming(
 class StreamConnection internal constructor(
     private val transport: StreamTransport,
     private val url: String,
+    private val token: String?,
     scope: CoroutineScope,
     private val initialBackoffMs: Long,
     private val maxBackoffMs: Long,
+    private val stableConnectionMs: Long,
+    private val clock: () -> Long,
 ) {
     private val generations = AtomicInteger(0)
     private val channelIds = AtomicInteger(0)
@@ -110,13 +116,17 @@ class StreamConnection internal constructor(
     val frames: SharedFlow<StreamFrame> = flow {
         var backoffMs = initialBackoffMs
         while (true) {
+            var openedAt: Long? = null
             try {
                 connectOnce().collect { frame ->
-                    if (frame is StreamFrame.Opened) backoffMs = initialBackoffMs
+                    if (frame is StreamFrame.Opened) openedAt = clock()
                     emit(frame)
                 }
+            } catch (_: StreamRejectedException) {
+                return@flow
             } catch (_: IOException) {
             }
+            if (openedAt?.let { clock() - it >= stableConnectionMs } == true) backoffMs = initialBackoffMs
             delay(backoffMs)
             backoffMs = (backoffMs * 2).coerceAtMost(maxBackoffMs)
         }
@@ -200,10 +210,10 @@ class StreamConnection internal constructor(
             }
 
             override fun onClosed(cause: Throwable?) {
-                close(IOException("Stream closed", cause))
+                close(cause as? StreamRejectedException ?: IOException("Stream closed", cause))
             }
         }
-        val opened = transport.open(url, listener)
+        val opened = transport.open(url, token, listener)
         awaitClose {
             openGeneration = 0
             socket = null
@@ -212,7 +222,7 @@ class StreamConnection internal constructor(
     }.buffer(Channel.UNLIMITED)
 
     private companion object {
-        const val STOP_TIMEOUT_MS = 2_000L
+        const val STOP_TIMEOUT_MS = 30_000L
 
         fun message(type: String, id: String): String =
             JSONObject().put("type", type).put("body", JSONObject().put("id", id)).toString()

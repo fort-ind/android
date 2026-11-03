@@ -654,6 +654,7 @@ private fun FeedPane(
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val selected = feed.selected
     val timeline = feed.current
+    val scopesOutdated by feedViewModel.scopesOutdated.collectAsStateWithLifecycle(initialValue = false)
     val listCallbacks = remember(feedViewModel) {
         TimelineListCallbacks(
             onLoadMore = { feedViewModel.loadMore() },
@@ -741,10 +742,14 @@ private fun FeedPane(
                     callbacks = listCallbacks,
                     reduceMotion = reduceMotion,
                     header = favorites,
-                    banner = if (feed.needsPermission) {
-                        { ReauthorizeBanner(onDismiss = feedViewModel::permissionPromptHandled) }
-                    } else {
-                        null
+                    banner = when {
+                        feed.needsPermission -> {
+                            { ReauthorizeBanner(onDismiss = feedViewModel::permissionPromptHandled) }
+                        }
+                        scopesOutdated -> {
+                            { ReauthorizeBanner(onDismiss = feedViewModel::dismissScopeBanner, newPermissions = true) }
+                        }
+                        else -> null
                     },
                 )
             }
@@ -847,7 +852,7 @@ private fun BookmarksPane(
 }
 
 @Composable
-private fun ReauthorizeBanner(onDismiss: () -> Unit) {
+private fun ReauthorizeBanner(onDismiss: () -> Unit, newPermissions: Boolean = false) {
     val login: LoginViewModel = viewModel(key = "reauthorize", factory = LoginViewModel.Factory)
     val loginState by login.uiState.collectAsStateWithLifecycle()
     AuthPageEffects(login)
@@ -866,7 +871,7 @@ private fun ReauthorizeBanner(onDismiss: () -> Unit) {
                 }
             }
         } else {
-            PermissionBanner(onGrant = login::onSignInClick, onDismiss = onDismiss)
+            PermissionBanner(onGrant = login::onSignInClick, onDismiss = onDismiss, newPermissions = newPermissions)
         }
     }
 }

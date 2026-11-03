@@ -13,6 +13,6 @@ class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.fortind.zenith", appContext.packageName)
+        assertEquals("com.fortind.zenith.debug", appContext.packageName)
     }
 }

@@ -306,14 +306,14 @@ class FeedViewModelTest {
     }
 
     @Test
-    fun switchingAReactionDeletesThenCreates() = runTest {
+    fun switchingAReactionIsOneCreate() = runTest {
         val f = fixture()
         f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", reactions = mapOf("❤" to 1), myReaction = "❤"))
         f.viewModel.awaitTimeline(TimelineKind.Home)
 
         f.viewModel.toggleReaction("n1", "👍")
 
-        assertEquals(listOf("n1"), f.api.unreactCalls)
+        assertTrue(f.api.unreactCalls.isEmpty())
         assertEquals(listOf("n1" to "👍"), f.api.reactCalls)
         assertEquals(mapOf("👍" to 1), f.viewModel.uiState.value.current.items.single().reactions)
     }
@@ -335,7 +335,7 @@ class FeedViewModelTest {
     }
 
     @Test
-    fun alreadyReactedIsRetriedOnce() = runTest {
+    fun alreadyReactedCountsAsDone() = runTest {
         val f = fixture()
         f.api.timelines[TimelineKind.Home] = listOf(testNote("n1"))
         f.api.reactFailure = HttpStatusException(400, "ALREADY_REACTED")
@@ -343,9 +343,28 @@ class FeedViewModelTest {
 
         f.viewModel.toggleReaction("n1", "👍")
 
-        assertEquals(2, f.api.reactCalls.size)
-        assertEquals(listOf("n1"), f.api.unreactCalls)
+        assertEquals(1, f.api.reactCalls.size)
+        assertTrue(f.api.unreactCalls.isEmpty())
         assertEquals("👍", f.viewModel.uiState.value.current.items.single().myReaction)
+    }
+
+    @Test
+    fun aStreamEditReloadsTheWholeNote() = runTest {
+        val f = fixture()
+        val quoted = testNote("q1")
+        val poll = Poll(listOf(PollChoice("a", 0, false)), multiple = false, expiresAtMillis = null)
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", text = "old"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.api.timelines[TimelineKind.Home] = emptyList()
+        f.api.notes["n1"] = testNote("n1", text = "new", renote = quoted, poll = poll)
+        f.startStreaming()
+        f.stream.updates.subscriptionCount.first { it > 0 }
+
+        f.stream.updates.emit(NoteUpdate.Updated("n1"))
+
+        val note = f.viewModel.uiState.first { it.current.items.single().text == "new" }.current.items.single()
+        assertEquals(poll, note.poll)
+        assertEquals("q1", note.renote?.id)
     }
 
     @Test

@@ -59,6 +59,7 @@ data class FortNotification(
     val reactionEmojiUrl: String?,
     val title: String?,
     val body: String?,
+    val isDirect: Boolean = false,
 ) {
     val webUrl: String?
         get() = when {
@@ -67,6 +68,8 @@ data class FortNotification(
             else -> null
         }
 }
+
+private const val DIRECT_VISIBILITY = "specified"
 
 fun parseNotifications(array: JSONArray): List<FortNotification> =
     (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let(::parseNotification) }
@@ -87,6 +90,7 @@ fun parseNotification(json: JSONObject): FortNotification? {
         reactionEmojiUrl = if (reaction != null && note != null) customEmojiUrl(reaction, note) else null,
         title = json.optStringOrNull("header"),
         body = json.optStringOrNull("body") ?: json.optStringOrNull("reason") ?: json.optStringOrNull("message"),
+        isDirect = note?.optStringOrNull("visibility") == DIRECT_VISIBILITY,
     )
 }
 

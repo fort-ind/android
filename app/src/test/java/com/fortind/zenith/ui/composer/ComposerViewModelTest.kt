@@ -32,6 +32,10 @@ import com.fortind.zenith.timeline.FakeNotesApi
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.timeline.NoteUser
+import com.fortind.zenith.timeline.Poll
+import com.fortind.zenith.timeline.PollBody
+import com.fortind.zenith.timeline.PollChoice
+import com.fortind.zenith.timeline.ReactionAcceptance
 import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.timeline.testNote
 import com.fortind.zenith.timeline.testUser
@@ -99,6 +103,14 @@ class ComposerViewModelTest {
 
         override suspend fun clear(key: String) {
             drafts.remove(key)
+        }
+
+        override suspend fun adopt(userId: String) {
+            drafts.keys.filter { '/' !in it }.forEach { key -> drafts["$userId/$key"] = drafts.getValue(key).also { drafts.remove(key) } }
+        }
+
+        override suspend fun forget(userId: String) {
+            drafts.keys.removeAll { it.startsWith("$userId/") }
         }
     }
 
@@ -172,7 +184,7 @@ class ComposerViewModelTest {
         override suspend fun hashtags(token: String?, query: String, limit: Int): List<String> = emptyList()
     }
 
-    private class Fixture(maxText: Int, compress: Boolean) {
+    private class Fixture(maxText: Int, compress: Boolean, nowMillis: Long) {
         val suggestionsApi = FakeSuggestionsApi()
         val engine = SuggestionEngine(suggestionsApi, { null }, { emptyList() })
         val session = UserSessionService(FakeTokenStore("token"), FakeUserApi())
@@ -182,13 +194,16 @@ class ComposerViewModelTest {
         val compressor = FakeCompressor()
         val sanitizer = FakeSanitizer()
         val settings = FakeSettingsStore(AppSettings(compressUploads = compress))
+        var now = nowMillis
         val viewModel = ComposerViewModel(
-            session, api, drafts, FakeInstance(maxText), drive, FakeReader(), settings, compressor, sanitizer, engine, draftDebounceMs = DEBOUNCE_MS,
+            session, api, drafts, FakeInstance(maxText), drive, FakeReader(), settings, compressor, sanitizer, engine,
+            draftDebounceMs = DEBOUNCE_MS,
+            clock = { now },
         )
     }
 
-    private suspend fun fixture(maxText: Int = 3000, compress: Boolean = false): Fixture {
-        val f = Fixture(maxText, compress).also { viewModels += it.viewModel }
+    private suspend fun fixture(maxText: Int = 3000, compress: Boolean = false, nowMillis: Long = 1_000L): Fixture {
+        val f = Fixture(maxText, compress, nowMillis).also { viewModels += it.viewModel }
         f.session.restore()
         return f
     }
@@ -324,6 +339,95 @@ class ComposerViewModelTest {
         assertTrue(f.api.createCalls.isEmpty())
     }
 
+    private fun Fixture.openEdit(note: Note) {
+        api.notes[note.id] = note
+        viewModel.open(ComposerTarget.Edit(note.id), note)
+    }
+
+    private fun openPoll(expiresAt: Long?) = Poll(
+        choices = listOf(PollChoice("a", 3, false), PollChoice("b", 1, true)),
+        multiple = true,
+        expiresAtMillis = expiresAt,
+    )
+
+    @Test
+    fun editingKeepsTheQuoteThePollAndTheReactionLimit() = runTest {
+        val f = fixture()
+        val note = parent(id = "n1", authorId = "me").copy(
+            renote = testNote("q1"),
+            poll = openPoll(expiresAt = 5_000L),
+            reactionAcceptance = ReactionAcceptance.LikeOnly,
+        )
+        f.openEdit(note)
+        f.viewModel.type("fixed")
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        val sent = f.api.editCalls.single().second
+        assertEquals("q1", sent.renoteId)
+        assertEquals(PollBody(listOf("a", "b"), true, 5_000L), sent.poll)
+        assertEquals(ReactionAcceptance.LikeOnly, sent.reactionAcceptance)
+    }
+
+    @Test
+    fun editingANoteWithAnEndedPollWarnsAndRemovesIt() = runTest {
+        val f = fixture(nowMillis = 9_000L)
+        f.openEdit(parent(id = "n1", authorId = "me").copy(poll = openPoll(expiresAt = 5_000L)))
+
+        assertTrue(f.viewModel.uiState.value!!.dropsEndedPoll)
+        f.viewModel.type("fixed")
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertNull(f.api.editCalls.single().second.poll)
+    }
+
+    @Test
+    fun aPollEndingWhileEditingStopsTheFirstSaveToShowTheWarning() = runTest {
+        val f = fixture(nowMillis = 1_000L)
+        f.openEdit(parent(id = "n1", authorId = "me").copy(poll = openPoll(expiresAt = 5_000L)))
+        assertFalse(f.viewModel.uiState.value!!.dropsEndedPoll)
+        f.viewModel.type("fixed")
+
+        f.now = 9_000L
+        f.viewModel.submit()
+
+        assertTrue(f.api.editCalls.isEmpty())
+        assertTrue(f.viewModel.uiState.value!!.dropsEndedPoll)
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertNull(f.api.editCalls.single().second.poll)
+    }
+
+    @Test
+    fun aPollWithNoEndIsKeptWhenEditing() = runTest {
+        val f = fixture(nowMillis = 9_000L)
+        f.openEdit(parent(id = "n1", authorId = "me").copy(poll = openPoll(expiresAt = null)))
+        f.viewModel.type("fixed")
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertEquals(PollBody(listOf("a", "b"), true, null), f.api.editCalls.single().second.poll)
+    }
+
+    @Test
+    fun visibilityAndLocalOnlyCannotChangeOnEdit() = runTest {
+        val f = fixture()
+        f.openEdit(parent(id = "n1", authorId = "me", visibility = Visibility.Home, localOnly = true))
+
+        f.viewModel.setVisibility(Visibility.Public)
+        f.viewModel.setLocalOnly(false)
+
+        val state = f.viewModel.uiState.value!!
+        assertEquals(listOf(Visibility.Home), state.visibilityOptions)
+        assertEquals(Visibility.Home, state.visibility)
+        assertTrue(state.localOnly)
+    }
+
     @Test
     fun blankTextIsNeverSubmitted() = runTest {
         val f = fixture()
@@ -348,7 +452,18 @@ class ComposerViewModelTest {
     }
 
     @Test
-    fun emojiCountAsOneCharacterTowardsTheLimit() {
+    fun emojiCountAsTwoTowardsTheNoteLimitLikeTheServer() = runTest {
+        val f = fixture(maxText = 3)
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("ab😀")
+
+        f.viewModel.submit()
+
+        assertTrue(f.api.createCalls.isEmpty())
+    }
+
+    @Test
+    fun altTextStillCountsEmojiAsOneCharacter() {
         assertEquals(3, codePointLength("a😀b"))
     }
 
@@ -359,6 +474,8 @@ class ComposerViewModelTest {
             HttpStatusException(400, "CONTAINS_TOO_MANY_MENTIONS") to ComposerFailure.TooManyMentions,
             HttpStatusException(400, "CONTAINS_PROHIBITED_WORDS") to ComposerFailure.ProhibitedWords,
             HttpStatusException(400, "NO_SUCH_REPLY_TARGET") to ComposerFailure.TargetGone,
+            HttpStatusException(400, "MAX_LENGTH") to ComposerFailure.TooLong,
+            HttpStatusException(400, "MAX_CW_LENGTH") to ComposerFailure.TooLong,
             HttpStatusException(429, null) to ComposerFailure.RateLimited,
             HttpStatusException(500, null) to ComposerFailure.Generic,
         )
@@ -398,10 +515,10 @@ class ComposerViewModelTest {
 
         f.viewModel.type("work in progress")
         advanceTimeBy(DEBOUNCE_MS - 1)
-        assertNull(f.drafts.drafts["new"])
+        assertNull(f.drafts.drafts["me/new"])
         advanceTimeBy(2)
 
-        assertEquals("work in progress", f.drafts.drafts.getValue("new").text)
+        assertEquals("work in progress", f.drafts.drafts.getValue("me/new").text)
     }
 
     @Test
@@ -424,12 +541,12 @@ class ComposerViewModelTest {
         f.viewModel.open(ComposerTarget.NewPost, null)
         f.viewModel.type("never mind")
         advanceTimeBy(DEBOUNCE_MS * 2)
-        assertEquals("never mind", f.drafts.drafts.getValue("new").text)
+        assertEquals("never mind", f.drafts.drafts.getValue("me/new").text)
 
         f.viewModel.close(keepDraft = false)
         advanceTimeBy(DEBOUNCE_MS * 2)
 
-        assertNull(f.drafts.drafts["new"])
+        assertNull(f.drafts.drafts["me/new"])
         assertNull(f.viewModel.uiState.value)
     }
 
@@ -456,7 +573,7 @@ class ComposerViewModelTest {
         f.viewModel.open(ComposerTarget.Reply("p2"), parent(id = "p2", authorId = "me"))
 
         assertEquals("", f.viewModel.text.text.toString())
-        assertEquals("for the first", f.drafts.drafts.getValue("reply:p1").text)
+        assertEquals("for the first", f.drafts.drafts.getValue("me/reply:p1").text)
     }
 
 
@@ -661,7 +778,7 @@ class ComposerViewModelTest {
     @Test
     fun redraftingSeedsANewPostFromTheDeletedNoteAndIgnoresStoredDrafts() = runTest {
         val f = fixture()
-        f.drafts.drafts["new"] = ComposerDraft(text = "an older draft")
+        f.drafts.drafts["me/new"] = ComposerDraft(text = "an older draft")
 
         f.viewModel.redraft(deletedPost())
 

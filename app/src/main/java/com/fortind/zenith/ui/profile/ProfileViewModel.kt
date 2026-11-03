@@ -9,6 +9,7 @@ import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.UserSessionService
+import com.fortind.zenith.composer.DraftStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +25,10 @@ sealed interface ProfileUiState {
     data object Guest : ProfileUiState
 }
 
-class ProfileViewModel(private val session: UserSessionService) : ViewModel() {
+class ProfileViewModel(
+    private val session: UserSessionService,
+    private val drafts: DraftStore,
+) : ViewModel() {
 
     val uiState: StateFlow<ProfileUiState> = session.state
         .mapNotNull { state ->
@@ -49,7 +53,10 @@ class ProfileViewModel(private val session: UserSessionService) : ViewModel() {
     }
 
     fun logOut() {
-        viewModelScope.launch { session.signOut() }
+        viewModelScope.launch {
+            (session.state.value as? SessionState.SignedIn)?.user?.id?.let { drafts.forget(it) }
+            session.signOut()
+        }
     }
 
     fun logIn() = session.leaveGuest()
@@ -58,7 +65,7 @@ class ProfileViewModel(private val session: UserSessionService) : ViewModel() {
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ZenithApplication
-                ProfileViewModel(app.container.sessionService)
+                ProfileViewModel(app.container.sessionService, app.container.draftStore)
             }
         }
     }
