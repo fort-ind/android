@@ -1,0 +1,510 @@
+@file:OptIn(
+    ExperimentalMaterial3AdaptiveApi::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+    ExperimentalMaterial3Api::class,
+)
+
+package com.fortind.zenith.ui.nav
+
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Badge
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDragHandle
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.layout.PaneExpansionState
+import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
+import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
+import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteItem
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
+import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.ui.NavDisplay
+import androidx.navigation3.ui.defaultPopTransitionSpec
+import androidx.navigation3.ui.defaultPredictivePopTransitionSpec
+import androidx.navigation3.ui.defaultTransitionSpec
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
+import androidx.window.core.layout.WindowSizeClass
+import com.fortind.zenith.R
+import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.settings.AppSettings
+import com.fortind.zenith.ui.feed.ThreadPane
+import com.fortind.zenith.ui.feed.ThreadPlaceholder
+import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.games.GamesScreen
+import com.fortind.zenith.ui.games.GamesViewModel
+import com.fortind.zenith.ui.home.HomeDetailPlaceholder
+import com.fortind.zenith.ui.home.HomeScreen
+import com.fortind.zenith.ui.notifications.NotificationsScreen
+import com.fortind.zenith.ui.notifications.NotificationsViewModel
+import com.fortind.zenith.ui.people.AboutColumnWidth
+import com.fortind.zenith.ui.people.AboutPlacement
+import com.fortind.zenith.ui.people.FollowListScreen
+import com.fortind.zenith.ui.people.PeopleViewModel
+import com.fortind.zenith.ui.people.PersonAboutPane
+import com.fortind.zenith.ui.people.PersonByHandlePage
+import com.fortind.zenith.ui.people.PersonListWidth
+import com.fortind.zenith.ui.people.PersonPage
+import com.fortind.zenith.ui.people.rememberAboutPlacement
+import com.fortind.zenith.ui.profile.ProfileScreen
+import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.settings.SettingsScreen
+import com.fortind.zenith.ui.social.LocalNoteEnvironment
+import com.fortind.zenith.ui.social.SocialHost
+import com.fortind.zenith.ui.social.SocialUi
+import kotlinx.coroutines.launch
+
+private const val MAX_BADGE_COUNT = 99
+private val ListPaneWidth = 440.dp
+private val RailActionMargin = 20.dp
+private val CollapsedRailWidth = 96.dp
+
+@Composable
+fun AppShell(
+    requestedDestination: AppDestination?,
+    onRequestedDestinationHandled: () -> Unit,
+    requestedThreadId: String?,
+    onRequestedThreadHandled: () -> Unit,
+    shortcuts: AppShortcutDispatcher,
+) {
+    val stacks = rememberAppBackStacks()
+    val app = LocalContext.current.applicationContext as ZenithApplication
+    val scope = rememberCoroutineScope()
+    val settings by app.container.settingsStore.settings.collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
+    val gamesViewModel: GamesViewModel = viewModel(factory = GamesViewModel.Factory)
+    val notificationsViewModel: NotificationsViewModel = viewModel(factory = NotificationsViewModel.Factory)
+    val unreadCount by notificationsViewModel.unreadCount.collectAsStateWithLifecycle()
+
+    val adaptiveInfo = currentWindowAdaptiveInfoV2()
+    val sizeClass = adaptiveInfo.windowSizeClass
+    val directive = remember(adaptiveInfo) { calculatePaneScaffoldDirective(adaptiveInfo) }
+    val twoPane = directive.maxHorizontalPartitions > 1
+    val hasRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
+    val hasWideRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
+    val composeInRail = hasRail && sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
+    val railExpanded = hasWideRail && settings?.railCollapsed != true
+    val suiteType = when {
+        railExpanded -> NavigationSuiteType.WideNavigationRailExpanded
+        hasRail -> NavigationSuiteType.WideNavigationRailCollapsed
+        else -> NavigationSuiteType.ShortNavigationBarCompact
+    }
+
+    LaunchedEffect(requestedDestination) {
+        if (requestedDestination != null) {
+            stacks.select(requestedDestination)
+            onRequestedDestinationHandled()
+        }
+    }
+    LaunchedEffect(requestedThreadId) {
+        if (requestedThreadId != null) {
+            stacks.openIn(AppDestination.HOME, AppRoute.Thread(requestedThreadId))
+            onRequestedThreadHandled()
+        }
+    }
+    LifecycleStartEffect(notificationsViewModel) {
+        notificationsViewModel.setForeground(true)
+        onStopOrDispose { notificationsViewModel.setForeground(false) }
+    }
+
+    val navigationState = rememberNavigationSuiteScaffoldState()
+    val hideBar = !hasRail && stacks.top.isDetailPage
+    LaunchedEffect(hideBar) { if (hideBar) navigationState.hide() else navigationState.show() }
+
+    SocialHost(
+        selectedNoteId = stacks.openThreadId?.takeIf { twoPane },
+        onOpenThread = { note -> stacks.push(AppRoute.Thread(note.id)) },
+        onOpenPerson = { userId -> stacks.push(AppRoute.Person(userId)) },
+        onOpenOwnProfile = { stacks.select(AppDestination.PROFILE) },
+        onOpenHandle = { handle -> stacks.push(AppRoute.PersonHandle(handle.username, handle.host)) },
+    ) { ui ->
+        val feedActive = stacks.tab == AppDestination.HOME || stacks.current.any { it is AppRoute.Thread }
+        LifecycleStartEffect(ui.feed, feedActive) {
+            ui.feed.setActive(feedActive)
+            onStopOrDispose { ui.feed.setActive(false) }
+        }
+        LaunchedEffect(stacks.tab) { ui.playback.stop() }
+        val openThreadId = stacks.openThreadId
+        LaunchedEffect(openThreadId) {
+            if (openThreadId != null) ui.feed.openThread(openThreadId) else ui.feed.closeThread()
+        }
+
+        NavigationBackHandler(
+            state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+            isBackEnabled = !stacks.atHomeRoot && stacks.current.size == 1,
+            onBackCompleted = { stacks.back() },
+        )
+
+        DisposableEffect(shortcuts, ui, stacks, notificationsViewModel) {
+            shortcuts.handler = { shortcut ->
+                when (shortcut) {
+                    is AppShortcut.Destination -> {
+                        stacks.select(shortcut.destination)
+                        true
+                    }
+                    AppShortcut.NewPost -> {
+                        ui.startNewPost()
+                        true
+                    }
+                    AppShortcut.Refresh -> {
+                        val page = ui.pageKeys.target
+                        when {
+                            page != null -> {
+                                page.onRefresh()
+                                true
+                            }
+                            stacks.tab == AppDestination.HOME -> {
+                                ui.feed.refresh()
+                                true
+                            }
+                            stacks.tab == AppDestination.NOTIFICATIONS -> {
+                                notificationsViewModel.refresh()
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    AppShortcut.Dismiss -> stacks.pop()
+                    is AppShortcut.MoveTab -> ui.pageKeys.target?.let { page ->
+                        page.onMoveTab(shortcut.step)
+                        true
+                    } ?: false
+                }
+            }
+            onDispose { shortcuts.handler = null }
+        }
+
+        NavigationSuiteScaffold(
+            navigationSuiteType = suiteType,
+            state = navigationState,
+            primaryActionContent = {
+                if (hasWideRail || composeInRail) {
+                    RailActions(
+                        expanded = railExpanded,
+                        showToggle = hasWideRail,
+                        showCompose = composeInRail,
+                        onCompose = ui.startNewPost,
+                        onToggle = { scope.launch { app.container.settingsStore.setRailCollapsed(railExpanded) } },
+                    )
+                }
+            },
+            navigationItems = {
+                AppDestination.entries.forEach { destination ->
+                    NavigationSuiteItem(
+                        selected = stacks.tab == destination,
+                        onClick = { stacks.select(destination) },
+                        navigationSuiteType = suiteType,
+                        modifier = Modifier.testTag("nav:${destination.name}"),
+                        icon = {
+                            Icon(
+                                imageVector = destination.icon,
+                                contentDescription = if (destination == AppDestination.NOTIFICATIONS && unreadCount > 0) {
+                                    pluralStringResource(R.plurals.nav_notifications_unread, unreadCount, unreadCount)
+                                } else {
+                                    stringResource(destination.labelRes)
+                                },
+                            )
+                        },
+                        label = {
+                            Text(
+                                stringResource(
+                                    if (destination == AppDestination.NOTIFICATIONS && !railExpanded) {
+                                        R.string.nav_notifications_short
+                                    } else {
+                                        destination.labelRes
+                                    },
+                                ),
+                            )
+                        },
+                        badge = if (destination == AppDestination.NOTIFICATIONS && unreadCount > 0) {
+                            { Badge { Text(if (unreadCount > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else unreadCount.toString()) } }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            },
+        ) {
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AppNavDisplay(
+                        stacks = stacks,
+                        contentPadding = innerPadding,
+                        ui = ui,
+                        twoPane = twoPane,
+                        showHomeComposeButton = !composeInRail,
+                        gamesViewModel = gamesViewModel,
+                        notificationsViewModel = notificationsViewModel,
+                    )
+                    SnackbarHost(ui.snackbar, modifier = Modifier.align(Alignment.BottomCenter).padding(innerPadding))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RailActions(
+    expanded: Boolean,
+    showToggle: Boolean,
+    showCompose: Boolean,
+    onCompose: () -> Unit,
+    onToggle: () -> Unit,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = if (expanded) Alignment.Start else Alignment.CenterHorizontally,
+        modifier = Modifier
+            .then(if (expanded) Modifier.padding(start = RailActionMargin) else Modifier.width(CollapsedRailWidth))
+            .padding(vertical = 8.dp),
+    ) {
+        if (showToggle) {
+            TooltipIconButton(
+                label = stringResource(if (expanded) R.string.nav_rail_collapse else R.string.nav_rail_expand),
+                icon = if (expanded) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
+                onClick = onToggle,
+            )
+        }
+        if (showCompose) {
+            val label = stringResource(R.string.feed_compose)
+            ExtendedFloatingActionButton(
+                onClick = onCompose,
+                expanded = expanded,
+                icon = { Icon(Icons.Default.Edit, contentDescription = label) },
+                text = { Text(label) },
+                modifier = Modifier.testTag("nav:compose"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThreePaneScaffoldScope.PaneDragHandle(state: PaneExpansionState) {
+    val interactionSource = remember { MutableInteractionSource() }
+    VerticalDragHandle(
+        modifier = Modifier.paneExpansionDraggable(
+            state,
+            LocalMinimumInteractiveComponentSize.current,
+            interactionSource,
+        ),
+        interactionSource = interactionSource,
+    )
+}
+
+@Composable
+private fun AppNavDisplay(
+    stacks: AppBackStacks,
+    contentPadding: PaddingValues,
+    ui: SocialUi,
+    twoPane: Boolean,
+    showHomeComposeButton: Boolean,
+    gamesViewModel: GamesViewModel,
+    notificationsViewModel: NotificationsViewModel,
+) {
+    val holder = rememberSaveableStateHolder()
+    val reduceMotion = rememberReduceMotion()
+    val people by ui.people.uiState.collectAsStateWithLifecycle()
+    val aboutPlacement = rememberAboutPlacement()
+    val browseGames = { stacks.select(AppDestination.GAMES) }
+    val seeAllFavorites = {
+        gamesViewModel.showFavorites()
+        stacks.select(AppDestination.GAMES)
+    }
+    val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
+        Padded(contentPadding) {
+            val aboutUserId = when (val list = stacks.current.lastOrNull { it.isListPane }) {
+                is AppRoute.Person -> list.userId
+                is AppRoute.PersonHandle -> people.handles[PeopleViewModel.handleKey(list.username, list.host)]
+                AppRoute.Profile -> people.myUserId
+                else -> null
+            }
+            when {
+                stacks.current.lastOrNull { it.isListPane } == AppRoute.Home -> HomeDetailPlaceholder(ui, browseGames, seeAllFavorites)
+                aboutPlacement == AboutPlacement.DetailPane && aboutUserId != null -> PersonAboutPane(aboutUserId, ui.people)
+                else -> ThreadPlaceholder()
+            }
+        }
+    }
+    val listMetadata = ListDetailSceneStrategy.listPane(detailPlaceholder = detailPlaceholder) +
+        ListDetailSceneStrategy.preferredPaneSize(width = ListPaneWidth)
+    val personMetadata = ListDetailSceneStrategy.listPane(detailPlaceholder = detailPlaceholder) +
+        ListDetailSceneStrategy.preferredPaneSize(
+            width = if (aboutPlacement == AboutPlacement.Column) PersonListWidth + AboutColumnWidth else PersonListWidth,
+        )
+    val strategy = rememberListDetailSceneStrategy<AppRoute>(
+        backNavigationBehavior = BackNavigationBehavior.PopUntilContentChange,
+        paneExpansionDragHandle = { state -> PaneDragHandle(state) },
+    )
+    val tab = stacks.tab
+    holder.SaveableStateProvider(tab.name) {
+        key(tab) {
+            NavDisplay(
+                backStack = stacks.stack(tab),
+                onBack = { stacks.pop() },
+                sceneStrategies = listOf(strategy),
+                transitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultTransitionSpec(),
+                popTransitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultPopTransitionSpec(),
+                predictivePopTransitionSpec = if (reduceMotion) ({ _ -> EnterTransition.None togetherWith ExitTransition.None }) else defaultPredictivePopTransitionSpec(),
+                entryProvider = { route ->
+                    when (route) {
+                        AppRoute.Home -> NavEntry(
+                            key = route,
+                            metadata = listMetadata,
+                        ) {
+                            Padded(contentPadding) {
+                                HomeScreen(
+                                    ui = ui,
+                                    twoPane = twoPane,
+                                    showComposeButton = showHomeComposeButton,
+                                    onBrowseGames = browseGames,
+                                    onSeeAllFavorites = seeAllFavorites,
+                                )
+                            }
+                        }
+                        AppRoute.Games -> NavEntry(route) {
+                            Padded(contentPadding) { GamesScreen(viewModel = gamesViewModel) }
+                        }
+                        AppRoute.Notifications -> NavEntry(
+                            key = route,
+                            metadata = listMetadata,
+                        ) {
+                            Padded(contentPadding) {
+                                NotificationsScreen(
+                                    viewModel = notificationsViewModel,
+                                    onOpenNote = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
+                                    onOpenPerson = { userId ->
+                                        if (userId == people.myUserId) {
+                                            stacks.select(AppDestination.PROFILE)
+                                        } else {
+                                            stacks.push(AppRoute.Person(userId))
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        AppRoute.Profile -> NavEntry(
+                            key = route,
+                            metadata = if (people.myUserId != null) personMetadata else emptyMap(),
+                        ) {
+                            Padded(contentPadding) {
+                                ProfileScreen(
+                                    ui = ui,
+                                    onEditProfile = stacks::openEditProfile,
+                                    onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
+                                )
+                            }
+                        }
+                        is AppRoute.Settings -> NavEntry(key = route, contentKey = "settings") {
+                            Padded(contentPadding) {
+                                SettingsScreen(
+                                    editProfileRequested = route.openEditProfile,
+                                    onEditProfileHandled = stacks::editProfileHandled,
+                                )
+                            }
+                        }
+                        is AppRoute.Person -> NavEntry(key = route, metadata = personMetadata) {
+                            Padded(contentPadding) {
+                                PersonPage(
+                                    userId = route.userId,
+                                    ui = ui,
+                                    onBack = { stacks.pop() },
+                                    onOpenList = { kind -> stacks.push(AppRoute.FollowList(route.userId, kind)) },
+                                )
+                            }
+                        }
+                        is AppRoute.PersonHandle -> NavEntry(key = route, metadata = personMetadata) {
+                            Padded(contentPadding) {
+                                PersonByHandlePage(
+                                    username = route.username,
+                                    host = route.host,
+                                    ui = ui,
+                                    onBack = { stacks.pop() },
+                                    onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
+                                )
+                            }
+                        }
+                        is AppRoute.FollowList -> NavEntry(route) {
+                            Padded(contentPadding) {
+                                FollowListScreen(
+                                    userId = route.userId,
+                                    initialKind = route.kind,
+                                    ui = ui,
+                                    onBack = { stacks.pop() },
+                                    onOpenPerson = { detail -> ui.callbacks.openProfile(detail.user) },
+                                )
+                            }
+                        }
+                        is AppRoute.Thread -> NavEntry(
+                            key = route,
+                            metadata = ListDetailSceneStrategy.detailPane(),
+                        ) {
+                            val feed by ui.feed.uiState.collectAsStateWithLifecycle()
+                            Padded(contentPadding) {
+                                ThreadPane(
+                                    thread = feed.thread?.takeIf { it.noteId == route.noteId },
+                                    environment = LocalNoteEnvironment.current,
+                                    callbacks = ui.callbacks,
+                                    twoPane = twoPane,
+                                    onBack = { stacks.pop() },
+                                    onRetry = { ui.feed.openThread(route.noteId) },
+                                    onLoadMoreReplies = ui.feed::loadMoreReplies,
+                                    onToggleBranch = ui.feed::toggleBranch,
+                                    onLoadMoreBranch = ui.feed::loadMoreBranch,
+                                )
+                            }
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun Padded(contentPadding: PaddingValues, content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().padding(contentPadding)) { content() }
+}

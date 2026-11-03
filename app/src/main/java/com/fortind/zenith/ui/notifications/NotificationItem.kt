@@ -1,6 +1,7 @@
 package com.fortind.zenith.ui.notifications
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,7 @@ import com.fortind.zenith.ui.relativeTime
 
 class NotificationActions(
     val open: (FortNotification) -> Unit,
+    val openActor: (FortNotification) -> Unit,
     val copyLink: (FortNotification) -> Unit,
     val accept: (FortNotification) -> Unit,
     val reject: (FortNotification) -> Unit,
@@ -104,7 +106,7 @@ internal fun NotificationItem(
             MaterialTheme.colorScheme.surfaceContainer
         },
     )
-    val leading = @Composable { NotificationAvatar(notification) }
+    val leading = @Composable { NotificationAvatar(notification, onOpenActor = { actions.openActor(notification) }) }
     val supporting = @Composable {
         NotificationDetails(
             notification = notification,
@@ -128,7 +130,7 @@ internal fun NotificationItem(
         .contextMenuTrigger(enabled = hasMenu, onOpen = showMenu)
 
     Box(modifier = modifier) {
-        if (notification.noteId != null) {
+        if (notification.noteId != null || notification.actor != null) {
             SegmentedListItem(
                 onClick = { actions.open(notification) },
                 shapes = shapes,
@@ -157,6 +159,12 @@ internal fun NotificationItem(
                 MenuItem(R.string.notifications_menu_open) {
                     menuOpen = false
                     actions.open(notification)
+                }
+            }
+            if (notification.actor != null) {
+                MenuItem(R.string.notifications_menu_view_profile) {
+                    menuOpen = false
+                    actions.openActor(notification)
                 }
             }
             if (notification.webUrl != null) {
@@ -297,10 +305,11 @@ private fun FollowRequestActions(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun NotificationAvatar(notification: FortNotification) {
+private fun NotificationAvatar(notification: FortNotification, onOpenActor: () -> Unit) {
     val actor = notification.actor
     val badge = notification.type.badgeColors()
-    Box(modifier = Modifier.size(48.dp).clearAndSetSemantics {}) {
+    val tappable = if (actor != null) Modifier.clip(CircleShape).clickable(onClick = onOpenActor) else Modifier
+    Box(modifier = Modifier.size(48.dp).then(tappable).clearAndSetSemantics {}) {
         if (actor != null) {
             Avatar(name = actor.displayName, url = actor.avatarUrl, modifier = Modifier.align(Alignment.TopStart))
             Box(

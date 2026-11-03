@@ -179,6 +179,7 @@ private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCa
             size = if (focal) 48.dp else 40.dp,
             modifier = Modifier
                 .clickable(onClickLabel = note.user.handle) { callbacks.openProfile(note.user) }
+                .testTag("note:avatar")
                 .semantics { contentDescription = note.user.handle },
         )
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -512,6 +513,10 @@ fun NoteMenuItems(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
         MenuItem(stringResource(R.string.note_menu_block, name), destructive = true) {
             onDismiss()
             callbacks.blockAuthor(note)
+        }
+        MenuItem(R.string.note_menu_report, destructive = true) {
+            onDismiss()
+            callbacks.report(note)
         }
     }
     if (mine) {

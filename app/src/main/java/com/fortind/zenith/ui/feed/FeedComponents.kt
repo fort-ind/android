@@ -170,7 +170,7 @@ fun FeedLoading(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun FeedMessage(status: TimelineStatus, kind: TimelineKind?, onRetry: () -> Unit, onLogIn: () -> Unit, modifier: Modifier = Modifier) {
+fun FeedMessage(status: TimelineStatus, kind: TimelineKind?, onRetry: () -> Unit, onLogIn: () -> Unit, modifier: Modifier = Modifier, emptyBody: Int? = null) {
     val (shape, title, body) = when (status) {
         TimelineStatus.Failed -> Triple(MaterialShapes.Cookie9Sided, R.string.feed_failed_title, stringResource(R.string.feed_failed_body))
         TimelineStatus.Unavailable -> Triple(
@@ -185,7 +185,7 @@ fun FeedMessage(status: TimelineStatus, kind: TimelineKind?, onRetry: () -> Unit
             stringResource(
                 when (kind) {
                     TimelineKind.Home -> R.string.feed_empty_home_body
-                    null -> R.string.bookmarks_empty_body
+                    null -> emptyBody ?: R.string.bookmarks_empty_body
                     else -> R.string.feed_empty_body
                 },
             ),

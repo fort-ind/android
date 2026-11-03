@@ -35,6 +35,10 @@ class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
         state.update { it.copy(compressUploads = enabled) }
     }
 
+    override suspend fun setRailCollapsed(collapsed: Boolean) {
+        state.update { it.copy(railCollapsed = collapsed) }
+    }
+
     override suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean) {
         state.update {
             it.copy(

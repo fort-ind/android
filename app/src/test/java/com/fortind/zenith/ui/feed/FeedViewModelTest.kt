@@ -20,7 +20,9 @@ import com.fortind.zenith.timeline.Bookmark
 import com.fortind.zenith.timeline.FakeNotesApi
 import com.fortind.zenith.timeline.FakeTimelineStream
 import com.fortind.zenith.timeline.Note
+import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.NoteUpdate
+import com.fortind.zenith.timeline.UserNotesTab
 import com.fortind.zenith.timeline.Poll
 import com.fortind.zenith.timeline.PollChoice
 import com.fortind.zenith.timeline.TimelineKind
@@ -775,7 +777,7 @@ class FeedViewModelTest {
 
         assertEquals(listOf("mute:bob:${NOW_MILLIS + 60_000L}"), f.moderation.calls)
         assertEquals(listOf("n2", "n1"), f.viewModel.uiState.value.current.items.map { it.id })
-        assertEquals(listOf<FeedEvent>(FeedEvent.UserMuted(bob.displayName)), events)
+        assertEquals(listOf<FeedEvent>(FeedEvent.UserMuted(bob.id, bob.displayName)), events)
     }
 
     @Test
@@ -815,7 +817,7 @@ class FeedViewModelTest {
 
         assertEquals(listOf("block:bob"), f.moderation.calls)
         assertEquals(listOf("n1"), f.viewModel.uiState.value.current.items.map { it.id })
-        assertEquals(listOf<FeedEvent>(FeedEvent.UserBlocked(bob.displayName)), events)
+        assertEquals(listOf<FeedEvent>(FeedEvent.UserBlocked(bob.id, bob.displayName)), events)
     }
 
     @Test
@@ -1045,5 +1047,85 @@ class FeedViewModelTest {
         f.viewModel.requestPermission()
 
         assertTrue(f.viewModel.uiState.value.needsPermission)
+    }
+
+    @Test
+    fun userNoteListsLoadAndPageLikeAnyOtherList() = runTest {
+        val f = fixture()
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val key = NoteListKey.UserNotes("them", UserNotesTab.Notes)
+        f.api.userNotePages["them" to UserNotesTab.Notes] = (1..35).map { testNote("n$it") }
+
+        f.viewModel.loadList(key)
+        assertEquals(30, f.viewModel.uiState.first { it.list(key).status == TimelineStatus.Ready }.list(key).items.size)
+
+        f.viewModel.loadMoreList(key)
+        assertEquals(35, f.viewModel.uiState.first { it.list(key).items.size == 35 }.list(key).items.size)
+    }
+
+    @Test
+    fun aNoteChangeReachesPinnedAndProfileLists() = runTest {
+        val f = fixture()
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val pinned = NoteListKey.Pinned("them")
+        val notes = NoteListKey.UserNotes("them", UserNotesTab.Notes)
+        f.viewModel.seedList(pinned, listOf(testNote("n1")))
+        f.api.userNotePages["them" to UserNotesTab.Notes] = listOf(testNote("n1"))
+        f.viewModel.loadList(notes)
+        f.viewModel.uiState.first { it.list(notes).status == TimelineStatus.Ready }
+
+        f.viewModel.noteEdited(testNote("n1").copy(text = "edited"))
+
+        val state = f.viewModel.uiState.first { it.list(pinned).items.single().text == "edited" }
+        assertEquals("edited", state.list(notes).items.single().text)
+        assertTrue(state.list(pinned).endReached)
+    }
+
+    @Test
+    fun droppingAnAuthorKeepsTheirOwnPageButClearsOtherLists() = runTest {
+        val f = fixture()
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val them = testUser("them")
+        val note = testNote("n1").copy(user = them)
+        val theirs = NoteListKey.UserNotes("them", UserNotesTab.Notes)
+        val pinned = NoteListKey.Pinned("them")
+        val other = NoteListKey.UserNotes("other", UserNotesTab.Notes)
+        f.api.userNotePages["them" to UserNotesTab.Notes] = listOf(note)
+        f.api.userNotePages["other" to UserNotesTab.Notes] = listOf(note, testNote("n2"))
+        f.viewModel.seedList(pinned, listOf(note))
+        f.viewModel.loadList(theirs)
+        f.viewModel.loadList(other)
+        f.viewModel.uiState.first { it.list(theirs).items.isNotEmpty() && it.list(other).items.size == 2 }
+
+        f.viewModel.dropAuthor("them")
+
+        val state = f.viewModel.uiState.first { it.list(other).items.size == 1 }
+        assertEquals(listOf("n2"), state.list(other).items.map { it.id })
+        assertEquals(listOf("n1"), state.list(theirs).items.map { it.id })
+        assertEquals(listOf("n1"), state.list(pinned).items.map { it.id })
+    }
+
+    @Test
+    fun aNewNoteJoinsOnlyTheOwnTabsItBelongsIn() = runTest {
+        val f = fixture()
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val notes = NoteListKey.UserNotes("me", UserNotesTab.Notes)
+        val replies = NoteListKey.UserNotes("me", UserNotesTab.NotesAndReplies)
+        val media = NoteListKey.UserNotes("me", UserNotesTab.Media)
+        val unloaded = NoteListKey.UserNotes("them", UserNotesTab.Notes)
+        listOf(notes, replies, media).forEach { key ->
+            f.viewModel.loadList(key)
+            f.viewModel.uiState.first { it.list(key).status == TimelineStatus.Ready }
+        }
+
+        f.viewModel.noteCreated(testNote("plain"))
+        val afterPlain = f.viewModel.uiState.first { it.list(notes).items.isNotEmpty() }
+        assertEquals(listOf("plain"), afterPlain.list(replies).items.map { it.id })
+        assertTrue(afterPlain.list(media).items.isEmpty())
+
+        f.viewModel.noteCreated(testNote("reply").copy(reply = testNote("parent")))
+        val afterReply = f.viewModel.uiState.first { it.list(replies).items.size == 2 }
+        assertEquals(listOf("plain"), afterReply.list(notes).items.map { it.id })
+        assertEquals(TimelineStatus.Idle, afterReply.list(unloaded).status)
     }
 }

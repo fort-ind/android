@@ -46,6 +46,7 @@ class NoteCallbacks(
     val muteAuthor: (Note) -> Unit,
     val hideAuthorRenotes: (Note) -> Unit,
     val blockAuthor: (Note) -> Unit,
+    val report: (Note) -> Unit,
 )
 
 class NoteEnvironment(

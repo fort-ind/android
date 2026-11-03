@@ -24,6 +24,7 @@ data class AppSettings(
     val systemNotifications: Boolean = false,
     val notificationCategories: Set<NotificationCategory> = DefaultNotificationCategories,
     val compressUploads: Boolean = false,
+    val railCollapsed: Boolean = false,
 )
 
 interface SettingsStore {
@@ -35,6 +36,7 @@ interface SettingsStore {
     suspend fun setSystemNotifications(enabled: Boolean)
     suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean)
     suspend fun setCompressUploads(enabled: Boolean)
+    suspend fun setRailCollapsed(collapsed: Boolean)
 }
 
 private val Context.settingsDataStore by preferencesDataStore(
@@ -58,11 +60,16 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
                 ?.mapNotNullTo(mutableSetOf()) { saved -> NotificationCategory.entries.firstOrNull { it.name == saved } }
                 ?: DefaultNotificationCategories,
             compressUploads = prefs[CompressUploadsKey] ?: false,
+            railCollapsed = prefs[RailCollapsedKey] ?: false,
         )
     }
 
     override suspend fun setCompressUploads(enabled: Boolean) {
         dataStore.edit { it[CompressUploadsKey] = enabled }
+    }
+
+    override suspend fun setRailCollapsed(collapsed: Boolean) {
+        dataStore.edit { it[RailCollapsedKey] = collapsed }
     }
 
     override suspend fun setThemeMode(mode: ThemeMode) {
@@ -100,5 +107,6 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         val SystemNotificationsKey = booleanPreferencesKey("system_notifications")
         val NotificationCategoriesKey = stringSetPreferencesKey("notification_categories")
         val CompressUploadsKey = booleanPreferencesKey("compress_uploads")
+        val RailCollapsedKey = booleanPreferencesKey("rail_collapsed")
     }
 }

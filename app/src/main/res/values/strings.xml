@@ -20,7 +20,6 @@
     <string name="login_error_rejected">%1$s didn\'t accept the sign-in.</string>
     <string name="login_error_no_browser">No browser is available to open the sign-in page.</string>
 
-    <string name="profile_avatar_description">Your profile picture</string>
     <string name="profile_edit_profile">Edit profile</string>
     <string name="profile_log_out">Log out</string>
     <string name="profile_logout_confirm_title">Log out of fort.android?</string>
@@ -105,6 +104,8 @@
     <string name="feed_permission_title">one more permission..</string>
     <string name="feed_permission_body">to react and renote, fort.android needs your OK on %1$s. you\'ll hop over there and right back.</string>
     <string name="feed_permission_grant">Grant access</string>
+    <string name="nav_rail_collapse">Collapse navigation</string>
+    <string name="nav_rail_expand">Expand navigation</string>
     <string name="feed_permission_dismiss">Not now</string>
     <string name="feed_new_permissions_title">a few new permissions..</string>
     <string name="feed_new_permissions_body">new features need your OK on %1$s. you\'ll hop over there and right back.</string>
@@ -143,9 +144,6 @@
     </plurals>
     <string name="note_poll_ends">ends %1$s</string>
     <string name="note_poll_ended">Poll ended</string>
-    <string name="profile_bookmarks">Bookmarks</string>
-    <string name="bookmarks_title">Bookmarks</string>
-    <string name="bookmarks_back">Back to profile</string>
     <string name="bookmarks_empty_body">Posts you bookmark from the More menu show up here. :D</string>
     <string name="note_menu_bookmark">Bookmark</string>
     <string name="note_menu_unbookmark">Remove bookmark</string>
@@ -534,4 +532,107 @@
     <string name="feed_renotes_hidden">Hiding renotes from %1$s</string>
     <string name="feed_user_blocked">Blocked %1$s</string>
     <string name="feed_moderation_failed">Couldn\'t update that. Try again.</string>
+    <string name="note_menu_report">Report</string>
+    <string name="notifications_menu_view_profile">View profile</string>
+
+    <string name="person_back">Back</string>
+    <string name="person_refresh">Refresh</string>
+    <string name="person_more">More options</string>
+    <string name="person_avatar_description">%1$s\'s profile picture</string>
+    <string name="person_pinned">Pinned</string>
+    <string name="person_follow">Follow</string>
+    <string name="person_follow_back">Follow back</string>
+    <string name="person_request_follow">Request to follow</string>
+    <string name="person_following">Following</string>
+    <string name="person_requested">Requested</string>
+    <string name="person_follow_row_description">%1$s, %2$s</string>
+    <string name="person_unfollow_title">Unfollow %1$s?</string>
+    <string name="person_unfollow_body">You\'ll stop seeing their posts in your Home timeline.</string>
+    <string name="person_unfollow_confirm">Unfollow</string>
+    <string name="person_withdraw_title">Withdraw your request to %1$s?</string>
+    <string name="person_withdraw_body">They won\'t be asked to approve you anymore.</string>
+    <string name="person_withdraw_confirm">Withdraw</string>
+    <string name="person_unblock_title">Unblock %1$s?</string>
+    <string name="person_unblock_body">They\'ll be able to follow you and see your posts again.</string>
+    <string name="person_unblock_confirm">Unblock</string>
+    <string name="person_follow_blocked_by_them">%1$s has blocked you</string>
+    <string name="person_follow_you_blocked">You\'ve blocked %1$s. Unblock them first.</string>
+    <string name="person_follow_failed">Couldn\'t change that follow. Try again.</string>
+    <string name="person_unmuted">Unmuted %1$s</string>
+    <string name="person_renotes_shown">Showing renotes from %1$s</string>
+    <string name="person_unblocked">Unblocked %1$s</string>
+    <string name="person_menu_view">View profile</string>
+    <string name="person_menu_open_browser">Open on fort.social</string>
+    <string name="person_menu_copy_link">Copy link</string>
+    <string name="person_menu_share">Share</string>
+    <string name="person_menu_unmute">Unmute %1$s</string>
+    <string name="person_menu_show_renotes">Show renotes from %1$s</string>
+    <string name="person_menu_unblock">Unblock %1$s</string>
+    <string name="person_menu_report">Report %1$s</string>
+    <string name="person_tag_follows_you">Follows you</string>
+    <string name="person_tag_locked">Approves followers</string>
+    <string name="person_tag_bot">Bot</string>
+    <string name="person_tag_muted">Muted</string>
+    <string name="person_tag_blocked">Blocked</string>
+    <string name="person_tab_notes">Notes</string>
+    <string name="person_tab_replies">Replies</string>
+    <string name="person_tab_replies_description">Notes and replies</string>
+    <string name="person_tab_media">Media</string>
+    <string name="person_tab_bookmarks">Bookmarks</string>
+    <string name="person_notes_empty">They haven\'t posted anything that belongs in this tab.</string>
+    <string name="person_about_title">About</string>
+    <string name="person_about_location">Location</string>
+    <string name="person_about_birthday">Birthday</string>
+    <string name="person_about_joined">Joined</string>
+    <string name="person_requests_many">%1$d+</string>
+    <string name="person_not_found_title">we can\'t find them</string>
+    <string name="person_not_found_body">This account doesn\'t exist or fort.social can\'t reach it.</string>
+    <string name="person_failed_title">ouch.. that didn\'t load</string>
+    <string name="person_failed_body">Check your connection and try again.</string>
+    <string name="person_suspended_title">This account is suspended</string>
+    <string name="person_suspended_body">Its posts aren\'t available here.</string>
+    <string name="person_moved_title">This account has moved</string>
+    <string name="person_moved_body">Open it on fort.social to see where it went.</string>
+    <plurals name="person_notes_count">
+        <item quantity="one">%1$d post</item>
+        <item quantity="other">%1$d posts</item>
+    </plurals>
+    <plurals name="person_following_count">
+        <item quantity="one">%1$d following</item>
+        <item quantity="other">%1$d following</item>
+    </plurals>
+    <plurals name="person_followers_count">
+        <item quantity="one">%1$d follower</item>
+        <item quantity="other">%1$d followers</item>
+    </plurals>
+    <plurals name="person_requests_waiting">
+        <item quantity="one">%1$d follow request waiting</item>
+        <item quantity="other">%1$d follow requests waiting</item>
+    </plurals>
+
+    <string name="follows_tab_following">Following</string>
+    <string name="follows_tab_followers">Followers</string>
+    <string name="follows_tab_requests">Requests</string>
+    <string name="follows_empty_following">Not following anyone yet.</string>
+    <string name="follows_empty_followers">No followers yet.</string>
+    <string name="follows_empty_requests">No one\'s waiting right now.</string>
+    <string name="follows_hidden_title">This list is private</string>
+    <string name="follows_hidden_body">Only people they allow can see it.</string>
+    <string name="follows_failed_title">ouch.. that didn\'t load</string>
+    <string name="follows_failed_body">Check your connection and try again.</string>
+    <string name="follows_remote_notice">%1$s is on another server, so fort.social may not know the whole list.</string>
+    <string name="follows_remote_open">See it on %1$s</string>
+    <string name="follows_request_gone">No longer pending</string>
+    <string name="follows_accept_failed">Couldn\'t accept %1$s\'s request</string>
+    <string name="follows_reject_failed">Couldn\'t reject %1$s\'s request</string>
+
+    <string name="report_title">Report %1$s</string>
+    <string name="report_body">This goes to fort.social\'s moderators. Say what\'s wrong.</string>
+    <string name="report_label">What happened?</string>
+    <string name="report_counter">%1$d / %2$d</string>
+    <string name="report_send">Send report</string>
+    <string name="report_sent">Report sent. Thanks.</string>
+    <string name="report_failed">Couldn\'t send that report. Try again.</string>
+    <string name="report_failed_yourself">You can\'t report yourself.</string>
+    <string name="report_failed_admin">Administrators can\'t be reported.</string>
 </resources>

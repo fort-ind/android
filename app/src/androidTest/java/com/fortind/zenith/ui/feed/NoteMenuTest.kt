@@ -80,6 +80,7 @@ class NoteMenuTest {
         muteAuthor = { calls += "mute" },
         hideAuthorRenotes = { calls += "hideRenotes" },
         blockAuthor = { calls += "block" },
+        report = { calls += "block" },
     )
 
     private fun show(

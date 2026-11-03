@@ -19,11 +19,14 @@ import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.net.isRateLimited
-import com.fortind.zenith.timeline.Bookmark
 import com.fortind.zenith.timeline.Note
+import com.fortind.zenith.timeline.NoteListKey
+import com.fortind.zenith.timeline.NoteSource
 import com.fortind.zenith.timeline.NoteUpdate
 import com.fortind.zenith.timeline.NoteUser
 import com.fortind.zenith.timeline.NotesApi
+import com.fortind.zenith.timeline.UserNotesTab
+import com.fortind.zenith.timeline.NotesApiSource
 import com.fortind.zenith.timeline.Reactions
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.timeline.TimelineStream
@@ -32,6 +35,7 @@ import com.fortind.zenith.timeline.TimelineUnavailableException
 import com.fortind.zenith.timeline.acceptsOnlyLike
 import com.fortind.zenith.timeline.canRenote
 import com.fortind.zenith.timeline.captureIds
+import com.fortind.zenith.timeline.evictSecondary
 import com.fortind.zenith.timeline.hasVoted
 import com.fortind.zenith.timeline.isRenoteOf
 import com.fortind.zenith.timeline.mapNote
@@ -114,8 +118,9 @@ class FeedViewModel(
     private val voting = HashSet<String>()
     private val deleting = HashSet<String>()
     private val moderating = HashSet<String>()
-    private var bookmarksJob: Job? = null
-    private var bookmarkCursor: String? = null
+    private val source: NoteSource = NotesApiSource(api)
+    private val listJobs = HashMap<NoteListKey, Job>()
+    private val listsUsed = ArrayList<NoteListKey>()
     private var auth: FeedAuth = FeedAuth.Pending
 
     private val token: String? get() = (auth as? FeedAuth.SignedIn)?.token
@@ -409,7 +414,7 @@ class FeedViewModel(
         _uiState.update { state ->
             state.copy(
                 renoted = state.renoted - noteId,
-                timelines = state.timelines.mapValues { (_, timeline) ->
+                lists = state.lists.mapValues { (_, timeline) ->
                     if (userId == null) {
                         timeline
                     } else {
@@ -499,7 +504,7 @@ class FeedViewModel(
         viewModelScope.launch {
             try {
                 if (remove) unbookmarkTolerant(token, noteId) else bookmarkTolerant(token, noteId)
-                _uiState.update { state -> state.copy(bookmarks = state.bookmarks.withBookmark(note, present = !remove)) }
+                updateList(NoteListKey.Bookmarks) { it.withBookmark(note, present = !remove) }
                 _events.trySend(if (remove) FeedEvent.BookmarkRemoved else FeedEvent.Bookmarked)
             } catch (e: IOException) {
                 _uiState.update { it.copy(bookmarked = if (remove) it.bookmarked + noteId else it.bookmarked - noteId) }
@@ -508,71 +513,81 @@ class FeedViewModel(
         }
     }
 
-    fun loadBookmarks() {
-        val token = token ?: return
-        val current = _uiState.value.bookmarks
+    fun loadBookmarks() = loadList(NoteListKey.Bookmarks)
+
+    fun loadMoreBookmarks() = loadMoreList(NoteListKey.Bookmarks)
+
+    fun loadList(key: NoteListKey) {
+        if (key.needsToken && token == null) return
+        val current = _uiState.value.list(key)
         if (current.status == TimelineStatus.Loading || current.refreshing) return
-        bookmarksJob?.cancel()
+        listJobs[key]?.cancel()
+        markUsed(key)
         val hasItems = current.items.isNotEmpty()
-        _uiState.update {
+        updateList(key) {
             it.copy(
-                bookmarks = it.bookmarks.copy(
-                    status = if (hasItems) TimelineStatus.Ready else TimelineStatus.Loading,
-                    refreshing = hasItems,
-                    loadingMore = false,
-                    loadMoreFailed = false,
-                ),
+                status = if (hasItems) TimelineStatus.Ready else TimelineStatus.Loading,
+                refreshing = hasItems,
+                loadingMore = false,
+                loadMoreFailed = false,
             )
         }
-        bookmarksJob = viewModelScope.launch {
+        val currentAuth = auth
+        listJobs[key] = viewModelScope.launch {
             try {
-                val page = api.bookmarks(token, null, PAGE_SIZE)
-                bookmarkCursor = page.lastOrNull()?.id
-                _uiState.update { state ->
-                    state.copy(
-                        bookmarks = TimelineState(items = page.map(Bookmark::note), status = TimelineStatus.Ready, endReached = page.isEmpty()),
-                        bookmarked = state.bookmarked + page.map { it.note.id },
-                    )
+                val page = source.page(token, key, cursor = null, limit = PAGE_SIZE)
+                if (auth != currentAuth) return@launch
+                updateList(key) {
+                    TimelineState(items = page.notes, status = TimelineStatus.Ready, endReached = page.notes.isEmpty(), cursor = page.nextCursor)
                 }
+                onListPage(key, page.notes)
             } catch (e: IOException) {
                 handleFailure(e) {}
-                _uiState.update {
-                    it.copy(
-                        bookmarks = it.bookmarks.copy(
-                            status = if (it.bookmarks.items.isEmpty()) TimelineStatus.Failed else TimelineStatus.Ready,
-                            refreshing = false,
-                        ),
-                    )
+                updateList(key) {
+                    it.copy(status = if (it.items.isEmpty()) TimelineStatus.Failed else TimelineStatus.Ready, refreshing = false)
                 }
             }
         }
     }
 
-    fun loadMoreBookmarks() {
-        val token = token ?: return
-        val cursor = bookmarkCursor ?: return
-        val state = _uiState.value.bookmarks
+    fun loadMoreList(key: NoteListKey) {
+        if (key.needsToken && token == null) return
+        val state = _uiState.value.list(key)
+        val cursor = state.cursor ?: return
         if (state.status != TimelineStatus.Ready || state.loadingMore || state.refreshing || state.endReached) return
-        _uiState.update { it.copy(bookmarks = it.bookmarks.copy(loadingMore = true, loadMoreFailed = false)) }
-        bookmarksJob = viewModelScope.launch {
+        updateList(key) { it.copy(loadingMore = true, loadMoreFailed = false) }
+        val currentAuth = auth
+        listJobs[key] = viewModelScope.launch {
             try {
-                val page = api.bookmarks(token, cursor, PAGE_SIZE)
-                bookmarkCursor = page.lastOrNull()?.id ?: cursor
-                _uiState.update { current ->
-                    current.copy(
-                        bookmarks = current.bookmarks.copy(
-                            items = mergeOlder(current.bookmarks.items, page.map(Bookmark::note)),
-                            loadingMore = false,
-                            endReached = page.isEmpty(),
-                        ),
-                        bookmarked = current.bookmarked + page.map { it.note.id },
+                val page = source.page(token, key, cursor = cursor, limit = PAGE_SIZE)
+                if (auth != currentAuth) return@launch
+                updateList(key) {
+                    it.copy(
+                        items = mergeOlder(it.items, page.notes),
+                        loadingMore = false,
+                        endReached = page.notes.isEmpty(),
+                        cursor = page.nextCursor ?: cursor,
                     )
                 }
+                onListPage(key, page.notes)
             } catch (e: IOException) {
                 handleFailure(e) {}
-                _uiState.update { it.copy(bookmarks = it.bookmarks.copy(loadingMore = false, loadMoreFailed = true)) }
+                updateList(key) { it.copy(loadingMore = false, loadMoreFailed = true) }
             }
         }
+    }
+
+    private val NoteListKey.needsToken: Boolean get() = this == NoteListKey.Bookmarks
+
+    private fun onListPage(key: NoteListKey, notes: List<Note>) {
+        if (key == NoteListKey.Bookmarks) _uiState.update { state -> state.copy(bookmarked = state.bookmarked + notes.map { it.id }) }
+    }
+
+    private fun markUsed(key: NoteListKey) {
+        if (key.isPrimary) return
+        listsUsed.remove(key)
+        listsUsed.add(key)
+        _uiState.update { state -> state.copy(lists = evictSecondary(state.lists, listsUsed, MAX_SECONDARY_LISTS) { it.isPrimary }) }
     }
 
     fun deleteNote(noteId: String) = delete(noteId, redraft = false)
@@ -604,7 +619,7 @@ class FeedViewModel(
         moderate(noteId) { token, user ->
             moderation.mute(token, user.id, durationMillis?.let { clock() + it })
             removeAuthorEverywhere(user.id)
-            FeedEvent.UserMuted(user.displayName)
+            FeedEvent.UserMuted(user.id, user.displayName)
         }
     }
 
@@ -612,7 +627,7 @@ class FeedViewModel(
         moderate(noteId) { token, user ->
             moderation.hideRenotes(token, user.id)
             removeRenotesEverywhere(user.id)
-            FeedEvent.RenotesHidden(user.displayName)
+            FeedEvent.RenotesHidden(user.id, user.displayName)
         }
     }
 
@@ -620,7 +635,7 @@ class FeedViewModel(
         moderate(noteId) { token, user ->
             moderation.block(token, user.id)
             removeAuthorEverywhere(user.id)
-            FeedEvent.UserBlocked(user.displayName)
+            FeedEvent.UserBlocked(user.id, user.displayName)
         }
     }
 
@@ -639,13 +654,20 @@ class FeedViewModel(
         }
     }
 
+    fun dropAuthor(userId: String) = removeAuthorEverywhere(userId)
+
+    fun dropRenotesBy(userId: String) = removeRenotesEverywhere(userId)
+
     private fun removeAuthorEverywhere(userId: String) {
         _uiState.update { state ->
             state.copy(
-                timelines = state.timelines.mapValues { (_, timeline) ->
-                    timeline.copy(items = timeline.items.removeAuthoredBy(userId), pending = timeline.pending.removeAuthoredBy(userId))
+                lists = state.lists.mapValues { (key, timeline) ->
+                    if (key.ownerId == userId) {
+                        timeline
+                    } else {
+                        timeline.copy(items = timeline.items.removeAuthoredBy(userId), pending = timeline.pending.removeAuthoredBy(userId))
+                    }
                 },
-                bookmarks = state.bookmarks.copy(items = state.bookmarks.items.removeAuthoredBy(userId)),
             )
         }
     }
@@ -653,8 +675,12 @@ class FeedViewModel(
     private fun removeRenotesEverywhere(userId: String) {
         _uiState.update { state ->
             state.copy(
-                timelines = state.timelines.mapValues { (_, timeline) ->
-                    timeline.copy(items = timeline.items.removePureRenotesBy(userId), pending = timeline.pending.removePureRenotesBy(userId))
+                lists = state.lists.mapValues { (key, timeline) ->
+                    if (key.ownerId == userId) {
+                        timeline
+                    } else {
+                        timeline.copy(items = timeline.items.removePureRenotesBy(userId), pending = timeline.pending.removePureRenotesBy(userId))
+                    }
                 },
             )
         }
@@ -682,7 +708,29 @@ class FeedViewModel(
         else -> this
     }
 
+    fun seedList(key: NoteListKey, notes: List<Note>) {
+        markUsed(key)
+        updateList(key) { TimelineState(items = notes, status = TimelineStatus.Ready, endReached = true) }
+    }
+
+    private fun addToOwnLists(note: Note) {
+        val me = myUserId ?: return
+        val isReply = note.reply != null
+        val tabs = buildList {
+            if (!isReply) add(UserNotesTab.Notes)
+            add(UserNotesTab.NotesAndReplies)
+            if (!isReply && note.files.isNotEmpty()) add(UserNotesTab.Media)
+        }
+        tabs.forEach { tab ->
+            val key = NoteListKey.UserNotes(me, tab)
+            if (_uiState.value.lists[key]?.status == TimelineStatus.Ready) {
+                updateList(key) { it.copy(items = mergeNewer(it.items, listOf(note))) }
+            }
+        }
+    }
+
     fun noteCreated(note: Note) {
+        addToOwnLists(note)
         val parent = note.reply
         if (parent != null) {
             mutateEverywhere(parent.id) { it.copy(repliesCount = it.repliesCount + 1) }
@@ -746,8 +794,9 @@ class FeedViewModel(
         reactionJobs.values.forEach { it.cancel() }
         reactionJobs.clear()
         confirmedReactions.clear()
-        bookmarksJob?.cancel()
-        bookmarkCursor = null
+        listJobs.values.forEach { it.cancel() }
+        listJobs.clear()
+        listsUsed.clear()
         TimelineKind.entries.forEach { atTop[it] = true }
         visible.value = emptySet()
         val signedIn = next is FeedAuth.SignedIn
@@ -758,8 +807,8 @@ class FeedViewModel(
             signedIn = signedIn,
             myUserId = (next as? FeedAuth.SignedIn)?.userId,
             selected = initial,
-            timelines = TimelineKind.entries.associateWith { kind ->
-                TimelineState(status = if (kind.requiresAuth && !signedIn) TimelineStatus.SignInRequired else TimelineStatus.Idle)
+            lists = TimelineKind.entries.associate { kind ->
+                NoteListKey.Timeline(kind) to TimelineState(status = if (kind.requiresAuth && !signedIn) TimelineStatus.SignInRequired else TimelineStatus.Idle)
             },
         )
     }
@@ -974,15 +1023,12 @@ class FeedViewModel(
     private fun mutateEverywhere(noteId: String, transform: (Note) -> Note) {
         _uiState.update { state ->
             state.copy(
-                timelines = state.timelines.mapValues { (_, timeline) ->
+                lists = state.lists.mapValues { (_, timeline) ->
                     val items = timeline.items.mapNote(noteId, transform)
                     val pending = timeline.pending.mapNote(noteId, transform)
                     if (items === timeline.items && pending === timeline.pending) timeline else timeline.copy(items = items, pending = pending)
                 },
                 thread = state.thread?.mapNotes { it.mapNote(noteId, transform) },
-                bookmarks = state.bookmarks.items.mapNote(noteId, transform).let { items ->
-                    if (items === state.bookmarks.items) state.bookmarks else state.bookmarks.copy(items = items)
-                },
             )
         }
         threadCache.entries.forEach { entry -> entry.setValue(entry.value.mapNotes { it.mapNote(noteId, transform) }) }
@@ -991,18 +1037,20 @@ class FeedViewModel(
     private fun removeEverywhere(noteId: String) {
         _uiState.update { state ->
             state.copy(
-                timelines = state.timelines.mapValues { (_, timeline) ->
+                lists = state.lists.mapValues { (_, timeline) ->
                     timeline.copy(items = timeline.items.removeNote(noteId), pending = timeline.pending.removeNote(noteId))
                 },
                 thread = state.thread?.mapNotes { it.removeNote(noteId) },
-                bookmarks = state.bookmarks.copy(items = state.bookmarks.items.removeNote(noteId)),
             )
         }
         threadCache.remove(noteId)
     }
 
-    private fun updateTimeline(kind: TimelineKind, transform: (TimelineState) -> TimelineState) {
-        _uiState.update { state -> state.copy(timelines = state.timelines + (kind to transform(state.timeline(kind)))) }
+    private fun updateTimeline(kind: TimelineKind, transform: (TimelineState) -> TimelineState) =
+        updateList(NoteListKey.Timeline(kind), transform)
+
+    private fun updateList(key: NoteListKey, transform: (TimelineState) -> TimelineState) {
+        _uiState.update { state -> state.copy(lists = state.lists + (key to transform(state.list(key)))) }
     }
 
     private fun handleFailure(error: IOException, onOther: () -> Unit) {
@@ -1020,6 +1068,7 @@ class FeedViewModel(
         const val MAX_CAPTURED = 60
         const val THREAD_ANCESTORS = 30
         const val THREAD_CACHE_SIZE = 8
+        const val MAX_SECONDARY_LISTS = 16
         const val REACTION_DEBOUNCE_MS = 600L
 
         val Factory = viewModelFactory {

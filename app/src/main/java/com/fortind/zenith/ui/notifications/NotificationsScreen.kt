@@ -95,6 +95,7 @@ private const val LOAD_MORE_THRESHOLD = 5
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
     onOpenNote: (String) -> Unit,
+    onOpenPerson: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -112,7 +113,7 @@ fun NotificationsScreen(
         }
     }
 
-    val actions = rememberNotificationActions(snackbarHostState, viewModel, onOpenNote)
+    val actions = rememberNotificationActions(snackbarHostState, viewModel, onOpenNote, onOpenPerson = onOpenPerson)
 
     Box(modifier = modifier.fillMaxSize()) {
         when (val current = state) {
@@ -139,16 +140,18 @@ private fun rememberNotificationActions(
     snackbarHostState: SnackbarHostState,
     viewModel: NotificationsViewModel,
     onOpenNote: (String) -> Unit,
+    onOpenPerson: (String) -> Unit,
 ): NotificationActions {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val linkCopiedMessage = stringResource(R.string.notifications_link_copied)
 
-    return remember(clipboard, linkCopiedMessage, viewModel, onOpenNote) {
+    return remember(clipboard, linkCopiedMessage, viewModel, onOpenNote, onOpenPerson) {
         NotificationActions(
             open = { notification ->
-                notification.noteId?.let(onOpenNote)
+                notification.noteId?.let(onOpenNote) ?: notification.actor?.id?.let(onOpenPerson)
             },
+            openActor = { notification -> notification.actor?.id?.let(onOpenPerson) },
             copyLink = { notification ->
                 notification.webUrl?.let { url ->
                     scope.launch {

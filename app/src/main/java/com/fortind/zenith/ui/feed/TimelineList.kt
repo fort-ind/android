@@ -1,17 +1,25 @@
 package com.fortind.zenith.ui.feed
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -32,7 +40,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.fortind.zenith.R
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.TimelineKind
 import kotlinx.coroutines.FlowPreview
@@ -68,6 +78,10 @@ fun TimelineList(
     modifier: Modifier = Modifier,
     header: (@Composable () -> Unit)? = null,
     banner: (@Composable () -> Unit)? = null,
+    fullHeader: (@Composable () -> Unit)? = null,
+    stickyHeader: (@Composable () -> Unit)? = null,
+    pinned: List<Note> = emptyList(),
+    emptyBody: Int? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
@@ -76,7 +90,6 @@ fun TimelineList(
     val atTop by remember(listState) {
         derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < topThreshold }
     }
-    val leadingItems = (if (header != null) 1 else 0) + (if (banner != null) 1 else 0)
 
     LaunchedEffect(listState) {
         snapshotFlow { atTop }.collect { current.onAtTop(it) }
@@ -100,8 +113,9 @@ fun TimelineList(
             .collect { current.onVisibleNotes(it) }
     }
     val firstId = timeline.items.firstOrNull()?.id
+    val pinnedToTop = atTop
     LaunchedEffect(firstId) {
-        if (firstId != null && listState.firstVisibleItemIndex <= leadingItems && atTop) listState.requestScrollToItem(0)
+        if (firstId != null && pinnedToTop) listState.requestScrollToItem(0)
     }
 
     LazyColumn(
@@ -133,6 +147,16 @@ fun TimelineList(
                 }
             },
     ) {
+        if (fullHeader != null) {
+            item(key = "feed:fullheader", contentType = "fullheader") {
+                Box(modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth()) { fullHeader() }
+            }
+        }
+        if (stickyHeader != null) {
+            stickyHeader(key = "feed:sticky", contentType = "sticky") {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { stickyHeader() }
+            }
+        }
         if (header != null) {
             item(key = "feed:header", contentType = "header") {
                 Box(modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) { header() }
@@ -144,11 +168,25 @@ fun TimelineList(
             }
         }
         val itemModifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth()
+        items(pinned, key = { "feed:pinned:${it.id}" }, contentType = { "pinned" }) { note ->
+            Column(modifier = itemModifier) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(start = 28.dp, top = 8.dp),
+                ) {
+                    Icon(Icons.Default.PushPin, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Text(stringResource(R.string.person_pinned), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                NoteCard(note = note, environment = environment, callbacks = noteCallbacks)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            }
+        }
         when {
             timeline.items.isEmpty() && (timeline.status == TimelineStatus.Loading || timeline.status == TimelineStatus.Idle) ->
                 item(key = "feed:loading", contentType = "loading") { FeedLoading() }
             timeline.items.isEmpty() -> item(key = "feed:message", contentType = "message") {
-                FeedMessage(timeline.status, kind, current.onRetry, current.onLogIn)
+                FeedMessage(timeline.status, kind, current.onRetry, current.onLogIn, emptyBody = emptyBody)
             }
             else -> {
                 itemsIndexed(timeline.items, key = { _, note -> note.id }, contentType = { _, note -> noteContentType(note) }) { index, note ->

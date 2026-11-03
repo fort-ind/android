@@ -60,6 +60,8 @@ interface NotesApi {
     suspend fun unbookmark(token: String, noteId: String)
 
     suspend fun bookmarks(token: String, untilId: String?, limit: Int): List<Bookmark>
+
+    suspend fun userNotes(token: String?, userId: String, tab: UserNotesTab, untilId: String?, limit: Int): List<Note>
 }
 
 class HttpNotesApi(private val http: FortHttp) : NotesApi {
@@ -86,6 +88,18 @@ class HttpNotesApi(private val http: FortHttp) : NotesApi {
             }
         }
         return if (sinceId != null && untilId == null) notes.sortedNewestFirst() else notes
+    }
+
+    override suspend fun userNotes(token: String?, userId: String, tab: UserNotesTab, untilId: String?, limit: Int): List<Note> {
+        val body = request(token)
+            .put("userId", userId)
+            .put("limit", limit)
+            .put("allowPartial", true)
+            .put("withReplies", tab == UserNotesTab.NotesAndReplies)
+            .put("withRenotes", tab != UserNotesTab.Media)
+            .put("withFiles", tab == UserNotesTab.Media)
+        untilId?.let { body.put("untilId", it) }
+        return notes("/api/users/notes", body)
     }
 
     override suspend fun show(token: String?, noteId: String): Note {

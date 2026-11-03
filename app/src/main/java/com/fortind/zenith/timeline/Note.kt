@@ -58,6 +58,8 @@ data class NoteUser(
     val handle: String get() = if (host == null) "@$username" else "@$username@$host"
 
     val profileUrl: String get() = "https://${FortInstance.HOST}/$handle"
+
+    val fullHandle: String get() = "@$username@${host ?: FortInstance.HOST}"
 }
 
 data class NoteFile(

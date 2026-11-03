@@ -12,16 +12,18 @@ private const val UI_TIMEOUT_MS = 5_000L
 private const val FEED_TIMEOUT_MS = 15_000L
 private const val NOTE = "note"
 private const val FEED_LIST = "feed:list"
-private val DESTINATIONS = listOf("Games", "Notifications", "Profile", "Settings", "Home")
+private const val NOTE_AVATAR = "note:avatar"
+private const val PERSON_MEDIA_TAB = "person:tab:Media"
+private val DESTINATIONS = listOf("nav:GAMES", "nav:NOTIFICATIONS", "nav:PROFILE", "nav:SETTINGS", "nav:HOME")
 
 fun MacrobenchmarkScope.browseAsGuest() {
     device.wait(Until.hasObject(By.text(BROWSE_AS_GUEST)), UI_TIMEOUT_MS)
     checkNotNull(device.findObject(By.text(BROWSE_AS_GUEST))) { "Login screen did not appear" }.click()
     device.waitForIdle()
 
-    DESTINATIONS.forEach { label ->
-        device.wait(Until.hasObject(By.text(label)), UI_TIMEOUT_MS)
-        checkNotNull(device.findObject(By.text(label))) { "Destination $label did not appear" }.click()
+    DESTINATIONS.forEach { tag ->
+        device.wait(Until.hasObject(By.res(tag)), UI_TIMEOUT_MS)
+        checkNotNull(device.findObject(By.res(tag))) { "Destination $tag did not appear" }.click()
         device.waitForIdle()
     }
 }
@@ -34,6 +36,16 @@ fun MacrobenchmarkScope.browseFeed() {
     device.findObject(By.res("timeline:Local"))?.click()
     device.wait(Until.hasObject(By.res(NOTE)), FEED_TIMEOUT_MS)
     device.findObject(By.res(NOTE))?.click()
+    device.waitForIdle()
+    device.pressBack()
+    device.waitForIdle()
+    browsePerson()
+}
+
+private fun MacrobenchmarkScope.browsePerson() {
+    device.findObject(By.res(NOTE_AVATAR))?.click() ?: return
+    if (!device.wait(Until.hasObject(By.res(PERSON_MEDIA_TAB)), FEED_TIMEOUT_MS)) return
+    device.findObject(By.res(PERSON_MEDIA_TAB))?.click()
     device.waitForIdle()
     device.pressBack()
     device.waitForIdle()

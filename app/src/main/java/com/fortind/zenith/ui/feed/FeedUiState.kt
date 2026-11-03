@@ -1,6 +1,7 @@
 package com.fortind.zenith.ui.feed
 
 import com.fortind.zenith.timeline.Note
+import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.timeline.findNote
 import com.fortind.zenith.timeline.mergeNewer
@@ -16,6 +17,7 @@ data class TimelineState(
     val endReached: Boolean = false,
     val pending: List<Note> = emptyList(),
     val gap: Boolean = false,
+    val cursor: String? = null,
 ) {
     val hasPending: Boolean get() = pending.isNotEmpty() || gap
 }
@@ -67,23 +69,25 @@ data class FeedUiState(
     val signedIn: Boolean = false,
     val myUserId: String? = null,
     val selected: TimelineKind = TimelineKind.Home,
-    val timelines: Map<TimelineKind, TimelineState> = TimelineKind.entries.associateWith { TimelineState() },
+    val lists: Map<NoteListKey, TimelineState> = TimelineKind.entries.associate { NoteListKey.Timeline(it) to TimelineState() },
     val thread: ThreadState? = null,
     val renoted: Set<String> = emptySet(),
     val renoteChecks: Set<String> = emptySet(),
     val needsPermission: Boolean = false,
-    val bookmarks: TimelineState = TimelineState(),
     val bookmarked: Set<String> = emptySet(),
     val bookmarkChecks: Set<String> = emptySet(),
 ) {
-    fun timeline(kind: TimelineKind): TimelineState = timelines[kind] ?: TimelineState()
+    fun list(key: NoteListKey): TimelineState = lists[key] ?: TimelineState()
+
+    fun timeline(kind: TimelineKind): TimelineState = list(NoteListKey.Timeline(kind))
+
+    val bookmarks: TimelineState get() = list(NoteListKey.Bookmarks)
 
     val current: TimelineState get() = timeline(selected)
 
     fun findNote(noteId: String): Note? =
-        timelines.values.firstNotNullOfOrNull { (it.items + it.pending).findNote(noteId) }
+        lists.values.firstNotNullOfOrNull { (it.items + it.pending).findNote(noteId) }
             ?: thread?.notes?.findNote(noteId)
-            ?: bookmarks.items.findNote(noteId)
 }
 
 sealed interface FeedEvent {
@@ -103,11 +107,11 @@ sealed interface FeedEvent {
 
     data class Redraft(val note: Note) : FeedEvent
 
-    data class UserMuted(val name: String) : FeedEvent
+    data class UserMuted(val userId: String, val name: String) : FeedEvent
 
-    data class RenotesHidden(val name: String) : FeedEvent
+    data class RenotesHidden(val userId: String, val name: String) : FeedEvent
 
-    data class UserBlocked(val name: String) : FeedEvent
+    data class UserBlocked(val userId: String, val name: String) : FeedEvent
 
     data object ModerationFailed : FeedEvent
 

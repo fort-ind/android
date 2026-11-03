@@ -189,6 +189,14 @@ class FakeNotesApi : NotesApi {
         val older = if (untilId == null) bookmarkEntries else bookmarkEntries.dropWhile { it.id != untilId }.drop(1)
         return older.take(limit)
     }
+
+    val userNotePages = mutableMapOf<Pair<String, UserNotesTab>, List<Note>>()
+
+    override suspend fun userNotes(token: String?, userId: String, tab: UserNotesTab, untilId: String?, limit: Int): List<Note> {
+        val all = userNotePages[userId to tab].orEmpty()
+        val older = if (untilId == null) all else all.dropWhile { it.id != untilId }.drop(1)
+        return older.take(limit)
+    }
 }
 
 class FakeTimelineStream : TimelineStream {

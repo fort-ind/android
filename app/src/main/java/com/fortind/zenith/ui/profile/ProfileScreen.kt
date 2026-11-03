@@ -1,35 +1,20 @@
 package com.fortind.zenith.ui.profile
 
-import androidx.compose.foundation.background
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -41,74 +26,62 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.rememberBottomSheetState
-import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.graphics.shapes.RoundedPolygon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.window.core.layout.WindowSizeClass
-import coil3.compose.AsyncImage
 import com.fortind.zenith.R
-import com.fortind.zenith.auth.CurrentUser
+import com.fortind.zenith.people.FollowListKind
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
-import com.fortind.zenith.ui.rememberMorphingShape
+import com.fortind.zenith.ui.people.OwnProfileActions
+import com.fortind.zenith.ui.people.PersonPage
 import com.fortind.zenith.ui.rememberReduceMotion
-
-private val AvatarSize = 112.dp
-private val AvatarRing = 8.dp
+import com.fortind.zenith.ui.social.SocialUi
 
 @Composable
 fun ProfileScreen(
-    onOpenBookmarks: () -> Unit,
+    ui: SocialUi,
     onEditProfile: () -> Unit,
-    contentPadding: PaddingValues,
+    onOpenList: (String, FollowListKind) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     var confirmingLogout by rememberSaveable { mutableStateOf(false) }
+    val own = remember(onEditProfile) { OwnProfileActions(onEditProfile = onEditProfile, onLogOut = { confirmingLogout = true }) }
 
-    val layoutDirection = LocalLayoutDirection.current
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(
-                start = contentPadding.calculateStartPadding(layoutDirection),
-                end = contentPadding.calculateEndPadding(layoutDirection),
-                bottom = contentPadding.calculateBottomPadding(),
-            ),
-    ) {
-        ProfileContent(
-            state = state,
-            topInset = contentPadding.calculateTopPadding(),
+    when (val current = state) {
+        is ProfileUiState.Loaded -> {
+            LaunchedEffect(ui.people, current.user) { ui.people.refresh(current.user.id) }
+            PersonPage(
+                userId = current.user.id,
+                ui = ui,
+                onBack = null,
+                onOpenList = { kind -> onOpenList(current.user.id, kind) },
+                own = own,
+            )
+        }
+        ProfileUiState.Unavailable, ProfileUiState.Guest -> ProfileMessage(
+            state = current,
             refreshing = refreshing,
-            onEditProfile = onEditProfile,
             onLogOut = { confirmingLogout = true },
             onRetry = viewModel::refresh,
             onLogIn = viewModel::logIn,
-            onOpenBookmarks = onOpenBookmarks,
+            modifier = modifier,
         )
     }
 
@@ -125,258 +98,45 @@ fun ProfileScreen(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ProfileContent(
+private fun ProfileMessage(
     state: ProfileUiState,
-    topInset: Dp,
     refreshing: Boolean,
-    onEditProfile: () -> Unit,
     onLogOut: () -> Unit,
     onRetry: () -> Unit,
     onLogIn: () -> Unit,
-    onOpenBookmarks: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val wide = currentWindowAdaptiveInfoV2().windowSizeClass
-        .isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
-    val gutter = if (wide) 32.dp else 16.dp
-    val fullBleedBanner = state is ProfileUiState.Loaded && !wide
-
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(top = if (fullBleedBanner) 0.dp else topInset + 16.dp, bottom = 16.dp),
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 640.dp)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            when (state) {
-                is ProfileUiState.Loaded -> {
-                    ProfileHeader(
-                        user = state.user,
-                        wide = wide,
-                        gutter = gutter,
-                        bannerTopInset = if (fullBleedBanner) topInset else 0.dp,
-                    )
-                    ProfileActions(
-                        onOpenBookmarks = onOpenBookmarks,
-                        onEditProfile = onEditProfile,
-                        onLogOut = onLogOut,
-                        modifier = Modifier.padding(horizontal = gutter),
+        Box(modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth()) {
+            if (state == ProfileUiState.Guest) {
+                StatusMessage(
+                    shape = MaterialShapes.Cookie9Sided,
+                    title = stringResource(R.string.profile_guest_title),
+                    body = stringResource(R.string.profile_guest_body),
+                ) {
+                    PrimaryButton(
+                        label = stringResource(R.string.profile_guest_log_in),
+                        onClick = onLogIn,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                ProfileUiState.Unavailable -> Box(Modifier.padding(horizontal = gutter)) {
-                    StatusMessage(
-                        shape = MaterialShapes.Sunny,
-                        title = stringResource(R.string.profile_unavailable_title),
-                        body = stringResource(R.string.profile_unavailable_body),
-                    ) {
-                        RetryButton(refreshing = refreshing, onRetry = onRetry)
-                        LogOutButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-                ProfileUiState.Guest -> Box(Modifier.padding(horizontal = gutter)) {
-                    StatusMessage(
-                        shape = MaterialShapes.Cookie9Sided,
-                        title = stringResource(R.string.profile_guest_title),
-                        body = stringResource(R.string.profile_guest_body),
-                    ) {
-                        PrimaryButton(
-                            label = stringResource(R.string.profile_guest_log_in),
-                            onClick = onLogIn,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+            } else {
+                StatusMessage(
+                    shape = MaterialShapes.Sunny,
+                    title = stringResource(R.string.profile_unavailable_title),
+                    body = stringResource(R.string.profile_unavailable_body),
+                ) {
+                    RetryButton(refreshing = refreshing, onRetry = onRetry)
+                    LogOutButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ProfileHeader(user: CurrentUser, wide: Boolean, gutter: Dp, bannerTopInset: Dp) {
-    val fullBleed = !wide
-    val bannerShape = if (fullBleed) {
-        MaterialTheme.shapes.extraExtraLarge.copy(topStart = ZeroCornerSize, topEnd = ZeroCornerSize)
-    } else {
-        MaterialTheme.shapes.extraExtraLarge
-    }
-    val bannerGutter = if (fullBleed) 0.dp else gutter
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Box(modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = bannerGutter)
-            .padding(bottom = (AvatarSize + AvatarRing * 2) / 2)) {
-            Banner(
-                url = user.bannerUrl,
-                aspectRatio = if (wide) 3f else 16f / 9f,
-                topInset = bannerTopInset,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(bannerShape),
-            )
-            Avatar(
-                user = user,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = 24.dp + (gutter - bannerGutter), y = (AvatarSize + AvatarRing * 2) / 2),
-            )
-        }
-        Column(modifier = Modifier.padding(horizontal = gutter + 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = user.displayName,
-                style = MaterialTheme.typography.displaySmallEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() },
-            )
-            Text(
-                text = user.handle,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun Banner(url: String?, aspectRatio: Float, topInset: Dp, modifier: Modifier = Modifier) {
-    Box(modifier = modifier) {
-        Spacer(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = topInset)
-                .aspectRatio(aspectRatio),
-        )
-        BannerArt(Modifier.matchParentSize())
-        if (url != null) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
-        }
-        if (topInset > 0.dp) {
-            val scrim = MaterialTheme.colorScheme.surface
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(topInset + 24.dp)
-                    .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0.7f), Color.Transparent))),
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun BannerArt(modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        modifier = modifier.background(Brush.linearGradient(listOf(colors.primaryContainer, colors.tertiaryContainer)))
-    ) {
-        ArtShape(MaterialShapes.Sunny, colors.secondaryContainer, 180.dp, Modifier.align(Alignment.TopStart).offset(x = (-40).dp, y = (-50).dp))
-        ArtShape(MaterialShapes.Cookie9Sided, colors.primary, 120.dp, Modifier.align(Alignment.TopEnd).offset(x = 30.dp, y = 20.dp), alpha = 0.25f)
-        ArtShape(MaterialShapes.SoftBurst, colors.tertiary, 96.dp, Modifier.align(Alignment.BottomCenter).offset(x = 60.dp, y = 36.dp), alpha = 0.3f)
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ArtShape(
-    polygon: RoundedPolygon,
-    color: androidx.compose.ui.graphics.Color,
-    size: androidx.compose.ui.unit.Dp,
-    modifier: Modifier = Modifier,
-    alpha: Float = 1f,
-) {
-    Box(modifier = modifier.size(size).alpha(alpha).clip(polygon.toShape()).background(color))
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun Avatar(user: CurrentUser, modifier: Modifier = Modifier) {
-    val shape = rememberMorphingShape(
-        target = MaterialShapes.Cookie12Sided,
-        reduceMotion = rememberReduceMotion(),
-        start = MaterialShapes.Circle,
-    )
-    val description = stringResource(R.string.profile_avatar_description)
-    Box(
-        modifier = modifier
-            .size(AvatarSize + AvatarRing * 2)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(AvatarSize)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = user.displayName.take(1).uppercase(),
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            if (user.avatarUrl != null) {
-                AsyncImage(
-                    model = user.avatarUrl,
-                    contentDescription = description,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ProfileActions(
-    onOpenBookmarks: () -> Unit,
-    onEditProfile: () -> Unit,
-    onLogOut: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    FlowRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ProfileActionButton(Icons.Default.Bookmarks, R.string.profile_bookmarks, onOpenBookmarks)
-        ProfileActionButton(Icons.Default.Edit, R.string.profile_edit_profile, onEditProfile)
-        ProfileActionButton(
-            icon = Icons.AutoMirrored.Filled.ExitToApp,
-            label = R.string.profile_log_out,
-            onClick = onLogOut,
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            ),
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ProfileActionButton(
-    icon: ImageVector,
-    @StringRes label: Int,
-    onClick: () -> Unit,
-    colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(),
-) {
-    FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes(), colors = colors) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-        Text(stringResource(label), maxLines = 1)
     }
 }
 

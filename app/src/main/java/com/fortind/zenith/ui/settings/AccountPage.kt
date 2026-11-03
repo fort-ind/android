@@ -2,7 +2,6 @@
 
 package com.fortind.zenith.ui.settings
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +64,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.graphics.shapes.RoundedPolygon
 import com.fortind.zenith.R
 import com.fortind.zenith.account.ModerationKind
@@ -124,7 +126,11 @@ internal fun AccountPage(
     }
     val goBack = { if (section == AccountSection.OVERVIEW) onBack() else leaveSection() }
 
-    BackHandler(enabled = section != AccountSection.OVERVIEW, onBack = leaveSection)
+    NavigationBackHandler(
+        state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+        isBackEnabled = section != AccountSection.OVERVIEW,
+        onBackCompleted = leaveSection,
+    )
 
     LaunchedEffect(editProfileRequested, user != null) {
         if (editProfileRequested && user != null) {
