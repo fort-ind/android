@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fitInside
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +57,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.WindowInsetsRulers
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -70,11 +73,13 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.graphics.shapes.RoundedPolygon
 import com.fortind.zenith.R
 import com.fortind.zenith.account.ModerationKind
+import com.fortind.zenith.account.SettingsEditor
 import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
 import com.fortind.zenith.ui.account.AccountEvent
+import com.fortind.zenith.ui.account.AccountSettingsViewModel
 import com.fortind.zenith.ui.account.AccountViewModel
 import com.fortind.zenith.ui.account.ModerationEvent
 import com.fortind.zenith.ui.account.ModerationViewModel
@@ -83,10 +88,40 @@ import com.fortind.zenith.ui.profile.ProfileUiState
 import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.launch
 
-private enum class AccountSection(@param:StringRes val titleRes: Int, @param:StringRes val supportingRes: Int) {
+private enum class AccountSection(
+    @param:StringRes val titleRes: Int,
+    @param:StringRes val supportingRes: Int,
+    val group: PrivacyGroup? = null,
+    val editors: List<SettingsEditor> = emptyList(),
+) {
     OVERVIEW(R.string.settings_category_account, R.string.settings_account_supporting),
     EDIT_PROFILE(R.string.account_edit_profile_title, R.string.account_edit_profile_supporting),
-    MODERATION(R.string.account_moderation_title, R.string.account_moderation_supporting),
+    MODERATION(
+        R.string.account_moderation_title,
+        R.string.account_moderation_supporting,
+        editors = listOf(SettingsEditor.MutedWords, SettingsEditor.HardMutedWords, SettingsEditor.MutedInstances),
+    ),
+    PRIVACY(R.string.account_privacy_title, R.string.account_privacy_supporting),
+    PRIVACY_FOLLOWERS(
+        R.string.privacy_followers_title,
+        R.string.privacy_followers_supporting,
+        group = PrivacyGroup.FOLLOWERS,
+        editors = listOf(SettingsEditor.FollowedMessage),
+    ),
+    PRIVACY_VISIBILITY(R.string.privacy_visibility_title, R.string.privacy_visibility_supporting, group = PrivacyGroup.VISIBILITY),
+    PRIVACY_DISCOVERY(R.string.privacy_discovery_title, R.string.privacy_discovery_supporting, group = PrivacyGroup.DISCOVERY),
+    PRIVACY_OLDER_NOTES(R.string.privacy_older_title, R.string.privacy_older_supporting, group = PrivacyGroup.OLDER_NOTES),
+    PRIVACY_CHAT(R.string.privacy_chat_title, R.string.privacy_chat_supporting, group = PrivacyGroup.CHAT);
+
+    val parent: AccountSection
+        get() = when {
+            group != null -> PRIVACY
+            else -> OVERVIEW
+        }
+
+    companion object {
+        fun of(group: PrivacyGroup): AccountSection = entries.first { it.group == group }
+    }
 }
 
 @Composable
@@ -96,8 +131,10 @@ internal fun AccountPage(
     onBack: () -> Unit,
     accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory),
     moderationViewModel: ModerationViewModel = viewModel(factory = ModerationViewModel.Factory),
+    settingsViewModel: AccountSettingsViewModel = viewModel(factory = AccountSettingsViewModel.Factory),
 ) {
     val account by accountViewModel.account.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val saveState by accountViewModel.saveState.collectAsStateWithLifecycle()
     var section by rememberSaveable { mutableStateOf(AccountSection.OVERVIEW) }
     var confirmingDiscard by rememberSaveable { mutableStateOf(false) }
@@ -115,13 +152,15 @@ internal fun AccountPage(
         }
     }
     val valid by remember(form) { derivedStateOf { form?.toForm()?.isValid == true } }
+    val openEditors = section.editors.map(settingsViewModel::editor)
+    val editorsDirty = openEditors.any { it.dirty }
 
     val leaveSection = {
-        if (section == AccountSection.EDIT_PROFILE && dirty && !saveState.saving) {
+        if ((section == AccountSection.EDIT_PROFILE && dirty && !saveState.saving) || editorsDirty) {
             confirmingDiscard = true
         } else {
             if (section == AccountSection.EDIT_PROFILE) accountViewModel.discardForm()
-            section = AccountSection.OVERVIEW
+            section = section.parent
         }
     }
     val goBack = { if (section == AccountSection.OVERVIEW) onBack() else leaveSection() }
@@ -149,6 +188,7 @@ internal fun AccountPage(
             }
         }
     }
+    AccountSettingsEventsEffect(settingsViewModel, snackbarHostState)
     LaunchedEffect(moderationViewModel) {
         moderationViewModel.events.collect { event ->
             when (event) {
@@ -181,6 +221,10 @@ internal fun AccountPage(
                 when {
                     keyDown && event.key == Key.Escape && section != AccountSection.OVERVIEW -> {
                         leaveSection()
+                        true
+                    }
+                    keyDown && event.key == Key.S && (event.isCtrlPressed || event.isMetaPressed) && editorsDirty -> {
+                        openEditors.filter { it.dirty }.forEach { settingsViewModel.save(it.editor) }
                         true
                     }
                     keyDown && event.key == Key.S && (event.isCtrlPressed || event.isMetaPressed) &&
@@ -231,6 +275,7 @@ internal fun AccountPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .fitInside(WindowInsetsRulers.Ime.current)
                 .verticalScroll(rememberScrollState())
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -261,6 +306,7 @@ internal fun AccountPage(
                         AccountSection.OVERVIEW -> AccountOverview(
                             user = current.user,
                             onEditProfile = { section = AccountSection.EDIT_PROFILE },
+                            onPrivacy = { section = AccountSection.PRIVACY },
                             onModeration = { section = AccountSection.MODERATION },
                             snackbarHostState = snackbarHostState,
                         )
@@ -271,7 +317,14 @@ internal fun AccountPage(
                                 saveState = saveState,
                             )
                         }
-                        AccountSection.MODERATION -> ModerationContent(viewModel = moderationViewModel)
+                        AccountSection.MODERATION -> ModerationContent(viewModel = moderationViewModel, settings = settingsViewModel)
+                        AccountSection.PRIVACY -> PrivacyOverview(onOpen = { section = AccountSection.of(it) })
+                        AccountSection.PRIVACY_FOLLOWERS,
+                        AccountSection.PRIVACY_VISIBILITY,
+                        AccountSection.PRIVACY_DISCOVERY,
+                        AccountSection.PRIVACY_OLDER_NOTES,
+                        AccountSection.PRIVACY_CHAT,
+                        -> section.group?.let { PrivacyGroupContent(it, settingsState, settingsViewModel) }
                     }
                 }
             }
@@ -287,8 +340,9 @@ internal fun AccountPage(
                 TextButton(
                     onClick = {
                         confirmingDiscard = false
-                        accountViewModel.discardForm()
-                        section = AccountSection.OVERVIEW
+                        if (section == AccountSection.EDIT_PROFILE) accountViewModel.discardForm()
+                        openEditors.forEach { it.revert() }
+                        section = section.parent
                     },
                 ) {
                     Text(stringResource(R.string.account_discard_confirm), color = MaterialTheme.colorScheme.error)
@@ -305,6 +359,7 @@ internal fun AccountPage(
 private fun AccountOverview(
     user: CurrentUser,
     onEditProfile: () -> Unit,
+    onPrivacy: () -> Unit,
     onModeration: () -> Unit,
     snackbarHostState: SnackbarHostState,
 ) {
@@ -317,26 +372,33 @@ private fun AccountOverview(
     AccountSummary(user = user)
     Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
         SettingsRow(
-            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
+            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 4),
             action = RowAction.Click(onEditProfile),
             leading = { Icon(Icons.Default.Edit, contentDescription = null) },
             headline = { Text(stringResource(R.string.account_edit_profile_title)) },
             supporting = { Text(stringResource(R.string.account_edit_profile_supporting)) },
         )
         SettingsRow(
-            shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
+            shapes = ListItemDefaults.segmentedShapes(index = 1, count = 4),
+            action = RowAction.Click(onPrivacy),
+            leading = { Icon(Icons.Default.Lock, contentDescription = null) },
+            headline = { Text(stringResource(R.string.account_privacy_title)) },
+            supporting = { Text(stringResource(R.string.account_privacy_supporting)) },
+        )
+        SettingsRow(
+            shapes = ListItemDefaults.segmentedShapes(index = 2, count = 4),
             action = RowAction.Click(onModeration),
             leading = { Icon(Icons.Default.Block, contentDescription = null) },
             headline = { Text(stringResource(R.string.account_moderation_title)) },
             supporting = { Text(stringResource(R.string.account_moderation_supporting)) },
         )
         SettingsRow(
-            shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
-            action = RowAction.Click {
+            shapes = ListItemDefaults.segmentedShapes(index = 3, count = 4),
+            action = RowAction.Click({
                 if (!launchCustomTab(context, FortInstance.SETTINGS_URL, darkTheme, toolbarColor)) {
                     scope.launch { snackbarHostState.showSnackbar(noBrowser) }
                 }
-            },
+            }),
             leading = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
             headline = { Text(stringResource(R.string.account_web_title)) },
             supporting = { Text(stringResource(R.string.account_web_supporting)) },

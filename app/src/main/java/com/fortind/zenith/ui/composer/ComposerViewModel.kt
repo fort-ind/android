@@ -12,6 +12,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.compose.ui.text.TextRange
 import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.account.CW_PRIORITY_PARENT
+import com.fortind.zenith.account.composerContentWarning
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
@@ -526,8 +528,13 @@ class ComposerViewModel(
 
     private fun storageKey(slot: String): String = draftStorageKey(myUserId, slot)
 
+    private fun defaultWarning(parentCw: String?): String? {
+        val account = (session.state.value as? SessionState.SignedIn)?.user?.settings
+        return composerContentWarning(parentCw, account?.defaultCw, account?.defaultCwPriority ?: CW_PRIORITY_PARENT)
+    }
+
     private fun initialDraft(target: ComposerTarget, note: Note?): ComposerDraft = when {
-        note == null -> ComposerDraft()
+        note == null -> ComposerDraft(cw = defaultWarning(null))
         target is ComposerTarget.Edit -> ComposerDraft(
             text = note.text.orEmpty(),
             cw = note.cw,
@@ -536,11 +543,12 @@ class ComposerViewModel(
         )
         target is ComposerTarget.Reply -> ComposerDraft(
             text = if (note.user.id == myUserId) "" else "${note.user.handle} ",
-            cw = note.cw,
+            cw = defaultWarning(note.cw),
             visibility = note.visibility,
             localOnly = note.localOnly,
         )
         else -> ComposerDraft(
+            cw = defaultWarning(null),
             visibility = if (note.canRenote(myUserId)) note.visibility else Visibility.Public,
             localOnly = note.localOnly,
         )

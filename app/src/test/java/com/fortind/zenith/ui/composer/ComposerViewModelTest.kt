@@ -3,6 +3,11 @@ package com.fortind.zenith.ui.composer
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.lifecycle.viewModelScope
+import com.fortind.zenith.account.AccountSettings
+import com.fortind.zenith.account.CW_PRIORITY_DEFAULT
+import com.fortind.zenith.account.CW_PRIORITY_PARENT
+import com.fortind.zenith.account.CW_PRIORITY_PARENT_DEFAULT
+import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.autocomplete.SuggestionEngine
 import com.fortind.zenith.autocomplete.SuggestionsApi
@@ -243,6 +248,44 @@ class ComposerViewModelTest {
         localOnly = localOnly,
         visibleUserIds = visibleUserIds,
     )
+
+    private fun Fixture.useDefaultWarning(cw: String, priority: String) {
+        session.applyUpdatedUser(
+            CurrentUser("me", "me", null, null, null, settings = AccountSettings(defaultCw = cw, defaultCwPriority = priority)),
+        )
+    }
+
+    @Test
+    fun aNewNoteStartsWithTheDefaultWarning() = runTest {
+        val f = fixture()
+        f.useDefaultWarning("mine", CW_PRIORITY_PARENT)
+
+        f.viewModel.open(ComposerTarget.NewPost, null)
+
+        assertEquals("mine", f.viewModel.cw.text.toString())
+        assertTrue(f.viewModel.uiState.value!!.cwEnabled)
+    }
+
+    @Test
+    fun aReplyFollowsTheWarningPriority() = runTest {
+        val f = fixture()
+        f.useDefaultWarning("mine", CW_PRIORITY_PARENT_DEFAULT)
+
+        f.viewModel.open(ComposerTarget.Reply("p1"), parent(cw = "spoilers"))
+
+        assertEquals("spoilers, mine", f.viewModel.cw.text.toString())
+    }
+
+    @Test
+    fun anEditKeepsTheNotesOwnWarning() = runTest {
+        val f = fixture()
+        f.useDefaultWarning("mine", CW_PRIORITY_DEFAULT)
+
+        f.viewModel.open(ComposerTarget.Edit("p1"), parent(authorId = "me"))
+
+        assertEquals("", f.viewModel.cw.text.toString())
+        assertFalse(f.viewModel.uiState.value!!.cwEnabled)
+    }
 
     @Test
     fun replyingPrefillsAMentionAndInheritsTheParentsSettings() = runTest {

@@ -1,5 +1,6 @@
 package com.fortind.zenith.notifications
 
+import com.fortind.zenith.account.AccountSettings
 import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.TokenStore
 import com.fortind.zenith.auth.UserApi
@@ -50,8 +51,8 @@ class FakeTokenStore(@Volatile var token: String?) : TokenStore {
     }
 }
 
-class FakeUserApi : UserApi {
-    override suspend fun fetchCurrentUser(token: String) = CurrentUser("me", "me", null, null, null)
+class FakeUserApi(@Volatile var settings: AccountSettings = AccountSettings()) : UserApi {
+    override suspend fun fetchCurrentUser(token: String) = CurrentUser("me", "me", null, null, null, settings = settings)
 }
 
 class FakeNotificationsApi : NotificationsApi {

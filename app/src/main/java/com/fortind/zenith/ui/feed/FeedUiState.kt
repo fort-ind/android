@@ -18,6 +18,7 @@ data class TimelineState(
     val pending: List<Note> = emptyList(),
     val gap: Boolean = false,
     val cursor: String? = null,
+    val softMuted: Map<String, List<String>> = emptyMap(),
 ) {
     val hasPending: Boolean get() = pending.isNotEmpty() || gap
 }

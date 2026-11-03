@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fitInside
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -89,6 +90,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,10 +105,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.WindowInsetsRulers
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -129,6 +139,8 @@ import com.fortind.zenith.settings.AppIcon
 import androidx.compose.material.icons.filled.Edit
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
+import com.fortind.zenith.account.SettingsEditor
+import com.fortind.zenith.ui.account.AccountSettingsViewModel
 import com.fortind.zenith.ui.pointerHover
 import kotlinx.coroutines.launch
 
@@ -168,6 +180,27 @@ private enum class SettingsEntry(
             R.string.account_change_banner,
         ),
     ),
+    ACCOUNT_PRIVACY(
+        SettingsPage.ACCOUNT,
+        R.string.account_privacy_title,
+        listOf(
+            R.string.account_privacy_supporting,
+            R.string.privacy_locked_title,
+            R.string.privacy_followed_message_title,
+            R.string.privacy_following_visibility,
+            R.string.privacy_followers_visibility,
+            R.string.privacy_public_reactions_title,
+            R.string.privacy_hide_online_title,
+            R.string.privacy_explorable_title,
+            R.string.privacy_no_crawle_title,
+            R.string.privacy_prevent_ai_title,
+            R.string.privacy_no_index_title,
+            R.string.privacy_rss_title,
+            R.string.privacy_require_signin_title,
+            R.string.privacy_older_title,
+            R.string.privacy_chat_scope,
+        ),
+    ),
     ACCOUNT_MODERATION(
         SettingsPage.ACCOUNT,
         R.string.account_moderation_title,
@@ -177,6 +210,10 @@ private enum class SettingsEntry(
             R.string.moderation_tab_renotes,
             R.string.moderation_tab_blocked,
             R.string.moderation_action_unblock,
+            R.string.moderation_tab_words,
+            R.string.moderation_tab_instances,
+            R.string.mute_soft_title,
+            R.string.mute_hard_title,
         ),
     ),
     THEME(
@@ -204,6 +241,21 @@ private enum class SettingsEntry(
         R.string.settings_compress_title,
         listOf(R.string.settings_compress_supporting),
     ),
+    POSTING_DEFAULT_CW(
+        SettingsPage.POSTING,
+        R.string.posting_default_cw_title,
+        listOf(R.string.posting_default_cw_body, R.string.posting_cw_priority_title),
+    ),
+    POSTING_SENSITIVE(
+        SettingsPage.POSTING,
+        R.string.posting_default_sensitive_title,
+        listOf(R.string.posting_always_sensitive_title, R.string.posting_auto_sensitive_title),
+    ),
+    POSTING_LANGUAGE(
+        SettingsPage.POSTING,
+        R.string.posting_language_title,
+        listOf(R.string.posting_language_body),
+    ),
     SYSTEM_NOTIFICATIONS(
         SettingsPage.NOTIFICATIONS,
         R.string.settings_notifications_title,
@@ -214,6 +266,21 @@ private enum class SettingsEntry(
             R.string.settings_notifications_type_renotes,
             R.string.settings_notifications_type_follows,
             R.string.settings_notifications_type_other,
+        ),
+    ),
+    NOTIFICATION_FILTERS(
+        SettingsPage.NOTIFICATIONS,
+        R.string.notification_filters_section,
+        listOf(
+            R.string.notification_filters_body,
+            R.string.notification_filter_follow,
+            R.string.notification_filter_mention,
+            R.string.notification_filter_reply,
+            R.string.notification_filter_renote,
+            R.string.notification_filter_quote,
+            R.string.notification_filter_reaction,
+            R.string.notification_filter_poll,
+            R.string.notification_filter_request,
         ),
     ),
     PUSH_DELIVERY(
@@ -523,16 +590,70 @@ private fun SettingsDetail(
     editProfileRequested: Boolean,
     onEditProfileHandled: () -> Unit,
     onBack: () -> Unit,
+    accountSettings: AccountSettingsViewModel = viewModel(factory = AccountSettingsViewModel.Factory),
 ) {
     if (page == SettingsPage.ACCOUNT) {
-        AccountPage(editProfileRequested = editProfileRequested, onEditProfileHandled = onEditProfileHandled, onBack = onBack)
+        AccountPage(
+            editProfileRequested = editProfileRequested,
+            onEditProfileHandled = onEditProfileHandled,
+            onBack = onBack,
+            settingsViewModel = accountSettings,
+        )
         return
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val cwEditor = if (page == SettingsPage.POSTING) accountSettings.editor(SettingsEditor.DefaultCw) else null
+    var confirmingDiscard by rememberSaveable { mutableStateOf(false) }
+    val leavePage = { if (cwEditor?.dirty == true) confirmingDiscard = true else onBack() }
+
+    AccountSettingsEventsEffect(accountSettings, snackbarHostState)
+    NavigationBackHandler(
+        state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+        isBackEnabled = cwEditor?.dirty == true,
+        onBackCompleted = { confirmingDiscard = true },
+    )
+    if (confirmingDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmingDiscard = false },
+            title = { Text(stringResource(R.string.account_discard_title)) },
+            text = { Text(stringResource(R.string.account_discard_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingDiscard = false
+                        cwEditor?.revert()
+                        onBack()
+                    },
+                ) {
+                    Text(stringResource(R.string.account_discard_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDiscard = false }) { Text(stringResource(R.string.account_discard_keep)) }
+            },
+        )
+    }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .onPreviewKeyEvent { event ->
+                val keyDown = event.type == KeyEventType.KeyDown
+                when {
+                    keyDown && event.key == Key.Escape && cwEditor?.dirty == true -> {
+                        confirmingDiscard = true
+                        true
+                    }
+                    keyDown && event.key == Key.S && (event.isCtrlPressed || event.isMetaPressed) && cwEditor?.dirty == true -> {
+                        accountSettings.save(SettingsEditor.DefaultCw)
+                        true
+                    }
+                    else -> false
+                }
+            },
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
@@ -547,7 +668,7 @@ private fun SettingsDetail(
                     Text(text = stringResource(page.supportingRes), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = leavePage) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.settings_back),
@@ -562,6 +683,7 @@ private fun SettingsDetail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .fitInside(WindowInsetsRulers.Ime.current)
                 .verticalScroll(rememberScrollState())
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -583,12 +705,18 @@ private fun SettingsDetail(
                         onAppIcon = onAppIcon,
                     )
                     SettingsPage.HOME -> HomeSettings(settings = settings, onShowFavorites = onShowHomeFavorites)
-                    SettingsPage.POSTING -> PostingSettings(settings = settings, onCompressUploads = onCompressUploads)
-                    SettingsPage.NOTIFICATIONS -> NotificationSettings(
-                        settings = settings,
-                        onSystemNotifications = onSystemNotifications,
-                        onCategory = onNotificationCategory,
-                    )
+                    SettingsPage.POSTING -> {
+                        PostingSettings(settings = settings, onCompressUploads = onCompressUploads)
+                        PostingAccountDefaults(accountSettings)
+                    }
+                    SettingsPage.NOTIFICATIONS -> {
+                        NotificationSettings(
+                            settings = settings,
+                            onSystemNotifications = onSystemNotifications,
+                            onCategory = onNotificationCategory,
+                        )
+                        NotificationFilters(accountSettings)
+                    }
                     SettingsPage.ABOUT -> AboutSettings()
                 }
             }
@@ -865,8 +993,8 @@ private fun AboutSettings() {
 internal sealed interface RowAction {
     data object None : RowAction
     data class Select(val selected: Boolean, val onClick: () -> Unit) : RowAction
-    data class Toggle(val checked: Boolean, val onCheckedChange: (Boolean) -> Unit) : RowAction
-    data class Click(val onClick: () -> Unit) : RowAction
+    data class Toggle(val checked: Boolean, val onCheckedChange: (Boolean) -> Unit, val enabled: Boolean = true) : RowAction
+    data class Click(val onClick: () -> Unit, val enabled: Boolean = true) : RowAction
 }
 
 @Composable
@@ -914,6 +1042,7 @@ internal fun SettingsRow(
         )
         is RowAction.Click -> SegmentedListItem(
             onClick = action.onClick,
+            enabled = action.enabled,
             shapes = shapes,
             modifier = modifier,
             colors = colors,
@@ -925,6 +1054,7 @@ internal fun SettingsRow(
         is RowAction.Toggle -> SegmentedListItem(
             checked = action.checked,
             onCheckedChange = action.onCheckedChange,
+            enabled = action.enabled,
             shapes = shapes,
             modifier = modifier.semantics { role = Role.Switch },
             colors = colors,

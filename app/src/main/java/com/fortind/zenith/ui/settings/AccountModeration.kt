@@ -16,7 +16,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,33 +37,39 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.R
 import com.fortind.zenith.account.ModerationEntry
 import com.fortind.zenith.account.ModerationKind
+import com.fortind.zenith.account.SettingsEditor
 import com.fortind.zenith.ui.Avatar
+import com.fortind.zenith.ui.account.AccountSettingsViewModel
 import com.fortind.zenith.ui.account.ListStatus
 import com.fortind.zenith.ui.account.ModerationViewModel
 import com.fortind.zenith.ui.account.busyKey
 import com.fortind.zenith.ui.rememberReduceMotion
 
+private const val WORDS_TAB = 3
+private const val INSTANCES_TAB = 4
+
 @Composable
-internal fun ModerationContent(viewModel: ModerationViewModel) {
+internal fun ModerationContent(viewModel: ModerationViewModel, settings: AccountSettingsViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val settingsState by settings.uiState.collectAsStateWithLifecycle()
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     var confirmingUnblock by rememberSaveable { mutableStateOf<String?>(null) }
     val kinds = ModerationKind.entries
-    val kind = kinds[selectedIndex]
-    val list = state.list(kind)
+    val kind = kinds.getOrNull(selectedIndex)
+    val list = kind?.let(state::list)
     val reduceMotion = rememberReduceMotion()
 
-    LaunchedEffect(kind, list.status) {
-        if (list.status == ListStatus.Idle) viewModel.load(kind)
+    LaunchedEffect(kind, list?.status) {
+        if (kind != null && list?.status == ListStatus.Idle) viewModel.load(kind)
     }
 
-    if (state.needsPermission) {
+    if (state.needsPermission || settingsState.needsPermission) {
         ReauthorizePrompt()
         return
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PrimaryTabRow(selectedTabIndex = selectedIndex) {
+        PrimaryScrollableTabRow(selectedTabIndex = selectedIndex, edgePadding = 0.dp) {
             kinds.forEachIndexed { index, item ->
                 Tab(
                     selected = index == selectedIndex,
@@ -71,8 +77,21 @@ internal fun ModerationContent(viewModel: ModerationViewModel) {
                     text = { Text(stringResource(item.tabRes()), maxLines = 1) },
                 )
             }
+            Tab(
+                selected = selectedIndex == WORDS_TAB,
+                onClick = { selectedIndex = WORDS_TAB },
+                text = { Text(stringResource(R.string.moderation_tab_words), maxLines = 1) },
+            )
+            Tab(
+                selected = selectedIndex == INSTANCES_TAB,
+                onClick = { selectedIndex = INSTANCES_TAB },
+                text = { Text(stringResource(R.string.moderation_tab_instances), maxLines = 1) },
+            )
         }
         when {
+            selectedIndex == WORDS_TAB -> MuteWordsTab(settings)
+            selectedIndex == INSTANCES_TAB -> MuteInstancesTab(settings)
+            kind == null || list == null -> Unit
             list.status == ListStatus.Failed -> Notice(
                 text = stringResource(R.string.moderation_load_failed),
                 actionRes = R.string.moderation_retry,
@@ -111,7 +130,7 @@ internal fun ModerationContent(viewModel: ModerationViewModel) {
         }
     }
 
-    val target = confirmingUnblock?.let { id -> list.items.firstOrNull { it.id == id } }
+    val target = confirmingUnblock?.let { id -> list?.items?.firstOrNull { it.id == id } }
     if (confirmingUnblock != null && target == null) confirmingUnblock = null
     target?.let { entry ->
         AlertDialog(
@@ -132,6 +151,42 @@ internal fun ModerationContent(viewModel: ModerationViewModel) {
             dismissButton = { TextButton(onClick = { confirmingUnblock = null }) { Text(stringResource(R.string.note_dialog_cancel)) } },
         )
     }
+}
+
+@Composable
+private fun MuteWordsTab(settings: AccountSettingsViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            text = stringResource(R.string.mute_words_help),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SettingsTextEditor(
+            state = settings.editor(SettingsEditor.MutedWords),
+            labelRes = R.string.mute_soft_title,
+            supportingRes = R.string.mute_soft_body,
+            multiline = true,
+            onSave = { settings.save(SettingsEditor.MutedWords) },
+        )
+        SettingsTextEditor(
+            state = settings.editor(SettingsEditor.HardMutedWords),
+            labelRes = R.string.mute_hard_title,
+            supportingRes = R.string.mute_hard_body,
+            multiline = true,
+            onSave = { settings.save(SettingsEditor.HardMutedWords) },
+        )
+    }
+}
+
+@Composable
+private fun MuteInstancesTab(settings: AccountSettingsViewModel) {
+    SettingsTextEditor(
+        state = settings.editor(SettingsEditor.MutedInstances),
+        labelRes = R.string.mute_instances_title,
+        supportingRes = R.string.mute_instances_body,
+        multiline = true,
+        onSave = { settings.save(SettingsEditor.MutedInstances) },
+    )
 }
 
 @Composable

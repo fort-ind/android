@@ -2,6 +2,10 @@ package com.fortind.zenith.ui.feed
 
 import androidx.lifecycle.viewModelScope
 import com.fortind.zenith.account.FakeModerationApi
+import com.fortind.zenith.account.AccountSettings
+import com.fortind.zenith.account.MuteWordSet
+import com.fortind.zenith.account.MuteWordsParse
+import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
@@ -49,6 +53,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.yield
+import com.fortind.zenith.notifications.awaitTrue
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -102,20 +108,38 @@ class FeedViewModelTest {
         override suspend fun groups() = listOf(UnicodeEmojiGroup("Smileys", listOf(UnicodeEmoji("😀", "grinning face"))))
     }
 
-    private class Fixture(initialToken: String?, debounceMs: Long) {
-        val session = UserSessionService(FakeTokenStore(initialToken), FakeUserApi())
+    private class Fixture(initialToken: String?, debounceMs: Long, settings: AccountSettings) {
+        val userApi = FakeUserApi(settings)
+        val session = UserSessionService(FakeTokenStore(initialToken), userApi)
+        var now = NOW_MILLIS
         val api = FakeNotesApi()
         val stream = FakeTimelineStream()
         val recents = FakeRecents()
         val moderation = FakeModerationApi()
         val viewModelCreated = lazy {
-            FeedViewModel(session, api, stream, FakeInstance(), recents, FakeUnicode(), moderation, debounceMs, clock = { NOW_MILLIS })
+            FeedViewModel(
+                session,
+                api,
+                stream,
+                FakeInstance(),
+                recents,
+                FakeUnicode(),
+                moderation,
+                debounceMs,
+                clock = { now },
+                muteDispatcher = Dispatchers.Unconfined,
+            )
         }
         val viewModel by viewModelCreated
     }
 
-    private suspend fun fixture(token: String? = "token", debounceMs: Long = 0): Fixture {
-        val f = Fixture(token, debounceMs).also(fixtures::add)
+    private fun muted(soft: String = "", hard: String = "") = AccountSettings(
+        mutedWords = (MuteWordSet.parseEditor(soft) as MuteWordsParse.Valid).set,
+        hardMutedWords = (MuteWordSet.parseEditor(hard) as MuteWordsParse.Valid).set,
+    )
+
+    private suspend fun fixture(token: String? = "token", debounceMs: Long = 0, settings: AccountSettings = AccountSettings()): Fixture {
+        val f = Fixture(token, debounceMs, settings).also(fixtures::add)
         if (token == null) f.session.browseAsGuest() else f.session.restore()
         return f
     }
@@ -136,6 +160,153 @@ class FeedViewModelTest {
         val events = mutableListOf<FeedEvent>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.events.collect { events += it } }
         return events
+    }
+
+    @Test
+    fun hiddenWordsLeaveTheTimelineAndMutedWordsAreMarked() = runTest {
+        val f = fixture(settings = muted(soft = "soft", hard = "hide"))
+        f.api.timelines[TimelineKind.Home] = listOf(
+            testNote("n3", text = "plain"),
+            testNote("n2", text = "soft thing"),
+            testNote("n1", text = "hide thing"),
+        )
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        assertEquals(listOf("n3", "n2"), timeline.items.map { it.id })
+        assertEquals(mapOf("n2" to listOf("soft")), timeline.softMuted)
+    }
+
+    @Test
+    fun pagingContinuesFromTheLastRawNoteNotTheLastShownOne() = runTest {
+        val f = fixture(settings = muted(hard = "hide"))
+        val shown = (60 downTo 41).map { testNote("n$it", text = "plain") }
+        val hidden = (40 downTo 31).map { testNote("n$it", text = "hide") }
+        val older = (30 downTo 1).map { testNote("n$it", text = "plain") }
+        f.api.timelines[TimelineKind.Home] = shown + hidden + older
+
+        val first = f.viewModel.awaitTimeline(TimelineKind.Home)
+        assertEquals("n41", first.items.last().id)
+        assertEquals("n31", first.cursor)
+
+        f.viewModel.loadMore()
+        f.viewModel.awaitTimeline(TimelineKind.Home) { it.items.size == 50 && !it.loadingMore }
+
+        assertEquals("n31", f.api.calls.last().untilId)
+    }
+
+    @Test
+    fun aFullyHiddenPageKeepsAskingThenStops() = runTest {
+        val f = fixture(settings = muted(hard = "hide"))
+        f.api.timelines[TimelineKind.Home] = (200 downTo 1).map { testNote("n$it", text = "hide") }
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        assertEquals(1 + FeedViewModel.HARD_MUTE_EXTRA_PAGES, f.api.calls.size)
+        assertTrue(timeline.items.isEmpty())
+        assertTrue(timeline.endReached)
+    }
+
+    @Test
+    fun aHiddenPageFollowedByRealNotesShowsThem() = runTest {
+        val f = fixture(settings = muted(hard = "hide"))
+        f.api.timelines[TimelineKind.Home] =
+            (60 downTo 31).map { testNote("n$it", text = "hide") } + (30 downTo 1).map { testNote("n$it", text = "plain") }
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        assertEquals(2, f.api.calls.size)
+        assertEquals(30, timeline.items.size)
+        assertFalse(timeline.endReached)
+    }
+
+    @Test
+    fun streamedNotesAreFilteredToo() = runTest {
+        val f = fixture(settings = muted(soft = "soft", hard = "hide"))
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.startStreaming()
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.stream.events.emit(TimelineStreamEvent.Posted(testNote("n2", text = "hide")))
+        f.stream.events.emit(TimelineStreamEvent.Posted(testNote("n3", text = "soft")))
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home) { it.items.size == 2 }
+
+        assertEquals(listOf("n3", "n1"), timeline.items.map { it.id })
+        assertEquals(setOf("n3"), timeline.softMuted.keys)
+    }
+
+    @Test
+    fun threadsAndPersonListsAreNotFiltered() = runTest {
+        val f = fixture(settings = muted(hard = "hide"))
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.api.notes["n9"] = testNote("n9", text = "hide")
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.openThread("n9")
+
+        awaitTrue { f.viewModel.uiState.value.thread?.note?.text == "hide" }
+    }
+
+    @Test
+    fun savingNewWordsReloadsTheOpenTimelineAndForgetsTheOthers() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n2", text = "hide"), testNote("n1", text = "plain"))
+        f.api.timelines[TimelineKind.Local] = page(5)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.select(TimelineKind.Local)
+        f.viewModel.awaitTimeline(TimelineKind.Local)
+        f.viewModel.select(TimelineKind.Home)
+
+        f.session.applyUpdatedUser(CurrentUser("me", "me", null, null, null, settings = muted(hard = "hide")))
+
+        val home = f.viewModel.awaitTimeline(TimelineKind.Home) { it.items.size == 1 }
+        assertEquals("n1", home.items.single().id)
+        assertEquals(TimelineStatus.Idle, f.viewModel.uiState.value.timeline(TimelineKind.Local).status)
+    }
+
+    @Test
+    fun anUnrelatedProfileChangeDoesNotReload() = runTest {
+        val settings = muted(hard = "hide")
+        val f = fixture(settings = settings)
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val calls = f.api.calls.size
+
+        f.session.applyUpdatedUser(CurrentUser("me", "me", "New name", null, null, settings = settings.copy(isLocked = true)))
+        yield()
+
+        assertEquals(calls, f.api.calls.size)
+    }
+
+    @Test
+    fun comingBackAfterAWhilePicksUpMutesSetOnTheWeb() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n2", text = "hide"), testNote("n1", text = "plain"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.userApi.settings = muted(hard = "hide")
+
+        f.viewModel.setActive(true)
+        yield()
+        assertEquals(2, f.viewModel.uiState.value.timeline(TimelineKind.Home).items.size)
+
+        f.viewModel.setActive(false)
+        f.now += FeedViewModel.SETTINGS_REFRESH_MS
+        f.viewModel.setActive(true)
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home) { it.items.size == 1 }
+        assertEquals("n1", timeline.items.single().id)
+    }
+
+    @Test
+    fun anEditCanMuteANoteAfterItLoaded() = runTest {
+        val f = fixture(settings = muted(soft = "soft"))
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", text = "plain"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.noteEdited(testNote("n1", text = "soft now"))
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home) { it.softMuted.isNotEmpty() }
+        assertEquals(listOf("soft"), timeline.softMuted["n1"])
     }
 
     @Test

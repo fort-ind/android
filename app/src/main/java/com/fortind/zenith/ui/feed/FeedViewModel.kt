@@ -7,6 +7,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.account.ModerationApi
+import com.fortind.zenith.account.MutedPage
+import com.fortind.zenith.account.PatternGuard
+import com.fortind.zenith.account.WordMuteFilter
+import com.fortind.zenith.account.WordMutes
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
@@ -35,6 +39,7 @@ import com.fortind.zenith.timeline.TimelineUnavailableException
 import com.fortind.zenith.timeline.acceptsOnlyLike
 import com.fortind.zenith.timeline.canRenote
 import com.fortind.zenith.timeline.captureIds
+import com.fortind.zenith.timeline.contains
 import com.fortind.zenith.timeline.evictSecondary
 import com.fortind.zenith.timeline.hasVoted
 import com.fortind.zenith.timeline.isRenoteOf
@@ -51,6 +56,8 @@ import com.fortind.zenith.timeline.withEditFrom
 import com.fortind.zenith.timeline.withVotes
 import com.fortind.zenith.timeline.withoutVotes
 import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -71,6 +78,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+private class TimelinePage(
+    val notes: List<Note>,
+    val softMuted: Map<String, List<String>>,
+    val cursor: String?,
+    val ended: Boolean,
+)
+
 private sealed interface FeedAuth {
     data object Pending : FeedAuth
     data object Guest : FeedAuth
@@ -87,6 +101,7 @@ class FeedViewModel(
     private val moderation: ModerationApi,
     private val reactionDebounceMs: Long = REACTION_DEBOUNCE_MS,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val muteDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -122,6 +137,9 @@ class FeedViewModel(
     private val listJobs = HashMap<NoteListKey, Job>()
     private val listsUsed = ArrayList<NoteListKey>()
     private var auth: FeedAuth = FeedAuth.Pending
+    private val patternGuard = PatternGuard()
+    private var muteFilter = WordMuteFilter(WordMutes(), null, patternGuard)
+    private var settingsReadAt = clock()
 
     private val token: String? get() = (auth as? FeedAuth.SignedIn)?.token
 
@@ -140,7 +158,10 @@ class FeedViewModel(
 
     fun setActive(isActive: Boolean) {
         active.value = isActive
-        if (isActive) instance.ensureFresh()
+        if (isActive) {
+            instance.ensureFresh()
+            refreshAccountSettingsIfStale()
+        }
     }
 
     fun select(kind: TimelineKind) {
@@ -178,10 +199,16 @@ class FeedViewModel(
         val currentAuth = auth
         loadJobs[kind] = viewModelScope.launch {
             try {
-                val page = api.timeline(token, kind, untilId = last.id, sinceId = null, limit = PAGE_SIZE)
+                val page = fetchTimeline(kind, untilId = timeline.cursor ?: last.id)
                 if (auth != currentAuth) return@launch
                 updateTimeline(kind) {
-                    it.copy(items = mergeOlder(it.items, page), loadingMore = false, endReached = page.isEmpty())
+                    it.copy(
+                        items = mergeOlder(it.items, page.notes),
+                        loadingMore = false,
+                        endReached = page.ended,
+                        cursor = page.cursor,
+                        softMuted = it.softMuted + page.softMuted,
+                    )
                 }
             } catch (e: IOException) {
                 handleFailure(e) { updateTimeline(kind) { it.copy(loadingMore = false, loadMoreFailed = true) } }
@@ -749,6 +776,7 @@ class FeedViewModel(
 
     fun noteEdited(note: Note) {
         mutateEverywhere(note.id) { it.withEditFrom(note, note.editedAtMillis ?: clock()) }
+        viewModelScope.launch { recheckMutes(note.id) }
     }
 
     fun requestPermission() {
@@ -799,6 +827,8 @@ class FeedViewModel(
         listsUsed.clear()
         TimelineKind.entries.forEach { atTop[it] = true }
         visible.value = emptySet()
+        muteFilter = WordMuteFilter(wordMutesOf(session.state.value), (next as? FeedAuth.SignedIn)?.userId, patternGuard)
+        settingsReadAt = clock()
         val signedIn = next is FeedAuth.SignedIn
         val initial = if (signedIn) TimelineKind.Home else TimelineKind.Local
         selected.value = initial
@@ -816,6 +846,7 @@ class FeedViewModel(
     private suspend fun serve() {
         loadFirstPage(selected.value)
         coroutineScope {
+            launch { watchWordMutes() }
             launch {
                 combine(active, selected) { isActive, kind -> isActive to kind }
                     .distinctUntilChanged()
@@ -848,16 +879,92 @@ class FeedViewModel(
         }
     }
 
-    private fun onPosted(kind: TimelineKind, note: Note) {
-        updateTimeline(kind) { timeline ->
+    private suspend fun onPosted(kind: TimelineKind, note: Note) {
+        val muted = applyMutes(listOf(note))
+        if (muted.kept.isEmpty()) return
+        updateTimeline(kind) { current ->
+            val timeline = current.copy(softMuted = current.softMuted + muted.softMuted)
             when {
-                timeline.status != TimelineStatus.Ready -> timeline
-                timeline.items.any { it.id == note.id } -> timeline
+                timeline.status != TimelineStatus.Ready -> current
+                timeline.items.any { it.id == note.id } -> current
                 atTop[kind] == true && !timeline.gap -> timeline.copy(items = mergeNewer(timeline.items, listOf(note)))
                 timeline.pending.size >= MAX_PENDING -> timeline.copy(gap = true)
                 else -> timeline.copy(pending = mergeNewer(timeline.pending, listOf(note)))
             }
         }
+    }
+
+    private suspend fun applyMutes(notes: List<Note>): MutedPage {
+        val filter = muteFilter
+        if (filter.isEmpty) return MutedPage(notes, emptyMap())
+        return withContext(muteDispatcher) { filter.apply(notes) }
+    }
+
+    private suspend fun fetchTimeline(kind: TimelineKind, untilId: String?): TimelinePage {
+        var cursor = untilId
+        repeat(HARD_MUTE_EXTRA_PAGES + 1) {
+            val page = api.timeline(token, kind, untilId = cursor, sinceId = null, limit = PAGE_SIZE)
+            if (page.isEmpty()) return TimelinePage(emptyList(), emptyMap(), cursor, ended = true)
+            cursor = page.last().id
+            val muted = applyMutes(page)
+            if (muted.kept.isNotEmpty()) return TimelinePage(muted.kept, muted.softMuted, cursor, ended = false)
+        }
+        return TimelinePage(emptyList(), emptyMap(), cursor, ended = true)
+    }
+
+    private fun TimelinePage.toState() = TimelineState(
+        items = notes,
+        status = TimelineStatus.Ready,
+        endReached = ended,
+        cursor = cursor,
+        softMuted = softMuted,
+    )
+
+    private fun wordMutesOf(state: SessionState): WordMutes =
+        (state as? SessionState.SignedIn)?.user?.settings?.wordMutes ?: WordMutes()
+
+    private suspend fun watchWordMutes() {
+        session.state.map(::wordMutesOf).distinctUntilChanged().collect { mutes ->
+            if (mutes != muteFilter.mutes) {
+                muteFilter = WordMuteFilter(mutes, myUserId, patternGuard)
+                TimelineKind.entries.forEach(::reloadForNewMutes)
+            }
+        }
+    }
+
+    private fun reloadForNewMutes(kind: TimelineKind) {
+        val timeline = _uiState.value.timeline(kind)
+        when {
+            timeline.status == TimelineStatus.Loading -> loadFirstPage(kind)
+            timeline.status != TimelineStatus.Ready -> Unit
+            kind == selected.value -> reload(kind)
+            else -> updateTimeline(kind) { TimelineState() }
+        }
+    }
+
+    private suspend fun recheckMutes(noteId: String) {
+        if (muteFilter.isEmpty) return
+        TimelineKind.entries.forEach { kind ->
+            val timeline = _uiState.value.timeline(kind)
+            val touched = (timeline.items + timeline.pending).filter { it.contains(noteId) }
+            if (touched.isEmpty()) return@forEach
+            val muted = applyMutes(touched)
+            val touchedIds = touched.mapTo(HashSet()) { it.id }
+            val dropped = touchedIds - muted.kept.mapTo(HashSet()) { it.id }
+            updateTimeline(kind) { current ->
+                current.copy(
+                    items = current.items.filterNot { it.id in dropped },
+                    pending = current.pending.filterNot { it.id in dropped },
+                    softMuted = current.softMuted - touchedIds + muted.softMuted,
+                )
+            }
+        }
+    }
+
+    private fun refreshAccountSettingsIfStale() {
+        if (myUserId == null || clock() - settingsReadAt < SETTINGS_REFRESH_MS) return
+        settingsReadAt = clock()
+        viewModelScope.launch { session.refreshUser() }
     }
 
     private fun loadFirstPage(kind: TimelineKind) {
@@ -868,11 +975,9 @@ class FeedViewModel(
         val currentAuth = auth
         loadJobs[kind] = viewModelScope.launch {
             try {
-                val page = api.timeline(token, kind, untilId = null, sinceId = null, limit = PAGE_SIZE)
+                val page = fetchTimeline(kind, untilId = null)
                 if (auth != currentAuth) return@launch
-                updateTimeline(kind) {
-                    TimelineState(items = page, status = TimelineStatus.Ready, endReached = page.isEmpty())
-                }
+                updateTimeline(kind) { page.toState() }
             } catch (_: TimelineUnavailableException) {
                 updateTimeline(kind) { it.copy(status = TimelineStatus.Unavailable) }
             } catch (e: IOException) {
@@ -887,9 +992,9 @@ class FeedViewModel(
         val currentAuth = auth
         loadJobs[kind] = viewModelScope.launch {
             try {
-                val page = api.timeline(token, kind, untilId = null, sinceId = null, limit = PAGE_SIZE)
+                val page = fetchTimeline(kind, untilId = null)
                 if (auth != currentAuth) return@launch
-                updateTimeline(kind) { TimelineState(items = page, status = TimelineStatus.Ready, endReached = page.isEmpty()) }
+                updateTimeline(kind) { page.toState() }
                 _events.trySend(FeedEvent.ScrollToTop(kind))
             } catch (e: IOException) {
                 updateTimeline(kind) { it.copy(refreshing = false) }
@@ -913,16 +1018,25 @@ class FeedViewModel(
                     reload(kind)
                     return@launch
                 }
+                val muted = applyMutes(page)
+                if (auth != currentAuth) return@launch
                 updateTimeline(kind) { current ->
+                    val softMuted = current.softMuted + muted.softMuted
                     if (toTop || (atTop[kind] == true && !current.gap)) {
                         current.copy(
-                            items = mergeNewer(current.items, mergeNewer(current.pending, page)),
+                            items = mergeNewer(current.items, mergeNewer(current.pending, muted.kept)),
                             pending = emptyList(),
                             refreshing = false,
                             gap = current.gap || overflow,
+                            softMuted = softMuted,
                         )
                     } else {
-                        current.copy(pending = mergeNewer(current.pending, page), gap = current.gap || overflow, refreshing = false)
+                        current.copy(
+                            pending = mergeNewer(current.pending, muted.kept),
+                            gap = current.gap || overflow,
+                            refreshing = false,
+                            softMuted = softMuted,
+                        )
                     }
                 }
                 if (toTop) _events.trySend(FeedEvent.ScrollToTop(kind))
@@ -949,6 +1063,7 @@ class FeedViewModel(
             is NoteUpdate.Updated -> try {
                 val fresh = api.show(token, update.noteId)
                 mutateEverywhere(update.noteId) { it.withEditFrom(fresh, fresh.editedAtMillis) }
+                recheckMutes(update.noteId)
             } catch (e: IOException) {
                 handleFailure(e) {}
             }
@@ -1070,6 +1185,8 @@ class FeedViewModel(
         const val THREAD_CACHE_SIZE = 8
         const val MAX_SECONDARY_LISTS = 16
         const val REACTION_DEBOUNCE_MS = 600L
+        const val HARD_MUTE_EXTRA_PAGES = 4
+        const val SETTINGS_REFRESH_MS = 15 * 60 * 1_000L
 
         val Factory = viewModelFactory {
             initializer {

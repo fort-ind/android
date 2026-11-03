@@ -192,7 +192,7 @@ fun TimelineList(
                 itemsIndexed(timeline.items, key = { _, note -> note.id }, contentType = { _, note -> noteContentType(note) }) { index, note ->
                     Column(modifier = if (reduceMotion) itemModifier else itemModifier.animateItem()) {
                         if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        NoteCard(note = note, environment = environment, callbacks = noteCallbacks)
+                        NoteCard(note = note, environment = environment, callbacks = noteCallbacks, mutedWords = timeline.softMuted[note.id])
                     }
                 }
                 item(key = "feed:footer", contentType = "footer") { FeedFooter(timeline, current.onRetry) }

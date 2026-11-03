@@ -88,7 +88,13 @@ fun NoteCard(
     modifier: Modifier = Modifier,
     focal: Boolean = false,
     showReplyContext: Boolean = true,
+    mutedWords: List<String>? = null,
 ) {
+    var muteRevealed by rememberSaveable(note.id) { mutableStateOf(false) }
+    if (!mutedWords.isNullOrEmpty() && !muteRevealed) {
+        MutedNoteRow(words = mutedWords, onShow = { muteRevealed = true }, modifier = modifier)
+        return
+    }
     val target = note.target
     var hovered by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -167,6 +173,28 @@ fun NoteCard(
             environment = environment,
             callbacks = callbacks,
         )
+    }
+}
+
+@Composable
+private fun MutedNoteRow(words: List<String>, onShow: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("note:muted")
+            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.note_muted_words, words.joinToString(", ")),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onShow) { Text(stringResource(R.string.note_cw_show)) }
     }
 }
 
