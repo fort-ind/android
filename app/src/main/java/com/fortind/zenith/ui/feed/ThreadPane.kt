@@ -222,11 +222,30 @@ private fun ThreadContent(
         }
         if (!thread.repliesEnd && thread.replies.isNotEmpty()) {
             item(key = "replies:more", contentType = "more") {
-                val loadMore by rememberUpdatedState(onLoadMoreReplies)
-                LaunchedEffect(thread.repliesLoadingMore, thread.replies.size) { if (!thread.repliesLoadingMore) loadMore() }
-                FeedLoading()
+                if (thread.repliesLoadMoreFailed) {
+                    RepliesLoadFailed(onRetry = onLoadMoreReplies)
+                } else {
+                    val loadMore by rememberUpdatedState(onLoadMoreReplies)
+                    LaunchedEffect(thread.repliesLoadingMore, thread.replies.size) { if (!thread.repliesLoadingMore) loadMore() }
+                    FeedLoading()
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun RepliesLoadFailed(onRetry: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.widthIn(max = ThreadMaxWidth).fillMaxWidth().padding(vertical = 16.dp),
+    ) {
+        Text(
+            stringResource(R.string.feed_load_more_failed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.feed_retry)) }
     }
 }
 

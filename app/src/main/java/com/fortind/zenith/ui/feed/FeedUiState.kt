@@ -53,6 +53,7 @@ data class ThreadState(
     val failed: Boolean = false,
     val repliesLoadingMore: Boolean = false,
     val repliesEnd: Boolean = false,
+    val repliesLoadMoreFailed: Boolean = false,
     val branches: Map<String, ReplyBranch> = emptyMap(),
     val renotes: ThreadPeople = ThreadPeople(),
     val reactions: Map<String?, ThreadPeople> = emptyMap(),

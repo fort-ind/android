@@ -16,6 +16,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.net.HttpStatusException
+import com.fortind.zenith.net.isRateLimited
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
@@ -122,7 +123,7 @@ class FollowRequestWorker(context: Context, params: WorkerParameters) : Coroutin
             container.systemNotifier.cancel(notificationId)
             Result.success()
         } catch (e: HttpStatusException) {
-            if (e.code in CLIENT_ERROR_RANGE) {
+            if (e.isFinalRefusal()) {
                 container.systemNotifier.cancel(notificationId)
                 Result.failure()
             } else {
@@ -140,9 +141,12 @@ class FollowRequestWorker(context: Context, params: WorkerParameters) : Coroutin
         const val KEY_USER_ID = "user_id"
         const val KEY_ACCEPT = "accept"
         private const val MAX_ATTEMPTS = 3
-        private val CLIENT_ERROR_RANGE = 400..499
     }
 }
+
+internal fun HttpStatusException.isFinalRefusal(): Boolean = code in CLIENT_ERROR_RANGE && !isRateLimited
+
+private val CLIENT_ERROR_RANGE = 400..499
 
 class MarkAllReadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {

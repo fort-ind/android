@@ -6,6 +6,7 @@ import com.fortind.zenith.auth.TokenStore
 import com.fortind.zenith.auth.UserApi
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -52,7 +53,14 @@ class FakeTokenStore(@Volatile var token: String?) : TokenStore {
 }
 
 class FakeUserApi(@Volatile var settings: AccountSettings = AccountSettings()) : UserApi {
-    override suspend fun fetchCurrentUser(token: String) = CurrentUser("me", "me", null, null, null, settings = settings)
+    @Volatile var failure: IOException? = null
+    val fetches = AtomicInteger()
+
+    override suspend fun fetchCurrentUser(token: String): CurrentUser {
+        fetches.incrementAndGet()
+        failure?.let { throw it }
+        return CurrentUser("me", "me", null, null, null, settings = settings)
+    }
 }
 
 class FakeNotificationsApi : NotificationsApi {

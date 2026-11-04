@@ -1,7 +1,9 @@
 package com.fortind.zenith.media
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.exifinterface.media.ExifInterface
 import com.fortind.zenith.timeline.MediaKind
 import java.io.File
@@ -9,6 +11,8 @@ import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+class LocationNotRemovedException : IOException("Could not strip location")
 
 interface MediaSanitizer {
     suspend fun stripLocation(media: LocalMedia): LocalMedia
@@ -23,13 +27,41 @@ class AndroidMediaSanitizer(private val context: Context, private val reader: Me
     private val reencoder = ImageReencoder(context)
 
     override suspend fun stripLocation(media: LocalMedia): LocalMedia {
-        if (media.kind != MediaKind.Image) return media
         return withContext(Dispatchers.IO) {
-            when (media.mimeType) {
-                in EDITABLE_FORMATS -> if (hasLocation(media)) copyWithoutLocation(media) else media
-                in REENCODED_FORMATS -> if (hasLocation(media)) reencoder.toJpeg(media, null, LOSSLESS_LIKE_QUALITY) ?: throw IOException("Could not strip location") else media
+            when {
+                media.kind == MediaKind.Video -> if (hasVideoLocation(media)) copyWithoutVideoLocation(media) else media
+                media.kind != MediaKind.Image -> media
+                media.mimeType in EDITABLE_FORMATS -> if (hasLocation(media)) copyWithoutLocation(media) else media
+                media.mimeType in REENCODED_FORMATS ->
+                    if (hasLocation(media)) reencoder.toJpeg(media, null, LOSSLESS_LIKE_QUALITY) ?: throw LocationNotRemovedException() else media
                 else -> media
             }
+        }
+    }
+
+    private fun hasVideoLocation(media: LocalMedia): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, media.uri.toUri())
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION) != null
+        } catch (_: RuntimeException) {
+            false
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private fun copyWithoutVideoLocation(media: LocalMedia): LocalMedia {
+        val extension = media.name.substringAfterLast('.', "mp4")
+        val output = File(File(context.cacheDir, "sanitized").also { it.mkdirs() }, "${UUID.randomUUID()}.$extension")
+        try {
+            reader.open(media.uri).use { input -> output.outputStream().use { input.copyTo(it) } }
+            val cleaned = LocalMedia(Uri.fromFile(output).toString(), media.name, media.mimeType, output.length())
+            if (!neutralizeMp4Location(output) || hasVideoLocation(cleaned)) throw LocationNotRemovedException()
+            return cleaned
+        } catch (e: IOException) {
+            output.delete()
+            throw e
         }
     }
 

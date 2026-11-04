@@ -2,6 +2,7 @@ package com.fortind.zenith.auth
 
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,7 @@ class UserSessionService(
     private val tokenStore: TokenStore,
     private val userApi: UserApi,
     private val scopeStamps: ScopeStampStore = InMemoryScopeStampStore(),
+    private val restoreRetryDelaysMs: List<Long> = DEFAULT_RESTORE_RETRY_DELAYS_MS,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -58,6 +60,16 @@ class UserSessionService(
             SessionState.SignedOut
         } catch (_: IOException) {
             SessionState.SignedIn(user = null)
+        }
+        if ((_state.value as? SessionState.SignedIn)?.user == null) retryUntilUserKnown()
+    }
+
+    private suspend fun retryUntilUserKnown() {
+        for (waitMs in restoreRetryDelaysMs) {
+            delay(waitMs)
+            val state = _state.value as? SessionState.SignedIn ?: return
+            if (state.user != null) return
+            if (refreshUser()) return
         }
     }
 
@@ -101,3 +113,5 @@ class UserSessionService(
 
     suspend fun token(): String? = withContext(Dispatchers.IO) { tokenStore.read() }
 }
+
+private val DEFAULT_RESTORE_RETRY_DELAYS_MS = listOf(5_000L, 15_000L, 45_000L, 120_000L)

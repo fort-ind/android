@@ -75,10 +75,13 @@ class FakeNotesApi : NotesApi {
     var replies: List<Note> = emptyList()
     val branchReplies = mutableMapOf<String, List<Note>>()
     var branchFailure: IOException? = null
+    var moreRepliesFailure: IOException? = null
     var reactFailure: IOException? = null
     var unreactFailure: IOException? = null
     var renoteFailure: IOException? = null
     var renotedByMe = false
+    var renotedByMeFailure: IOException? = null
+    val renotedByMeCalls = CopyOnWriteArrayList<String>()
     val reactCalls = CopyOnWriteArrayList<Pair<String, String>>()
     val unreactCalls = CopyOnWriteArrayList<String>()
     val renoteCalls = CopyOnWriteArrayList<String>()
@@ -120,11 +123,16 @@ class FakeNotesApi : NotesApi {
             val older = if (untilId == null) branch else branch.dropWhile { it.id != untilId }.drop(1)
             return older.take(limit)
         }
+        if (untilId != null) moreRepliesFailure?.let { throw it }
         val older = if (untilId == null) replies else replies.dropWhile { it.id != untilId }.drop(1)
         return older.take(limit)
     }
 
-    override suspend fun renotedByMe(token: String, noteId: String, userId: String): Boolean = renotedByMe
+    override suspend fun renotedByMe(token: String, noteId: String, userId: String): Boolean {
+        renotedByMeCalls += noteId
+        renotedByMeFailure?.let { throw it }
+        return renotedByMe
+    }
 
     override suspend fun react(token: String, noteId: String, reaction: String) {
         reactCalls += noteId to reaction

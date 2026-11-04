@@ -243,7 +243,7 @@ private fun FailureCover(attachment: Attachment, message: String, onRetry: (comp
     ) {
         Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         Text(message, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, modifier = Modifier.padding(horizontal = 4.dp))
-        val canRetry = attachment.failure != AttachmentFailure.Unreadable
+        val canRetry = attachment.failure != AttachmentFailure.Unreadable && attachment.failure != AttachmentFailure.LocationNotRemoved
         if (canRetry) {
             TextButton(onClick = { onRetry(tooLarge) }) {
                 Text(
@@ -298,6 +298,7 @@ private fun failureText(attachment: Attachment): String {
         AttachmentFailure.NoSpace -> stringResource(R.string.attachment_no_space)
         AttachmentFailure.Unreadable -> stringResource(R.string.attachment_unreadable)
         AttachmentFailure.PermissionMissing -> stringResource(R.string.attachment_permission)
+        AttachmentFailure.LocationNotRemoved -> stringResource(R.string.attachment_location)
         AttachmentFailure.Network, null -> stringResource(R.string.attachment_network)
     }
 }

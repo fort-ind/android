@@ -117,14 +117,19 @@ class StreamConnection internal constructor(
         var backoffMs = initialBackoffMs
         while (true) {
             var openedAt: Long? = null
+            var rejected = false
             try {
                 connectOnce().collect { frame ->
                     if (frame is StreamFrame.Opened) openedAt = clock()
                     emit(frame)
                 }
             } catch (_: StreamRejectedException) {
-                return@flow
+                rejected = true
             } catch (_: IOException) {
+            }
+            if (rejected) {
+                delay(maxBackoffMs)
+                continue
             }
             if (openedAt?.let { clock() - it >= stableConnectionMs } == true) backoffMs = initialBackoffMs
             delay(backoffMs)

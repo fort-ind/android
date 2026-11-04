@@ -104,16 +104,23 @@ class MisskeyStreamingTest {
     }
 
     @Test
-    fun aRefusedHandshakeStopsReconnecting() = runTest {
+    fun aRefusedHandshakeWaitsForTheLongestBackoffThenTriesAgain() = runTest {
         val transport = FakeTransport()
         val connection = streaming(transport).connection("tok")
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+        val events = mutableListOf<ChannelEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect { events += it } }
 
         transport.latest.listener.onClosed(StreamRejectedException(401))
-        advanceTimeBy(1_000)
+        advanceTimeBy(39)
         runCurrent()
-
         assertEquals(1, transport.sockets.size)
+
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(2, transport.sockets.size)
+
+        transport.latest.open()
+        assertEquals(listOf<ChannelEvent>(ChannelEvent.Connected), events)
     }
 
     @Test

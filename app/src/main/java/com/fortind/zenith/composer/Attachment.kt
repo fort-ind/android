@@ -7,7 +7,7 @@ const val MAX_ATTACHMENTS = 16
 
 enum class AttachmentPhase { Compressing, Uploading, Ready, Failed }
 
-enum class AttachmentFailure { TooLarge, NoSpace, Unreadable, PermissionMissing, Network }
+enum class AttachmentFailure { TooLarge, NoSpace, Unreadable, PermissionMissing, LocationNotRemoved, Network }
 
 data class Attachment(
     val localId: String,

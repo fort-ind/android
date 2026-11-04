@@ -26,6 +26,7 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -111,19 +112,28 @@ class AccountViewModel(
         if (edit.isEmpty && avatarUri == null && bannerUri == null) return
         viewModelScope.launch {
             _saveState.value = ProfileSaveState(saving = true)
+            val uploaded = mutableListOf<String>()
+            var token: String? = null
+            var saved = false
+            var updateSent = false
+            var refused = false
             try {
-                val token = session.token() ?: throw TokenRejectedException(0)
+                val sessionToken = session.token() ?: throw TokenRejectedException(0)
+                token = sessionToken
                 val uploads = listOfNotNull(avatarUri?.let { true to it }, bannerUri?.let { false to it })
                 var avatarId: String? = null
                 var bannerId: String? = null
                 uploads.forEachIndexed { index, (isAvatar, uri) ->
-                    val id = upload(token, uri) { fraction ->
+                    val id = upload(sessionToken, uri) { fraction ->
                         _saveState.update { it.copy(progress = (index + fraction) / (uploads.size + 1)) }
                     }
+                    uploaded += id
                     if (isAvatar) avatarId = id else bannerId = id
                 }
                 _saveState.update { it.copy(progress = null) }
-                val updated = api.updateProfile(token, edit.copy(avatarId = avatarId, bannerId = bannerId))
+                updateSent = true
+                val updated = api.updateProfile(sessionToken, edit.copy(avatarId = avatarId, bannerId = bannerId))
+                saved = true
                 session.applyUpdatedUser(updated)
                 this@AccountViewModel.form = null
                 _saveState.value = ProfileSaveState()
@@ -131,14 +141,32 @@ class AccountViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: TokenRejectedException) {
+                refused = true
                 _saveState.value = ProfileSaveState()
                 session.signOut()
             } catch (_: MissingPermissionException) {
+                refused = true
                 _saveState.value = ProfileSaveState(needsPermission = true)
             } catch (e: IOException) {
+                refused = e is HttpStatusException && e.code in CLIENT_ERROR_RANGE
                 _saveState.value = ProfileSaveState(failure = e.toFailure())
             } catch (_: SecurityException) {
                 _saveState.value = ProfileSaveState(failure = ProfileSaveFailure.Unreadable)
+            } finally {
+                val sessionToken = token
+                if (!saved && (!updateSent || refused) && sessionToken != null && uploaded.isNotEmpty()) discardUploads(sessionToken, uploaded)
+            }
+        }
+    }
+
+    private suspend fun discardUploads(token: String, ids: List<String>) {
+        withContext(NonCancellable) {
+            ids.forEach { id ->
+                try {
+                    drive.delete(token, id)
+                } catch (_: IOException) {
+                    return@forEach
+                }
             }
         }
     }
@@ -169,6 +197,7 @@ class AccountViewModel(
     companion object {
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val HTTP_PAYLOAD_TOO_LARGE = 413
+        private val CLIENT_ERROR_RANGE = 400..499
 
         val Factory = viewModelFactory {
             initializer {

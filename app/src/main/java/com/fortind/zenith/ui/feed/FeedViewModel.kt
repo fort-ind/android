@@ -314,29 +314,34 @@ class FeedViewModel(
         val thread = _uiState.value.thread ?: return
         val last = thread.replies.lastOrNull() ?: return
         if (thread.loading || thread.repliesLoadingMore || thread.repliesEnd) return
-        _uiState.update { it.copy(thread = thread.copy(repliesLoadingMore = true)) }
+        updateReplies(thread.noteId) { it.copy(repliesLoadingMore = true, repliesLoadMoreFailed = false) }
         viewModelScope.launch {
             val page = try {
                 api.children(token, thread.noteId, untilId = last.id, limit = PAGE_SIZE)
             } catch (e: IOException) {
                 handleFailure(e) {}
-                emptyList()
+                null
             }
-            _uiState.update { state ->
-                val current = state.thread
-                if (current?.noteId != thread.noteId) {
-                    state
+            updateReplies(thread.noteId) { current ->
+                if (page == null) {
+                    current.copy(repliesLoadingMore = false, repliesLoadMoreFailed = true)
                 } else {
-                    state.copy(
-                        thread = current.copy(
-                            replies = mergeOlder(current.replies, page),
-                            repliesLoadingMore = false,
-                            repliesEnd = page.size < PAGE_SIZE,
-                        ),
+                    current.copy(
+                        replies = mergeOlder(current.replies, page),
+                        repliesLoadingMore = false,
+                        repliesEnd = page.size < PAGE_SIZE,
                     )
                 }
             }
         }
+    }
+
+    private fun updateReplies(threadId: String, transform: (ThreadState) -> ThreadState) {
+        _uiState.update { state ->
+            val thread = state.thread
+            if (thread?.noteId == threadId) state.copy(thread = transform(thread)) else state
+        }
+        threadCache[threadId]?.let { threadCache[threadId] = transform(it) }
     }
 
     fun toggleBranch(parentId: String) {
@@ -395,6 +400,8 @@ class FeedViewModel(
     }
 
     private fun ThreadState.settled(): ThreadState = copy(
+        repliesLoadingMore = false,
+        repliesLoadMoreFailed = false,
         branches = branches.mapValues { (_, branch) -> branch.copy(loading = false, loadingMore = false) },
     )
 
@@ -425,14 +432,12 @@ class FeedViewModel(
         if (noteId in state.renoted || noteId in state.renoteChecks) return
         _uiState.update { it.copy(renoteChecks = it.renoteChecks + noteId) }
         viewModelScope.launch {
-            val renoted = try {
-                api.renotedByMe(token, noteId, userId)
+            try {
+                val renoted = api.renotedByMe(token, noteId, userId)
+                _uiState.update { it.copy(renoted = if (renoted) it.renoted + noteId else it.renoted) }
             } catch (e: IOException) {
                 handleFailure(e) {}
-                false
-            }
-            _uiState.update {
-                it.copy(renoted = if (renoted) it.renoted + noteId else it.renoted)
+                _uiState.update { it.copy(renoteChecks = it.renoteChecks - noteId) }
             }
         }
     }
@@ -1135,7 +1140,9 @@ class FeedViewModel(
     }
 
     private fun refreshAccountSettingsIfStale() {
-        if (myUserId == null || clock() - settingsReadAt < SETTINGS_REFRESH_MS) return
+        val signedIn = auth as? FeedAuth.SignedIn ?: return
+        val wait = if (signedIn.userId == null) UNKNOWN_USER_RETRY_MS else SETTINGS_REFRESH_MS
+        if (clock() - settingsReadAt < wait) return
         settingsReadAt = clock()
         viewModelScope.launch { session.refreshUser() }
     }
@@ -1335,6 +1342,7 @@ class FeedViewModel(
             )
         }
         threadCache.remove(noteId)
+        threadCache.entries.forEach { entry -> entry.setValue(entry.value.mapNotes { it.removeNote(noteId) }) }
     }
 
     private fun updateTimeline(kind: TimelineKind, transform: (TimelineState) -> TimelineState) =
@@ -1373,6 +1381,7 @@ class FeedViewModel(
         const val HARD_MUTE_EXTRA_PAGES = 4
         const val THREAD_PEOPLE_PAGE = 20
         const val SETTINGS_REFRESH_MS = 15 * 60 * 1_000L
+        const val UNKNOWN_USER_RETRY_MS = 10_000L
 
         val Factory = viewModelFactory {
             initializer {

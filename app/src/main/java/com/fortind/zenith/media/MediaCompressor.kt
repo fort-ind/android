@@ -27,6 +27,7 @@ import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -67,8 +68,18 @@ class AndroidMediaCompressor(private val context: Context) : MediaCompressor {
         val output = File(outputDir, "${UUID.randomUUID()}.mp4")
         val scale = source?.takeIf { it.shortEdge > VIDEO_MAX_SHORT_EDGE }?.downscaledTo(VIDEO_MAX_SHORT_EDGE)
         val bitrate = if ((source?.shortEdge ?: 0) > VIDEO_MAX_SHORT_EDGE) VIDEO_BITRATE_HIGH else VIDEO_BITRATE_STANDARD
-        withContext(Dispatchers.Main) { export(media, output, listOfNotNull(scale), bitrate, onProgress) }
-        if (media.sizeBytes > 0 && output.length() >= media.sizeBytes) {
+        val exported = try {
+            withContext(Dispatchers.Main) { export(media, output, listOfNotNull(scale), bitrate, onProgress) }
+            true
+        } catch (e: CancellationException) {
+            output.delete()
+            throw e
+        } catch (_: IOException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
+        if (!exported || (media.sizeBytes > 0 && output.length() >= media.sizeBytes)) {
             output.delete()
             return media
         }

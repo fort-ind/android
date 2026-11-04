@@ -57,6 +57,7 @@ import com.fortind.zenith.emoji.DEFAULT_MAX_FILE_SIZE_BYTES
 import com.fortind.zenith.emoji.DEFAULT_MAX_NOTE_TEXT_LENGTH
 import com.fortind.zenith.emoji.InstanceInfo
 import com.fortind.zenith.media.LocalMedia
+import com.fortind.zenith.media.LocationNotRemovedException
 import com.fortind.zenith.media.MediaCompressor
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
@@ -987,6 +988,7 @@ class ComposerViewModel(
     private fun IOException.toAttachmentFailure(): AttachmentFailure = when {
         this is MissingPermissionException -> AttachmentFailure.PermissionMissing
         this is FileNotFoundException -> AttachmentFailure.Unreadable
+        this is LocationNotRemovedException -> AttachmentFailure.LocationNotRemoved
         this is HttpStatusException && (code == HTTP_PAYLOAD_TOO_LARGE || apiErrorCode == ApiErrorCodes.FILE_TOO_BIG) -> AttachmentFailure.TooLarge
         this is HttpStatusException && apiErrorCode == ApiErrorCodes.NO_FREE_SPACE -> AttachmentFailure.NoSpace
         else -> AttachmentFailure.Network

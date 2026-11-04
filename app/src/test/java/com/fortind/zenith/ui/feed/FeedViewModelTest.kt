@@ -146,8 +146,14 @@ class FeedViewModelTest {
         hardMutedWords = (MuteWordSet.parseEditor(hard) as MuteWordsParse.Valid).set,
     )
 
-    private suspend fun fixture(token: String? = "token", debounceMs: Long = 0, settings: AccountSettings = AccountSettings()): Fixture {
+    private suspend fun fixture(
+        token: String? = "token",
+        debounceMs: Long = 0,
+        settings: AccountSettings = AccountSettings(),
+        offline: Boolean = false,
+    ): Fixture {
         val f = Fixture(token, debounceMs, settings).also(fixtures::add)
+        if (offline) f.userApi.failure = IOException("offline")
         if (token == null) f.session.browseAsGuest() else f.session.restore()
         return f
     }
@@ -572,6 +578,20 @@ class FeedViewModelTest {
     }
 
     @Test
+    fun startingOfflineLearnsWhoYouAreOnceTheAppBecomesActiveAgain() = runTest {
+        val f = fixture(offline = true)
+        f.api.timelines[TimelineKind.Home] = page(2, 1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        assertNull(f.viewModel.uiState.value.myUserId)
+
+        f.userApi.failure = null
+        f.now += FeedViewModel.UNKNOWN_USER_RETRY_MS
+        f.viewModel.setActive(true)
+
+        assertEquals("me", f.viewModel.uiState.first { it.myUserId != null }.myUserId)
+    }
+
+    @Test
     fun anEditCanMuteANoteAfterItLoaded() = runTest {
         val f = fixture(settings = muted(soft = "soft"))
         f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", text = "plain"))
@@ -857,6 +877,26 @@ class FeedViewModelTest {
 
         assertEquals(listOf<FeedEvent>(FeedEvent.SignInRequired, FeedEvent.SignInRequired), events)
         assertTrue(f.api.reactCalls.isEmpty())
+    }
+
+    @Test
+    fun aFailedRenoteCheckIsAskedAgainTheNextTimeButASuccessfulOneIsNot() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.api.renotedByMeFailure = IOException("offline")
+
+        f.viewModel.checkRenoted("n1")
+        assertFalse("n1" in f.viewModel.uiState.value.renoteChecks)
+        assertFalse("n1" in f.viewModel.uiState.value.renoted)
+
+        f.api.renotedByMeFailure = null
+        f.api.renotedByMe = true
+        f.viewModel.checkRenoted("n1")
+        f.viewModel.checkRenoted("n1")
+
+        assertTrue("n1" in f.viewModel.uiState.value.renoted)
+        assertEquals(2, f.api.renotedByMeCalls.size)
     }
 
     @Test
@@ -1333,6 +1373,52 @@ class FeedViewModelTest {
 
         f.viewModel.closeThread()
         assertNull(f.viewModel.uiState.value.thread)
+    }
+
+    @Test
+    fun aFailedRepliesPageKeepsTheThreadOpenAndRetries() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = (40 downTo 6).map { testNote("n$it") }
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+
+        f.api.moreRepliesFailure = IOException("offline")
+        f.viewModel.loadMoreReplies()
+        val failed = f.viewModel.uiState.value.thread!!
+        assertTrue(failed.repliesLoadMoreFailed)
+        assertFalse(failed.repliesEnd)
+        assertFalse(failed.repliesLoadingMore)
+        assertEquals(30, failed.replies.size)
+
+        f.api.moreRepliesFailure = null
+        f.viewModel.loadMoreReplies()
+        val recovered = f.viewModel.uiState.first { it.thread?.repliesEnd == true }.thread!!
+        assertFalse(recovered.repliesLoadMoreFailed)
+        assertEquals(35, recovered.replies.size)
+    }
+
+    @Test
+    fun aDeletedReplyIsGoneFromTheCachedThreadToo() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = listOf(testNote("n7"), testNote("n6", user = testUser("me")))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+
+        f.viewModel.deleteNote("n6")
+        f.viewModel.uiState.first { it.thread?.replies?.none { reply -> reply.id == "n6" } == true }
+        f.viewModel.closeThread()
+        f.api.notes.remove("n5")
+        f.api.timelines[TimelineKind.Home] = emptyList()
+        f.viewModel.openThread("n5")
+
+        val reopened = f.viewModel.uiState.first { it.thread?.failed == true }.thread!!
+        assertEquals(listOf("n7"), reopened.replies.map { it.id })
     }
 
     @Test

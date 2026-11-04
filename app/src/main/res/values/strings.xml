@@ -564,6 +564,7 @@
     <string name="attachment_unreadable">Can\'t read this file</string>
     <string name="attachment_permission">Needs permission</string>
     <string name="attachment_network">Upload failed</string>
+    <string name="attachment_location">Couldn\'t remove its location</string>
     <string name="attachment_retry">Retry</string>
     <string name="attachment_compress">Compress</string>
     <string name="attachment_remove">Remove attachment</string>

@@ -5,12 +5,22 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.core.content.edit
+import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+import java.security.ProviderException
+import java.security.UnrecoverableKeyException
+import java.security.InvalidKeyException
+import javax.crypto.BadPaddingException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+
+internal fun isPermanentKeyFailure(error: GeneralSecurityException): Boolean = when (error) {
+    is BadPaddingException, is UnrecoverableKeyException, is InvalidKeyException -> true
+    else -> false
+}
 
 interface TokenStore {
     fun read(): String?
@@ -29,8 +39,10 @@ class KeystoreTokenStore(context: Context) : TokenStore {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
             String(cipher.doFinal(bytes, GCM_IV_BYTES, bytes.size - GCM_IV_BYTES), Charsets.UTF_8)
-        } catch (_: GeneralSecurityException) {
-            clear()
+        } catch (e: GeneralSecurityException) {
+            if (isPermanentKeyFailure(e)) clear()
+            null
+        } catch (_: ProviderException) {
             null
         } catch (_: IllegalArgumentException) {
             clear()
@@ -42,9 +54,15 @@ class KeystoreTokenStore(context: Context) : TokenStore {
     }
 
     override fun write(token: String) {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
-        val encrypted = cipher.iv + cipher.doFinal(token.toByteArray(Charsets.UTF_8))
+        val encrypted = try {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+            cipher.iv + cipher.doFinal(token.toByteArray(Charsets.UTF_8))
+        } catch (e: GeneralSecurityException) {
+            throw IOException("Could not store the session", e)
+        } catch (e: ProviderException) {
+            throw IOException("Could not store the session", e)
+        }
         prefs.edit { putString(KEY_TOKEN, Base64.encodeToString(encrypted, Base64.NO_WRAP)) }
     }
 
