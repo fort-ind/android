@@ -12,6 +12,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -49,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,7 +61,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
@@ -71,6 +80,26 @@ import com.fortind.zenith.R
 import com.fortind.zenith.composer.Attachment
 import com.fortind.zenith.ui.rememberReduceMotion
 import kotlin.math.roundToInt
+
+private val OverlayEntryKeys = setOf(Key.Tab, Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
+
+@Stable
+internal class OverlayFocus {
+    val requester = FocusRequester()
+    var hasFocus = false
+
+    fun enterFrom(event: KeyEvent): Boolean {
+        if (hasFocus || event.type != KeyEventType.KeyDown || event.key !in OverlayEntryKeys) return false
+        requester.requestFocus()
+        return true
+    }
+}
+
+internal fun Modifier.overlayFocusHost(focus: OverlayFocus, open: Boolean): Modifier = this
+    .focusRequester(focus.requester)
+    .onFocusChanged { focus.hasFocus = it.hasFocus }
+    .focusProperties { onExit = { if (open) cancelFocusChange() } }
+    .focusGroup()
 
 @Composable
 fun ModalOverlay(

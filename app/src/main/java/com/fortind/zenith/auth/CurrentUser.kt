@@ -1,5 +1,6 @@
 package com.fortind.zenith.auth
 
+import com.fortind.zenith.net.strings
 import com.fortind.zenith.account.AccountSettings
 import com.fortind.zenith.account.parseAccountSettings
 import com.fortind.zenith.net.FortHttp
@@ -22,6 +23,7 @@ data class CurrentUser(
     val birthday: String? = null,
     val fields: List<ProfileField> = emptyList(),
     val settings: AccountSettings = AccountSettings(),
+    val pinnedNoteIds: List<String> = emptyList(),
 ) {
     val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: username
 
@@ -52,6 +54,7 @@ fun parseCurrentUser(json: JSONObject): CurrentUser {
             ProfileField(name, entry.optStringOrNull("value").orEmpty())
         },
         settings = parseAccountSettings(json),
+        pinnedNoteIds = json.optJSONArray("pinnedNoteIds")?.strings().orEmpty(),
     )
 }
 

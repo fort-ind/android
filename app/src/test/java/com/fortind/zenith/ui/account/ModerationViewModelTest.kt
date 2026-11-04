@@ -154,7 +154,7 @@ class ModerationViewModelTest {
 
         assertEquals(1, f.viewModel.uiState.value.list(ModerationKind.Mute).items.size)
         assertEquals(ModerationEvent.Failed, f.viewModel.events.first())
-        assertFalse(f.viewModel.uiState.value.busy.isNotEmpty())
+        f.viewModel.uiState.first { it.busy.isEmpty() }
     }
 
     @Test

@@ -1,5 +1,12 @@
 package com.fortind.zenith.ui.feed
 
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.testTag
+import com.fortind.zenith.timeline.Visibility
+import com.fortind.zenith.timeline.renoteVisibilities
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -92,6 +99,12 @@ fun rememberNoteActionLabels(): NoteActionLabels {
     }
 }
 
+private val RenoteTargets = listOf(
+    Triple(Visibility.Public, R.string.note_renote_public, Icons.Default.Public),
+    Triple(Visibility.Home, R.string.note_renote_home, Icons.Default.Home),
+    Triple(Visibility.Followers, R.string.note_renote_followers, Icons.Default.Lock),
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReactionChips(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks) {
@@ -146,7 +159,7 @@ fun ReactionChips(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
 }
 
 @Composable
-private fun ReactionChip(
+internal fun ReactionChip(
     reactionKey: String,
     count: Int,
     selected: Boolean,
@@ -240,15 +253,26 @@ fun NoteActionRow(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
                 },
             ) { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(20.dp)) }
             DropdownMenu(expanded = renoteMenu, onDismissRequest = { renoteMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text(labels.renote) },
-                    leadingIcon = { Icon(Icons.Default.Repeat, contentDescription = null) },
-                    onClick = {
-                        renoteMenu = false
-                        callbacks.renote(note)
-                    },
-                    enabled = !renoted,
+                val allowed = note.renoteVisibilities(environment.myUserId)
+                Text(
+                    text = stringResource(R.string.note_renote_to),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 )
+                RenoteTargets.forEach { (visibility, labelRes, icon) ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(labelRes)) },
+                        leadingIcon = { Icon(icon, contentDescription = null) },
+                        onClick = {
+                            renoteMenu = false
+                            callbacks.renoteAs(note, visibility)
+                        },
+                        enabled = !renoted && visibility in allowed,
+                        modifier = Modifier.testTag("renote:${visibility.name}"),
+                    )
+                }
+                HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text(labels.quote) },
                     leadingIcon = { Icon(Icons.Default.FormatQuote, contentDescription = null) },

@@ -9,6 +9,27 @@ import org.junit.Test
 class AppBackStacksTest {
 
     @Test
+    fun discoveryRoutesSurviveSaving() {
+        listOf(AppRoute.Tag("日本語"), AppRoute.Search("two: words / more"), AppRoute.Hashtags).forEach { route ->
+            assertEquals(route, AppRoute.decode(route.encode()))
+        }
+        assertEquals(null, AppRoute.decode("tag:"))
+        assertEquals(null, AppRoute.decode("search:"))
+    }
+
+    @Test
+    fun showRootClearsThatTabsStack() {
+        val stacks = AppBackStacks()
+        stacks.push(AppRoute.Tag("a"))
+        stacks.select(AppDestination.PROFILE)
+
+        stacks.showRoot(AppDestination.HOME)
+
+        assertEquals(AppDestination.HOME, stacks.tab)
+        assertEquals(1, stacks.current.size)
+    }
+
+    @Test
     fun everyTabStartsOnItsRoot() {
         val stacks = AppBackStacks()
 

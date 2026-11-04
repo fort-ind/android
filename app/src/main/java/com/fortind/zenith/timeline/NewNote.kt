@@ -7,11 +7,14 @@ data class PollBody(
     val choices: List<String>,
     val multiple: Boolean,
     val expiresAtMillis: Long?,
+    val expiredAfterMillis: Long? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("choices", JSONArray(choices))
         .put("multiple", multiple)
-        .put("expiresAt", expiresAtMillis ?: JSONObject.NULL)
+        .apply {
+            if (expiredAfterMillis != null) put("expiredAfter", expiredAfterMillis) else put("expiresAt", expiresAtMillis ?: JSONObject.NULL)
+        }
 }
 
 fun Poll.toBody(): PollBody = PollBody(choices.map { it.text }, multiple, expiresAtMillis)

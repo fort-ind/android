@@ -2,6 +2,21 @@
 
 package com.fortind.zenith.ui.feed
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material.icons.outlined.HowToReg
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
@@ -67,47 +82,80 @@ private class TimelineOption(val kind: TimelineKind, val labelRes: Int, val sele
 
 private val TimelineOptions = listOf(
     TimelineOption(TimelineKind.Home, R.string.feed_timeline_home, Icons.Filled.Home, Icons.Outlined.Home),
+    TimelineOption(TimelineKind.Following, R.string.feed_timeline_following, Icons.Filled.HowToReg, Icons.Outlined.HowToReg),
     TimelineOption(TimelineKind.Local, R.string.feed_timeline_local, Icons.Filled.Groups, Icons.Outlined.Groups),
     TimelineOption(TimelineKind.Global, R.string.feed_timeline_global, Icons.Filled.Public, Icons.Outlined.Public),
+    TimelineOption(TimelineKind.Lists, R.string.feed_timeline_lists, Icons.AutoMirrored.Filled.FormatListBulleted, Icons.AutoMirrored.Outlined.FormatListBulleted),
 )
 
+private val AllLabelsWidth = 520.dp
+private val IconOnlyButtonWidth = 48.dp
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TimelineSwitcher(
     selected: TimelineKind,
     available: Set<TimelineKind>,
     onSelect: (TimelineKind) -> Unit,
+    reduceMotion: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val options = TimelineOptions.filter { it.kind in available }
-    Row(
-        modifier = modifier
-            .widthIn(max = FeedMaxWidth)
-            .fillMaxWidth()
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
-    ) {
-        options.forEachIndexed { index, option ->
-            val checked = option.kind == selected
-            ToggleButton(
-                checked = checked,
-                onCheckedChange = { onSelect(option.kind) },
-                colors = ToggleButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-                shapes = when (index) {
-                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("timeline:${option.kind.name}")
-                    .semantics { role = Role.RadioButton },
-            ) {
-                Icon(if (checked) option.selectedIcon else option.icon, contentDescription = null)
-                Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
-                Text(stringResource(option.labelRes), maxLines = 1)
+    BoxWithConstraints(modifier = modifier.widthIn(max = FeedMaxWidth).fillMaxWidth()) {
+        val gaps = ButtonGroupDefaults.ConnectedSpaceBetween * (options.size - 1)
+        val allLabels = maxWidth >= AllLabelsWidth
+        val equalWidth = (maxWidth - gaps) / options.size
+        val selectedWidth = maxWidth - gaps - IconOnlyButtonWidth * (options.size - 1)
+        Row(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        ) {
+            options.forEachIndexed { index, option ->
+                val checked = option.kind == selected
+                val label = stringResource(option.labelRes)
+                val showLabel = allLabels || checked
+                val width by animateDpAsState(
+                    targetValue = when {
+                        allLabels -> equalWidth
+                        checked -> selectedWidth
+                        else -> IconOnlyButtonWidth
+                    },
+                    animationSpec = if (reduceMotion) snap() else MaterialTheme.motionScheme.defaultSpatialSpec(),
+                    label = "timelineButtonWidth",
+                )
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                    tooltip = { if (!showLabel) PlainTooltip { Text(label) } },
+                    state = rememberTooltipState(),
+                ) {
+                    ToggleButton(
+                        checked = checked,
+                        onCheckedChange = { onSelect(option.kind) },
+                        colors = ToggleButtonDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                        shapes = when (index) {
+                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                            options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                        },
+                        contentPadding = PaddingValues(horizontal = if (showLabel) 8.dp else 0.dp),
+                        modifier = Modifier
+                            .width(width)
+                            .testTag("timeline:${option.kind.name}")
+                            .semantics { role = Role.RadioButton },
+                    ) {
+                        Icon(
+                            if (checked) option.selectedIcon else option.icon,
+                            contentDescription = if (showLabel) null else label,
+                        )
+                        if (showLabel) {
+                            Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
+                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
             }
         }
     }
@@ -185,6 +233,8 @@ fun FeedMessage(status: TimelineStatus, kind: TimelineKind?, onRetry: () -> Unit
             stringResource(
                 when (kind) {
                     TimelineKind.Home -> R.string.feed_empty_home_body
+                    TimelineKind.Following -> R.string.feed_empty_following_body
+                    TimelineKind.Lists -> emptyBody ?: R.string.feed_empty_list_body
                     null -> emptyBody ?: R.string.bookmarks_empty_body
                     else -> R.string.feed_empty_body
                 },

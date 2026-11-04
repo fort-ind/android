@@ -1,5 +1,9 @@
 package com.fortind.zenith.composer
 
+import com.fortind.zenith.net.strings
+import com.fortind.zenith.timeline.NoteUser
+import com.fortind.zenith.timeline.ReactionAcceptance
+import com.fortind.zenith.timeline.parseNoteUser
 import android.content.Context
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.edit
@@ -22,8 +26,11 @@ data class ComposerDraft(
     val visibility: Visibility = Visibility.Public,
     val localOnly: Boolean = false,
     val attachments: List<DraftAttachment> = emptyList(),
+    val poll: PollDraft? = null,
+    val reactionAcceptance: ReactionAcceptance = ReactionAcceptance.All,
+    val recipients: List<NoteUser> = emptyList(),
 ) {
-    val isBlank: Boolean get() = text.isBlank() && cw.isNullOrBlank() && attachments.isEmpty()
+    val isBlank: Boolean get() = text.isBlank() && cw.isNullOrBlank() && attachments.isEmpty() && poll?.isBlank != false
 }
 
 data class StoredDraft(val draft: ComposerDraft, val updatedAtMillis: Long)
@@ -75,11 +82,36 @@ fun encodeDrafts(drafts: Map<String, StoredDraft>): String {
                 .put("visibility", stored.draft.visibility.apiName)
                 .put("localOnly", stored.draft.localOnly)
                 .put("attachments", JSONArray(stored.draft.attachments.map(::encodeAttachment)))
+                .put("poll", stored.draft.poll?.let(::encodePoll) ?: JSONObject.NULL)
+                .put("reactionAcceptance", stored.draft.reactionAcceptance.apiName ?: JSONObject.NULL)
+                .put("recipients", JSONArray(stored.draft.recipients.map(::encodeRecipient)))
                 .put("updatedAt", stored.updatedAtMillis),
         )
     }
     return root.toString()
 }
+
+private fun encodePoll(poll: PollDraft): JSONObject = JSONObject()
+    .put("choices", JSONArray(poll.choices))
+    .put("multiple", poll.multiple)
+    .put("endsAfter", poll.endsAfterMillis ?: JSONObject.NULL)
+    .put("endsAt", poll.endsAtMillis ?: JSONObject.NULL)
+
+private fun decodePoll(json: JSONObject): PollDraft = PollDraft(
+    choices = json.optJSONArray("choices")?.strings().orEmpty().ifEmpty { listOf("", "") },
+    multiple = json.optBoolean("multiple"),
+    endsAfterMillis = if (json.isNull("endsAfter")) null else json.optLong("endsAfter"),
+    endsAtMillis = if (json.isNull("endsAt")) null else json.optLong("endsAt"),
+)
+
+private fun encodeRecipient(user: NoteUser): JSONObject = JSONObject()
+    .put("id", user.id)
+    .put("username", user.username)
+    .put("host", user.host ?: JSONObject.NULL)
+    .put("name", user.name ?: JSONObject.NULL)
+    .put("avatarUrl", user.avatarUrl ?: JSONObject.NULL)
+
+private fun decodeRecipient(json: JSONObject): NoteUser? = parseNoteUser(json)
 
 private fun encodeAttachment(attachment: DraftAttachment): JSONObject {
     val file = attachment.file
@@ -96,6 +128,7 @@ private fun encodeAttachment(attachment: DraftAttachment): JSONObject {
         .put("serverSensitive", file.isSensitive)
         .put("alt", attachment.altText)
         .put("sensitive", attachment.isSensitive)
+        .put("owned", attachment.owned)
 }
 
 private fun decodeAttachment(json: JSONObject): DraftAttachment? {
@@ -113,7 +146,7 @@ private fun decodeAttachment(json: JSONObject): DraftAttachment? {
         width = json.optIntOrNull("width"),
         height = json.optIntOrNull("height"),
     )
-    return DraftAttachment(file, altText = json.optString("alt"), isSensitive = json.optBoolean("sensitive"))
+    return DraftAttachment(file, altText = json.optString("alt"), isSensitive = json.optBoolean("sensitive"), owned = json.optBoolean("owned", true))
 }
 
 fun decodeDrafts(raw: String?): Map<String, StoredDraft> {
@@ -132,6 +165,9 @@ fun decodeDrafts(raw: String?): Map<String, StoredDraft> {
                             visibility = Visibility.fromApiName(json.optStringOrNull("visibility")),
                             localOnly = json.optBoolean("localOnly"),
                             attachments = json.optJSONArray("attachments")?.objects()?.mapNotNull(::decodeAttachment).orEmpty(),
+                            poll = json.optJSONObject("poll")?.let(::decodePoll),
+                            reactionAcceptance = ReactionAcceptance.fromApiName(json.optStringOrNull("reactionAcceptance")),
+                            recipients = json.optJSONArray("recipients")?.objects()?.mapNotNull(::decodeRecipient).orEmpty(),
                         ),
                         updatedAtMillis = json.optLong("updatedAt"),
                     ),

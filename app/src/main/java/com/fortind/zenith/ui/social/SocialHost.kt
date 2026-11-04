@@ -2,6 +2,12 @@
 
 package com.fortind.zenith.ui.social
 
+import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.ui.discovery.AddToListSheet
+import com.fortind.zenith.ui.discovery.CollectionsEventsEffect
+import com.fortind.zenith.ui.discovery.CollectionsViewModel
+import com.fortind.zenith.ui.discovery.DiscoveryViewModel
+import com.fortind.zenith.ui.people.parseTagLink
 import android.content.ClipData
 import android.content.Intent
 import android.os.Build
@@ -73,7 +79,11 @@ import com.fortind.zenith.ui.people.ReportFailure
 import com.fortind.zenith.ui.people.parseProfileLink
 import com.fortind.zenith.ui.rememberNow
 import com.fortind.zenith.ui.rememberReduceMotion
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 val LocalNoteEnvironment = compositionLocalOf<NoteEnvironment> { error("LocalNoteEnvironment is provided by SocialHost") }
 
@@ -89,6 +99,8 @@ class SocialUi(
     val people: PeopleViewModel,
     val peopleActions: PeopleActions,
     val pageKeys: PageKeys,
+    val collections: CollectionsViewModel,
+    val discovery: DiscoveryViewModel,
 )
 
 @Composable
@@ -98,7 +110,12 @@ fun SocialHost(
     onOpenPerson: (String) -> Unit,
     onOpenOwnProfile: () -> Unit,
     onOpenHandle: (ProfileHandle) -> Unit,
+    onOpenTag: (String) -> Unit,
+    requestedReplyId: String? = null,
+    onRequestedReplyHandled: () -> Unit = {},
     feedViewModel: FeedViewModel = viewModel(factory = FeedViewModel.Factory),
+    collectionsViewModel: CollectionsViewModel = viewModel(factory = CollectionsViewModel.Factory),
+    discoveryViewModel: DiscoveryViewModel = viewModel(factory = DiscoveryViewModel.Factory),
     composerViewModel: ComposerViewModel = viewModel(factory = ComposerViewModel.Factory),
     playback: FeedPlayback = viewModel(factory = FeedPlayback.Factory),
     peopleViewModel: PeopleViewModel = viewModel(factory = PeopleViewModel.Factory),
@@ -124,18 +141,27 @@ fun SocialHost(
     var personUnblockTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var reportUserTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var reportNoteTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var addToListTarget by remember { mutableStateOf<NoteUser?>(null) }
     val people by peopleViewModel.uiState.collectAsStateWithLifecycle()
     val pageKeys = remember { PageKeys() }
     val browser = LocalUriHandler.current
     val openHandle by rememberUpdatedState(onOpenHandle)
+    val openTag by rememberUpdatedState(onOpenTag)
     val linkRouter = remember(browser) {
         object : UriHandler {
             override fun openUri(uri: String) {
-                parseProfileLink(uri)?.let { openHandle(it) } ?: browser.openUri(uri)
+                val tag = parseTagLink(uri)
+                val handle = parseProfileLink(uri)
+                when {
+                    tag != null -> openTag(tag)
+                    handle != null -> openHandle(handle)
+                    else -> browser.openUri(uri)
+                }
             }
         }
     }
 
+    val linkPreviews = (LocalContext.current.applicationContext as ZenithApplication).container.linkPreviews
     val now by rememberNow()
     val emojiUrl = remember(emojis) {
         { name: String -> emojis?.get(name)?.url ?: "https://${FortInstance.HOST}/emoji/$name.webp" }
@@ -149,12 +175,17 @@ fun SocialHost(
         feed.renoteChecks,
         feed.bookmarked,
         feed.bookmarkChecks,
+        feed.pinned,
+        feed.threadMuted,
         emojis,
         mfm,
         selectedNoteId,
         playback,
     ) {
         NoteEnvironment(
+            linkPreviews = linkPreviews,
+            pinned = feed.pinned,
+            threadMuted = feed.threadMuted,
             now = now,
             myUserId = feed.myUserId,
             signedIn = feed.signedIn,
@@ -209,9 +240,10 @@ fun SocialHost(
         onBlock = { detail -> personBlockTarget = detail.id },
         onUnblock = { detail -> personUnblockTarget = detail.id },
         onReport = { detail -> reportUserTarget = detail.id },
+        onAddToList = { addToListTarget = it },
     )
     val signedIn by rememberUpdatedState(feed.signedIn)
-    val ui = remember(feedViewModel, composerViewModel, playback, listStates, noteCallbacks, peopleViewModel, peopleActions, pageKeys) {
+    val ui = remember(feedViewModel, composerViewModel, playback, listStates, noteCallbacks, peopleViewModel, peopleActions, pageKeys, collectionsViewModel, discoveryViewModel) {
         SocialUi(
             feed = feedViewModel,
             composer = composerViewModel,
@@ -225,14 +257,29 @@ fun SocialHost(
             people = peopleViewModel,
             peopleActions = peopleActions,
             pageKeys = pageKeys,
+            collections = collectionsViewModel,
+            discovery = discoveryViewModel,
         )
     }
+    CollectionsEventsEffect(collectionsViewModel, snackbarHostState)
     FeedEventsEffect(feedViewModel, peopleViewModel, snackbarHostState, listStates, reduceMotion, onRedraft = composerViewModel::redraft)
     PeopleEventsEffect(peopleViewModel, feedViewModel, snackbarHostState)
     ComposerEventsEffect(composerViewModel, feedViewModel, snackbarHostState)
+    LaunchedEffect(requestedReplyId) {
+        val noteId = requestedReplyId ?: return@LaunchedEffect
+        val note = withTimeoutOrNull(REPLY_NOTE_WAIT_MS) {
+            feedViewModel.uiState.map { state -> state.thread?.takeIf { it.noteId == noteId }?.note }.filterNotNull().first()
+        }
+        if (note != null && feedViewModel.uiState.value.signedIn) composerViewModel.open(ComposerTarget.Reply(noteId), note)
+        onRequestedReplyHandled()
+    }
 
     CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter) {
         content(ui)
+    }
+
+    addToListTarget?.let { user ->
+        AddToListSheet(user = user, collections = collectionsViewModel, onDismiss = { addToListTarget = null })
     }
 
     ComposerHost(
@@ -425,10 +472,18 @@ fun SocialHost(
 @Composable
 private fun rememberTimelineListStates(): Map<TimelineKind, LazyListState> {
     val home = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+    val following = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val local = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val global = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-    return remember(home, local, global) {
-        mapOf(TimelineKind.Home to home, TimelineKind.Local to local, TimelineKind.Global to global)
+    val lists = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+    return remember(home, following, local, global, lists) {
+        mapOf(
+            TimelineKind.Home to home,
+            TimelineKind.Following to following,
+            TimelineKind.Local to local,
+            TimelineKind.Global to global,
+            TimelineKind.Lists to lists,
+        )
     }
 }
 
@@ -482,6 +537,19 @@ private fun FeedEventsEffect(
                 FeedEvent.ModerationFailed -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_moderation_failed)) }
                 FeedEvent.RateLimited -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_rate_limited)) }
                 FeedEvent.NoteUnavailable -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_note_unavailable)) }
+                FeedEvent.ThreadMuted -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_thread_muted)) }
+                FeedEvent.ThreadUnmuted -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_thread_unmuted)) }
+                FeedEvent.ThreadMuteFailed -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_thread_mute_failed)) }
+                FeedEvent.NotePinned -> {
+                    peopleViewModel.uiState.value.myUserId?.let(peopleViewModel::refresh)
+                    launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_note_pinned)) }
+                }
+                FeedEvent.NoteUnpinned -> {
+                    peopleViewModel.uiState.value.myUserId?.let(peopleViewModel::refresh)
+                    launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_note_unpinned)) }
+                }
+                FeedEvent.PinLimitReached -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_pin_limit)) }
+                FeedEvent.PinFailed -> launch { snackbarHostState.showSnackbar(resources.getString(R.string.feed_pin_failed)) }
             }
         }
     }
@@ -557,6 +625,7 @@ private fun rememberPeopleActions(
     onBlock: (UserDetail) -> Unit,
     onUnblock: (UserDetail) -> Unit,
     onReport: (UserDetail) -> Unit,
+    onAddToList: (NoteUser) -> Unit,
 ): PeopleActions {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -567,6 +636,7 @@ private fun rememberPeopleActions(
     val block by rememberUpdatedState(onBlock)
     val unblock by rememberUpdatedState(onUnblock)
     val report by rememberUpdatedState(onReport)
+    val addToList by rememberUpdatedState(onAddToList)
     return remember(people, feed, browser, context, clipboard) {
         PeopleActions(
             toggleFollow = { detail ->
@@ -586,6 +656,7 @@ private fun rememberPeopleActions(
                 }
             },
             report = { report(it) },
+            addToList = { addToList(it) },
             openInBrowser = browser::openUri,
             copyLink = { user ->
                 scope.launch {
@@ -602,6 +673,8 @@ private fun rememberPeopleActions(
         )
     }
 }
+
+private const val REPLY_NOTE_WAIT_MS = 20_000L
 
 @Composable
 private fun ComposerEventsEffect(
@@ -684,6 +757,9 @@ private fun rememberNoteCallbacks(
             reply = { note -> if (isSignedIn) reply(note) else feedViewModel.promptSignIn() },
             quote = { note -> if (isSignedIn) quote(note) else feedViewModel.promptSignIn() },
             openProfile = { openProfile(it) },
+            renoteAs = { note, visibility -> feedViewModel.renote(note.id, visibility) },
+            togglePin = { note -> feedViewModel.togglePin(note.id) },
+            toggleThreadMute = { note -> feedViewModel.toggleThreadMute(note.id) },
             toggleReaction = { note, reaction -> feedViewModel.toggleReaction(note.id, reaction) },
             openReactionPicker = { note ->
                 when {

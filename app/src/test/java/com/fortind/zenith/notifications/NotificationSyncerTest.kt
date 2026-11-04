@@ -1,5 +1,7 @@
 package com.fortind.zenith.notifications
 
+import com.fortind.zenith.auth.InMemoryScopeStampStore
+import com.fortind.zenith.auth.ScopeStamp
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.net.MissingPermissionException
@@ -15,8 +17,8 @@ import org.junit.Test
 
 class NotificationSyncerTest {
 
-    private class Fixture(settings: AppSettings = AppSettings(systemNotifications = true)) {
-        val session = UserSessionService(FakeTokenStore("token"), FakeUserApi())
+    private class Fixture(settings: AppSettings = AppSettings(systemNotifications = true), granted: Set<String>? = null) {
+        val session = UserSessionService(FakeTokenStore("token"), FakeUserApi(), InMemoryScopeStampStore(ScopeStamp(granted = granted)))
         val api = FakeNotificationsApi()
         val settingsStore = FakeSettingsStore(settings)
         val syncStore = FakeNotificationSyncStore()
@@ -143,5 +145,54 @@ class NotificationSyncerTest {
 
         assertEquals(5_000L, f.syncStore.lastSeen)
         assertTrue(f.notifier.shown.isEmpty())
+    }
+
+    @Test
+    fun readingEverythingElsewhereClearsWhatIsPosted() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 2_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 0
+
+        f.syncer.sync()
+
+        assertEquals(1, f.notifier.clearCount)
+    }
+
+    @Test
+    fun unreadNotificationsStayPosted() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 2_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 1
+
+        f.syncer.sync()
+
+        assertEquals(0, f.notifier.clearCount)
+    }
+
+    @Test
+    fun quickActionsFollowTheGrantedScopes() = runTest {
+        val f = Fixture(granted = setOf(SCOPE_WRITE_NOTES))
+        f.syncStore.lastSeen = 1_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 1
+
+        f.syncer.sync()
+
+        assertEquals(setOf(QuickAction.Reply), f.notifier.lastActions)
+    }
+
+    @Test
+    fun anOlderTokenGetsNoQuickActions() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 1_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 1
+
+        f.syncer.sync()
+
+        assertEquals(1, f.notifier.shown.size)
+        assertTrue(f.notifier.lastActions.isEmpty())
     }
 }

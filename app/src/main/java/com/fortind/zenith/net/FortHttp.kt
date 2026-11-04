@@ -4,6 +4,7 @@ import com.fortind.zenith.auth.FortInstance
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -40,19 +41,33 @@ class FortHttp(
         post(path, body)
     }
 
-    private suspend fun post(path: String, body: JSONObject): String =
+    suspend fun getJson(path: String, query: List<Pair<String, String>>): JSONObject {
+        val queryString = query.joinToString("&") { (key, value) -> "$key=${URLEncoder.encode(value, "UTF-8")}" }
+        val text = send(path, "$path?$queryString", body = null)
+        return try {
+            JSONObject(text)
+        } catch (e: JSONException) {
+            throw IOException("Malformed response", e)
+        }
+    }
+
+    private suspend fun post(path: String, body: JSONObject): String = send(path, path, body.toString())
+
+    private suspend fun send(path: String, target: String, body: String?): String =
         withContext(NonCancellable + Dispatchers.IO) {
             if (rateLimits.isHeld(path)) throw HttpStatusException(HTTP_TOO_MANY_REQUESTS, ApiErrorCodes.RATE_LIMIT_EXCEEDED)
-            val connection = URL("https://$host$path").openConnection() as HttpURLConnection
+            val connection = URL("https://$host$target").openConnection() as HttpURLConnection
             try {
                 val timeout = timeoutFor(path)
-                connection.requestMethod = "POST"
+                connection.requestMethod = if (body == null) "GET" else "POST"
                 connection.connectTimeout = timeout
                 connection.readTimeout = timeout
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("Accept", "application/json")
-                connection.outputStream.use { it.write(body.toString().toByteArray()) }
+                if (body != null) {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.outputStream.use { it.write(body.toByteArray()) }
+                }
 
                 val code = connection.responseCode
                 if (code !in 200..299) {

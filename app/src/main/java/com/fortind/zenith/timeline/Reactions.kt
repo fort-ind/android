@@ -88,4 +88,11 @@ fun Note.canRenote(myUserId: String?): Boolean = myUserId != null && !deleted &&
     Visibility.Specified -> false
 }
 
+fun Note.renoteVisibilities(myUserId: String?): List<Visibility> = when {
+    !canRenote(myUserId) -> emptyList()
+    visibility == Visibility.Public -> listOf(Visibility.Public, Visibility.Home, Visibility.Followers)
+    visibility == Visibility.Home -> listOf(Visibility.Home, Visibility.Followers)
+    else -> listOf(Visibility.Followers)
+}
+
 fun Note.isRenoteOf(noteId: String, userId: String): Boolean = isPureRenote && user.id == userId && renote?.id == noteId

@@ -64,6 +64,12 @@ class AppBackStacks(
         else -> false
     }
 
+    fun showRoot(destination: AppDestination) {
+        val stack = stack(destination)
+        while (stack.size > 1) stack.removeAt(stack.lastIndex)
+        tab = destination
+    }
+
     fun openEditProfile() {
         val settings = stack(AppDestination.SETTINGS)
         settings.clear()

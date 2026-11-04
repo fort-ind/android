@@ -2,6 +2,18 @@
 
 package com.fortind.zenith.ui.composer
 
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.HeartBroken
+import androidx.compose.material.icons.filled.Poll
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import com.fortind.zenith.composer.pollEditResetsVotes
+import com.fortind.zenith.composer.problem
+import com.fortind.zenith.timeline.ReactionAcceptance
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -134,6 +146,7 @@ import com.fortind.zenith.ui.feed.NoteHeader
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.launch
 
 private val ComposerMaxWidth = 640.dp
@@ -142,7 +155,7 @@ private val ComposerMaxHeight = 640.dp
 @Composable
 fun ComposerHost(
     viewModel: ComposerViewModel,
-    environment: NoteEnvironment,
+    environment: NoteEnvironment?,
     onGrantPermission: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -154,7 +167,7 @@ fun ComposerHost(
 private fun ComposerDialog(
     state: ComposerUiState,
     viewModel: ComposerViewModel,
-    environment: NoteEnvironment,
+    environment: NoteEnvironment?,
     onGrantPermission: () -> Unit,
 ) {
     val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
@@ -162,7 +175,7 @@ private fun ComposerDialog(
         windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
     var confirmClose by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf("") }
-    val overlayOpen = confirmClose || overlay.isNotEmpty()
+    val overlayOpen = confirmClose || overlay.isNotEmpty() || state.prompt != null || state.drive != null
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalResources.current
     val context = LocalContext.current
@@ -172,6 +185,9 @@ private fun ComposerDialog(
     val requestClose: () -> Unit = {
         when {
             confirmClose -> confirmClose = false
+            state.prompt != null -> viewModel.dismissPrompt()
+            state.drive?.menuFileId != null -> viewModel.closeDriveMenu()
+            state.drive != null -> viewModel.closeDrive()
             overlay.isNotEmpty() -> overlay = ""
             viewModel.hasUnsavedChanges() -> confirmClose = true
             else -> viewModel.close(keepDraft = false)
@@ -214,6 +230,19 @@ private fun ComposerDialog(
         onDismissRequest = requestClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
+        val overlayFocus = remember { OverlayFocus() }
+        val focusManager = LocalFocusManager.current
+        LaunchedEffect(overlayOpen) { if (overlayOpen) focusManager.clearFocus() }
+        val dialogView = LocalView.current
+        val darkTheme = isThemeDark()
+        SideEffect {
+            (dialogView.parent as? DialogWindowProvider)?.window?.let { window ->
+                WindowCompat.getInsetsController(window, dialogView).apply {
+                    isAppearanceLightStatusBars = !darkTheme && !floating
+                    isAppearanceLightNavigationBars = !darkTheme && !floating
+                }
+            }
+        }
         val draftable = state.target.draftKey != null
         val keyboard = LocalSoftwareKeyboardController.current
         val openSheet = { sheet: String ->
@@ -223,6 +252,7 @@ private fun ComposerDialog(
         val shortcuts = Modifier.onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             when {
+                overlayOpen && overlayFocus.enterFrom(event) -> true
                 event.key == Key.Escape -> {
                     if (!overlayOpen && suggestions != null) viewModel.dismissSuggestions() else requestClose()
                     true
@@ -262,6 +292,7 @@ private fun ComposerDialog(
                             onOpenAttach = { openSheet(OVERLAY_ATTACH) },
                             onOpenAttachment = { overlay = OVERLAY_PREVIEW + it },
                             onEditAttachment = { overlay = OVERLAY_DETAILS + it },
+                            onOpenPollEnd = { openSheet(OVERLAY_POLL_END) },
                         )
                     }
                 }
@@ -279,68 +310,111 @@ private fun ComposerDialog(
                         onOpenAttach = { openSheet(OVERLAY_ATTACH) },
                         onOpenAttachment = { overlay = OVERLAY_PREVIEW + it },
                         onEditAttachment = { overlay = OVERLAY_DETAILS + it },
+                        onOpenPollEnd = { openSheet(OVERLAY_POLL_END) },
                     )
                 }
             }
-            DiscardPrompt(
-                visible = confirmClose,
-                draftable = draftable,
-                onConfirm = {
-                    confirmClose = false
-                    if (draftable) viewModel.close(keepDraft = true)
-                },
-                onDiscard = {
-                    confirmClose = false
-                    viewModel.close(keepDraft = false)
-                },
-                onDismiss = { confirmClose = false },
-            )
-            VisibilitySheet(
-                visible = overlay == OVERLAY_VISIBILITY,
-                selected = state.visibility,
-                options = state.visibilityOptions,
-                onSelect = {
-                    overlay = ""
-                    viewModel.setVisibility(it)
-                },
-                onDismiss = { overlay = "" },
-            )
-            AttachSheet(
-                visible = overlay == OVERLAY_ATTACH,
-                onLibrary = {
-                    overlay = ""
-                    pickMedia()
-                },
-                onCamera = {
-                    overlay = ""
-                    openCamera()
-                },
-                onDismiss = { overlay = "" },
-            )
-            val detailsId = overlay.removePrefixOrNull(OVERLAY_DETAILS)
-            AttachmentDetailsPrompt(
-                attachment = detailsId?.let { id -> state.attachments.firstOrNull { it.localId == id } },
-                maxAltLength = state.maxAltLength,
-                onSave = { altText, isSensitive ->
-                    detailsId?.let { viewModel.setAttachmentDetails(it, altText, isSensitive) }
-                    overlay = ""
-                },
-                onDismiss = { overlay = "" },
-            )
-            val previewId = overlay.removePrefixOrNull(OVERLAY_PREVIEW)
-            MediaPreviewOverlay(
-                attachment = previewId?.let { id -> state.attachments.firstOrNull { it.localId == id } },
-                onClose = { overlay = "" },
-            )
-            if (overlay == OVERLAY_CAMERA) {
-                CameraCaptureOverlay(
-                    videoSizeLimitBytes = if (compressUploads) COMPRESSED_VIDEO_LIMIT_BYTES else state.maxFileSizeBytes,
-                    onCaptured = { media ->
-                        viewModel.addMedia(listOf(media))
+            Box(modifier = Modifier.fillMaxSize().overlayFocusHost(overlayFocus, overlayOpen)) {
+                DiscardPrompt(
+                    visible = confirmClose,
+                    draftable = draftable,
+                    onConfirm = {
+                        confirmClose = false
+                        if (draftable) viewModel.close(keepDraft = true)
+                    },
+                    onDiscard = {
+                        confirmClose = false
+                        viewModel.close(keepDraft = false)
+                    },
+                    onDismiss = { confirmClose = false },
+                )
+                VisibilitySheet(
+                    visible = overlay == OVERLAY_VISIBILITY,
+                    selected = state.visibility,
+                    options = state.visibilityOptions,
+                    onSelect = viewModel::setVisibility,
+                    acceptance = state.reactionAcceptance,
+                    onAcceptance = viewModel::setReactionAcceptance,
+                    onDismiss = { overlay = "" },
+                )
+                PollEndSheet(
+                    visible = overlay == OVERLAY_POLL_END,
+                    onChoose = {
+                        overlay = ""
+                        viewModel.setPollEndsAfter(it)
+                    },
+                    onCustom = { overlay = OVERLAY_POLL_DATE },
+                    onDismiss = { overlay = "" },
+                )
+                PollDateSheet(
+                    visible = overlay == OVERLAY_POLL_DATE,
+                    nowMillis = viewModel.now(),
+                    onChoose = {
+                        overlay = ""
+                        viewModel.setPollEndsAt(it)
+                    },
+                    onDismiss = { overlay = "" },
+                )
+                state.drive?.let { picker ->
+                    DrivePickerOverlay(
+                        picker = picker,
+                        attachedIds = state.attachments.mapNotNullTo(HashSet()) { it.remote?.id },
+                        slots = MAX_ATTACHMENTS - state.attachments.size,
+                        viewModel = viewModel,
+                        onClose = viewModel::closeDrive,
+                    )
+                }
+                ComposerPromptOverlay(
+                    prompt = state.prompt,
+                    onConfirm = viewModel::confirmPrompt,
+                    onDecline = {
+                        val missing = state.attachments.firstOrNull { it.needsAltText }
+                        val wasAltText = state.prompt == ComposerPrompt.MissingAltText
+                        viewModel.dismissPrompt()
+                        if (wasAltText && missing != null) overlay = OVERLAY_DETAILS + missing.localId
+                    },
+                )
+                AttachSheet(
+                    visible = overlay == OVERLAY_ATTACH,
+                    onLibrary = {
+                        overlay = ""
+                        pickMedia()
+                    },
+                    onCamera = {
+                        overlay = ""
+                        openCamera()
+                    },
+                    onDrive = {
+                        overlay = ""
+                        viewModel.openDrive()
+                    },
+                    onDismiss = { overlay = "" },
+                )
+                val detailsId = overlay.removePrefixOrNull(OVERLAY_DETAILS)
+                AttachmentDetailsPrompt(
+                    attachment = detailsId?.let { id -> state.attachments.firstOrNull { it.localId == id } },
+                    maxAltLength = state.maxAltLength,
+                    onSave = { altText, isSensitive ->
+                        detailsId?.let { viewModel.setAttachmentDetails(it, altText, isSensitive) }
                         overlay = ""
                     },
+                    onDismiss = { overlay = "" },
+                )
+                val previewId = overlay.removePrefixOrNull(OVERLAY_PREVIEW)
+                MediaPreviewOverlay(
+                    attachment = previewId?.let { id -> state.attachments.firstOrNull { it.localId == id } },
                     onClose = { overlay = "" },
                 )
+                if (overlay == OVERLAY_CAMERA) {
+                    CameraCaptureOverlay(
+                        videoSizeLimitBytes = if (compressUploads) COMPRESSED_VIDEO_LIMIT_BYTES else state.maxFileSizeBytes,
+                        onCaptured = { media ->
+                            viewModel.addMedia(listOf(media))
+                            overlay = ""
+                        },
+                        onClose = { overlay = "" },
+                    )
+                }
             }
         }
     }
@@ -348,6 +422,8 @@ private fun ComposerDialog(
 
 private const val OVERLAY_VISIBILITY = "visibility"
 private const val OVERLAY_ATTACH = "attach"
+private const val OVERLAY_POLL_END = "pollEnd"
+private const val OVERLAY_POLL_DATE = "pollDate"
 private const val OVERLAY_CAMERA = "camera"
 private const val OVERLAY_PREVIEW = "preview:"
 private const val OVERLAY_DETAILS = "details:"
@@ -360,7 +436,7 @@ private fun String.removePrefixOrNull(prefix: String): String? = if (startsWith(
 private fun ComposerContent(
     state: ComposerUiState,
     viewModel: ComposerViewModel,
-    environment: NoteEnvironment,
+    environment: NoteEnvironment?,
     floating: Boolean,
     promptOpen: Boolean,
     snackbar: SnackbarHostState,
@@ -369,8 +445,16 @@ private fun ComposerContent(
     onOpenAttach: () -> Unit,
     onOpenAttachment: (String) -> Unit,
     onEditAttachment: (String) -> Unit,
+    onOpenPollEnd: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
+    val recipientResults by viewModel.recipientResults.collectAsStateWithLifecycle()
+    val pollProblem by remember(viewModel, state) { derivedStateOf { viewModel.pollDraft(state)?.problem(viewModel.now()) } }
+    val pollResets by remember(viewModel, state) {
+        derivedStateOf {
+            state.target is ComposerTarget.Edit && !state.dropsEndedPoll && pollEditResetsVotes(state.contextNote?.poll, viewModel.pollDraft(state))
+        }
+    }
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     var dragOver by remember { mutableStateOf(false) }
     val dropHint = stringResource(R.string.composer_drop_hint)
@@ -407,7 +491,8 @@ private fun ComposerContent(
                     PostButton(
                         label = stringResource(if (state.target is ComposerTarget.Edit) R.string.composer_save_edit else R.string.composer_post),
                         posting = state.posting,
-                        enabled = (hasText || state.attachments.isNotEmpty()) && state.attachmentsReady && !overLimit && !state.posting,
+                        enabled = (hasText || state.attachments.isNotEmpty() || state.pollEnabled || state.isQuote) &&
+                            pollProblem == null && state.attachmentsReady && !overLimit && !state.posting,
                         onClick = viewModel::submit,
                     )
                     Spacer(Modifier.width(8.dp))
@@ -436,8 +521,9 @@ private fun ComposerContent(
                     .padding(horizontal = 16.dp),
             ) {
                 val context = state.contextNote
-                if (context != null && state.target !is ComposerTarget.Edit) ContextCard(context, environment)
-                if (state.dropsEndedPoll) EndedPollWarning()
+                if (context != null && environment != null && state.target !is ComposerTarget.Edit) ContextCard(context, environment)
+                if (state.showsRecipients) RecipientEditor(viewModel, state, recipientResults)
+                if (state.dropsEndedPoll && !state.pollEnabled) EndedPollWarning()
                 AnimatedVisibility(
                     visible = state.cwEnabled,
                     enter = expandVertically() + fadeIn(),
@@ -446,6 +532,9 @@ private fun ComposerContent(
                     ContentWarningField(viewModel, onRemove = { viewModel.setCwEnabled(false) })
                 }
                 BodyField(viewModel, state, focusRequester)
+                if (state.pollEnabled) {
+                    PollEditor(viewModel, state, pollProblem, pollResets, onOpenPollEnd)
+                }
                 AnimatedVisibility(
                     visible = state.attachments.isNotEmpty(),
                     enter = expandVertically() + fadeIn(),
@@ -478,6 +567,7 @@ private fun ComposerContent(
                 onOpenVisibility = onOpenVisibility,
                 onLocalOnlyChange = viewModel::setLocalOnly,
                 onOpenAttach = onOpenAttach,
+                onPollChange = viewModel::setPollEnabled,
                 modifier = Modifier.widthIn(max = ComposerMaxWidth).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
@@ -625,6 +715,7 @@ private fun ComposerToolbar(
     onOpenVisibility: () -> Unit,
     onLocalOnlyChange: (Boolean) -> Unit,
     onOpenAttach: () -> Unit,
+    onPollChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -638,13 +729,13 @@ private fun ComposerToolbar(
             checked = state.cwEnabled,
             onCheckedChange = onCwChange,
         )
-        VisibilityChip(state.visibility, enabled = state.visibilityOptions.size > 1, onClick = onOpenVisibility)
+        VisibilityChip(state.visibility, limited = state.reactionAcceptance != ReactionAcceptance.All, onClick = onOpenVisibility)
         ToggleTooltipButton(
             label = stringResource(if (state.settingsLocked) R.string.composer_local_only_locked else R.string.composer_local_only),
             icon = Icons.Default.PublicOff,
             checked = state.localOnly,
             onCheckedChange = onLocalOnlyChange,
-            enabled = !state.settingsLocked,
+            enabled = !state.settingsLocked && state.visibility != Visibility.Specified,
         )
         TooltipIconButton(
             label = stringResource(R.string.composer_attach),
@@ -652,13 +743,19 @@ private fun ComposerToolbar(
             onClick = onOpenAttach,
             enabled = state.canAttachMore,
         )
+        ToggleTooltipButton(
+            label = stringResource(if (state.pollEnabled) R.string.poll_remove else R.string.poll_add),
+            icon = Icons.Default.Poll,
+            checked = state.pollEnabled,
+            onCheckedChange = onPollChange,
+        )
         Spacer(Modifier.weight(1f))
         Counter(length, state.textLimit)
     }
 }
 
 @Composable
-fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, onDismiss: () -> Unit) {
+fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, onDrive: () -> Unit, onDismiss: () -> Unit) {
     val title = stringResource(R.string.composer_attach)
     BottomSheetOverlay(visible = visible, title = title, onDismiss = onDismiss) {
         val firstFocus = remember { FocusRequester() }
@@ -670,7 +767,7 @@ fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, o
         ) {
             SegmentedListItem(
                 onClick = onLibrary,
-                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
+                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
                 colors = sheetItemColors(),
                 leadingContent = { Icon(Icons.Default.PhotoLibrary, contentDescription = null) },
                 modifier = Modifier.focusRequester(firstFocus),
@@ -679,11 +776,19 @@ fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, o
             }
             SegmentedListItem(
                 onClick = onCamera,
-                shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
+                shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
                 colors = sheetItemColors(),
                 leadingContent = { Icon(Icons.Default.PhotoCamera, contentDescription = null) },
             ) {
                 Text(stringResource(R.string.composer_attach_camera))
+            }
+            SegmentedListItem(
+                onClick = onDrive,
+                shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
+                colors = sheetItemColors(),
+                leadingContent = { Icon(Icons.Default.Cloud, contentDescription = null) },
+            ) {
+                Text(stringResource(R.string.composer_attach_drive))
             }
         }
     }
@@ -744,19 +849,20 @@ private fun ToggleTooltipButton(
 }
 
 @Composable
-private fun VisibilityChip(selected: Visibility, enabled: Boolean, onClick: () -> Unit) {
+private fun VisibilityChip(selected: Visibility, limited: Boolean, onClick: () -> Unit) {
     val label = stringResource(selected.labelRes())
     val description = stringResource(R.string.composer_visibility)
     AssistChip(
         onClick = onClick,
-        enabled = enabled,
         label = { Text(label) },
-        leadingIcon = { Icon(selected.icon(), contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize)) },
-        trailingIcon = if (enabled) {
-            { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize)) }
-        } else {
-            null
+        leadingIcon = {
+            Icon(
+                if (limited) Icons.Default.HeartBroken else selected.icon(),
+                contentDescription = null,
+                modifier = Modifier.size(AssistChipDefaults.IconSize),
+            )
         },
+        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize)) },
         modifier = Modifier.semantics { contentDescription = "$description: $label" },
     )
 }
@@ -767,6 +873,8 @@ fun VisibilitySheet(
     selected: Visibility,
     options: List<Visibility>,
     onSelect: (Visibility) -> Unit,
+    acceptance: ReactionAcceptance,
+    onAcceptance: (ReactionAcceptance) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val title = stringResource(R.string.composer_visibility)
@@ -800,6 +908,61 @@ fun VisibilitySheet(
                 }
             }
         }
+        SheetTitle(stringResource(R.string.reaction_limit_title))
+        val limits = listOf(
+            ReactionAcceptance.All,
+            ReactionAcceptance.NonSensitiveOnly,
+            ReactionAcceptance.LikeOnly,
+            ReactionAcceptance.LikeOnlyForRemote,
+            ReactionAcceptance.NonSensitiveOnlyForLocalLikeOnlyForRemote,
+        )
+        Column(
+            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            modifier = Modifier
+                .selectableGroup()
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+        ) {
+            limits.forEachIndexed { index, limit ->
+                SegmentedListItem(
+                    selected = limit == acceptance,
+                    onClick = { onAcceptance(limit) },
+                    shapes = ListItemDefaults.segmentedShapes(index = index, count = limits.size),
+                    colors = sheetItemColors(),
+                    trailingContent = if (limit == acceptance) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else {
+                        null
+                    },
+                ) {
+                    Text(stringResource(limit.labelRes()))
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 12.dp), contentAlignment = Alignment.CenterEnd) {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.composer_sheet_done)) }
+        }
+    }
+}
+
+@Composable
+private fun ComposerPromptOverlay(prompt: ComposerPrompt?, onConfirm: () -> Unit, onDecline: () -> Unit) {
+    val titleRes = if (prompt == ComposerPrompt.PollResetsVotes) R.string.composer_prompt_votes_title else R.string.composer_prompt_alt_title
+    ModalOverlay(visible = prompt != null, title = stringResource(titleRes), onDismiss = onDecline) {
+        Text(stringResource(titleRes), style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = stringResource(if (prompt == ComposerPrompt.PollResetsVotes) R.string.composer_prompt_votes_body else R.string.composer_prompt_alt_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth().padding(top = 20.dp)) {
+            TextButton(onClick = onDecline) {
+                Text(stringResource(if (prompt == ComposerPrompt.PollResetsVotes) R.string.note_dialog_cancel else R.string.composer_prompt_alt_add))
+            }
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(if (prompt == ComposerPrompt.PollResetsVotes) R.string.composer_prompt_votes_confirm else R.string.composer_prompt_alt_post))
+            }
+        }
     }
 }
 
@@ -825,7 +988,7 @@ private fun Visibility.bodyRes(): Int = when (this) {
 }
 
 private fun ComposerUiState.titleRes(): Int = when (target) {
-    is ComposerTarget.NewPost -> R.string.composer_title_new
+    is ComposerTarget.NewPost, is ComposerTarget.Share -> R.string.composer_title_new
     is ComposerTarget.Reply -> R.string.composer_title_reply
     is ComposerTarget.Quote -> R.string.composer_title_quote
     is ComposerTarget.Edit -> R.string.composer_title_edit
@@ -842,5 +1005,7 @@ private fun ComposerFailure.messageRes(): Int = when (this) {
     ComposerFailure.MissingPermission -> R.string.composer_failed_permission
     ComposerFailure.SignInRequired -> R.string.composer_failed_sign_in
     ComposerFailure.TooManyAttachments -> R.string.composer_failed_attachments
+    ComposerFailure.PollAlreadyEnded -> R.string.poll_problem_past
     ComposerFailure.UnreadableFile -> R.string.composer_failed_unreadable
+    ComposerFailure.UnsupportedShare -> R.string.composer_failed_share_type
 }

@@ -7,6 +7,7 @@ import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapNotNull
 import org.json.JSONObject
@@ -33,6 +34,8 @@ sealed interface TimelineStreamEvent {
 
 interface TimelineStream {
     fun events(token: String?, kind: TimelineKind): Flow<TimelineStreamEvent>
+
+    fun collectionEvents(token: String, collection: NoteCollection): Flow<TimelineStreamEvent>
 
     fun updates(token: String?, captured: Flow<Set<String>>): Flow<NoteUpdate>
 }
@@ -62,7 +65,18 @@ class StreamingTimelineStream(private val streaming: MisskeyStreaming) : Timelin
     override fun events(token: String?, kind: TimelineKind): Flow<TimelineStreamEvent> {
         val params = JSONObject().put("withRenotes", true)
         if (kind.supportsReplies) params.put("withReplies", false)
-        return streaming.connection(token).channel(kind.channel, params)
+        val channel = kind.channel ?: return emptyFlow()
+        return streaming.connection(token).channel(channel, params)
+            .mapNotNull(::parseTimelineEvent)
+            .flowOn(Dispatchers.Default)
+    }
+
+    override fun collectionEvents(token: String, collection: NoteCollection): Flow<TimelineStreamEvent> {
+        val (channel, params) = when (collection.kind) {
+            CollectionKind.UserList -> "userList" to JSONObject().put("listId", collection.id).put("withRenotes", true).put("withFiles", false)
+            CollectionKind.Antenna -> "antenna" to JSONObject().put("antennaId", collection.id)
+        }
+        return streaming.connection(token).channel(channel, params)
             .mapNotNull(::parseTimelineEvent)
             .flowOn(Dispatchers.Default)
     }

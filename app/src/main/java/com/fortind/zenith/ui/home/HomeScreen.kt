@@ -6,6 +6,21 @@
 
 package com.fortind.zenith.ui.home
 
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.rememberSearchBarState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import com.fortind.zenith.ui.discovery.AnnouncementBars
+import com.fortind.zenith.ui.discovery.CollectionTab
+import com.fortind.zenith.ui.discovery.CollectionsBar
+import com.fortind.zenith.ui.discovery.CollapsedSearchField
+import com.fortind.zenith.ui.discovery.CollectionsEmptyPane
+import com.fortind.zenith.ui.discovery.SearchActions
+import com.fortind.zenith.ui.discovery.SearchOverlay
+import com.fortind.zenith.ui.discovery.rememberSearchInput
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -90,6 +105,8 @@ import com.fortind.zenith.ui.login.AuthPageEffects
 import com.fortind.zenith.ui.login.LoginViewModel
 import com.fortind.zenith.ui.pointerHover
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.rememberTopBarReveal
+import com.fortind.zenith.ui.revealTopBarOnWheel
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
 
@@ -100,6 +117,9 @@ fun HomeScreen(
     showComposeButton: Boolean,
     onBrowseGames: () -> Unit,
     onSeeAllFavorites: () -> Unit,
+    onOpenSearch: (String) -> Unit,
+    onOpenTag: (String) -> Unit,
+    onOpenHandle: (String, String?) -> Unit,
     viewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory),
 ) {
     val homeState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -126,6 +146,17 @@ fun HomeScreen(
         reduceMotion = reduceMotion,
         onCompose = ui.startNewPost,
         showComposeButton = showComposeButton,
+        ui = ui,
+        searchActions = remember(ui, onOpenSearch, onOpenTag, onOpenHandle) {
+            SearchActions(
+                openTag = onOpenTag,
+                openPerson = ui.callbacks.openProfile,
+                openHandle = onOpenHandle,
+                openNotes = onOpenSearch,
+                logIn = ui.feed::logIn,
+                people = ui.peopleActions,
+            )
+        },
         favorites = if (ready != null && ready.showFavorites && !twoPane && ready.favorites.isNotEmpty()) {
             {
                 FavoritesCarousel(
@@ -169,8 +200,10 @@ fun HomeDetailPlaceholder(
 
 private fun availableTimelines(local: Boolean, global: Boolean): Set<TimelineKind> = buildSet {
     add(TimelineKind.Home)
+    add(TimelineKind.Following)
     if (local) add(TimelineKind.Local)
     if (global) add(TimelineKind.Global)
+    add(TimelineKind.Lists)
 }
 
 @Composable
@@ -184,9 +217,39 @@ private fun FeedPane(
     reduceMotion: Boolean,
     onCompose: () -> Unit,
     showComposeButton: Boolean,
+    ui: SocialUi,
+    searchActions: SearchActions,
     favorites: (@Composable () -> Unit)?,
 ) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val collections by ui.collections.uiState.collectAsStateWithLifecycle()
+    val discovery by ui.discovery.uiState.collectAsStateWithLifecycle()
+    val searchState = rememberSearchBarState()
+    val searchText = rememberTextFieldState()
+    val density = LocalDensity.current
+    var searchWidth by remember { mutableStateOf(Dp.Unspecified) }
+    val searchInput = rememberSearchInput(searchState, searchText, feed.signedIn, searchActions)
+    val onLists = feed.selected == TimelineKind.Lists
+    val chosenCollection = collections.selected
+
+    LaunchedEffect(ui.discovery, feed.signedIn) { ui.discovery.loadAnnouncements() }
+    LaunchedEffect(discovery.searchRequested) {
+        if (discovery.searchRequested) {
+            searchState.animateToExpanded()
+            ui.discovery.searchRequestHandled()
+        }
+    }
+    LaunchedEffect(ui.collections, onLists, feed.signedIn) {
+        if (onLists && feed.signedIn) ui.collections.load()
+    }
+    LaunchedEffect(ui.feed, onLists, chosenCollection) {
+        if (onLists) ui.feed.selectCollection(chosenCollection)
+    }
+    val refresh = {
+        feedViewModel.refresh()
+        ui.discovery.loadAnnouncements(force = true)
+        if (onLists) ui.collections.load()
+    }
     val selected = feed.selected
     val timeline = feed.current
     val scopesOutdated by feedViewModel.scopesOutdated.collectAsStateWithLifecycle(initialValue = false)
@@ -208,27 +271,49 @@ private fun FeedPane(
         }
     }
 
+    val listShown = !(onLists && feed.signedIn && (collections.needsPermission || chosenCollection == null))
+    val topBarReveal = rememberTopBarReveal(
+        behavior = scrollBehavior,
+        reduceMotion = reduceMotion,
+        contentKey = selected to chosenCollection,
+        canScrollBack = { listShown && listStates.getValue(selected).canScrollBackward },
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection).revealTopBarOnWheel(topBarReveal),
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = {
-                    TimelineSwitcher(
-                        selected = selected,
-                        available = available,
-                        onSelect = feedViewModel::select,
-                        modifier = Modifier.semantics { heading() },
-                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth(),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            SearchBar(
+                                state = searchState,
+                                inputField = { CollapsedSearchField(searchState) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .onSizeChanged { searchWidth = with(density) { it.width.toDp() } },
+                            )
+                            TooltipIconButton(
+                                label = stringResource(R.string.feed_refresh),
+                                icon = Icons.Default.Refresh,
+                                onClick = refresh,
+                            )
+                        }
+                        TimelineSwitcher(
+                            selected = selected,
+                            available = available,
+                            onSelect = feedViewModel::select,
+                            reduceMotion = reduceMotion,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                    }
                 },
-                actions = {
-                    TooltipIconButton(
-                        label = stringResource(R.string.feed_refresh),
-                        icon = Icons.Default.Refresh,
-                        onClick = feedViewModel::refresh,
-                    )
-                },
-                expandedHeight = 64.dp,
+                expandedHeight = 128.dp,
                 windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -270,25 +355,43 @@ private fun FeedPane(
                 animationSpec = if (reduceMotion) snap() else MaterialTheme.motionScheme.defaultEffectsSpec(),
                 label = "timeline",
             ) { kind ->
-                TimelineList(
-                    kind = kind,
-                    timeline = feed.timeline(kind),
-                    listState = listStates.getValue(kind),
-                    environment = environment,
-                    noteCallbacks = noteCallbacks,
-                    callbacks = listCallbacks,
-                    reduceMotion = reduceMotion,
-                    header = favorites,
-                    banner = when {
-                        feed.needsPermission -> {
-                            { ReauthorizeBanner(onDismiss = feedViewModel::permissionPromptHandled) }
-                        }
-                        scopesOutdated -> {
-                            { ReauthorizeBanner(onDismiss = feedViewModel::dismissScopeBanner, newPermissions = true) }
-                        }
-                        else -> null
-                    },
-                )
+                val listsSignedIn = kind == TimelineKind.Lists && feed.signedIn
+                if (listsSignedIn && collections.needsPermission) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.TopCenter) {
+                        ReauthorizeBanner(onDismiss = ui.collections::permissionPromptHandled)
+                    }
+                } else if (listsSignedIn && chosenCollection == null) {
+                    CollectionsEmptyPane(collections, ui.collections)
+                } else {
+                    TimelineList(
+                        kind = kind,
+                        timeline = feed.timeline(kind),
+                        listState = listStates.getValue(kind),
+                        environment = environment,
+                        noteCallbacks = noteCallbacks,
+                        callbacks = listCallbacks,
+                        reduceMotion = reduceMotion,
+                        header = favorites.takeIf { kind != TimelineKind.Lists },
+                        stickyHeader = if (listsSignedIn) {
+                            { CollectionsBar(ui.collections) }
+                        } else {
+                            null
+                        },
+                        emptyBody = if (kind == TimelineKind.Lists && collections.tab == CollectionTab.Antennas) R.string.feed_empty_antenna_body else null,
+                        banner = when {
+                            feed.needsPermission -> {
+                                { ReauthorizeBanner(onDismiss = feedViewModel::permissionPromptHandled) }
+                            }
+                            scopesOutdated -> {
+                                { ReauthorizeBanner(onDismiss = feedViewModel::dismissScopeBanner, newPermissions = true) }
+                            }
+                            discovery.announcements.isNotEmpty() -> {
+                                { AnnouncementBars(discovery.announcements, environment.mfm, ui.discovery::dismissAnnouncement) }
+                            }
+                            else -> null
+                        },
+                    )
+                }
             }
             NewPostsPill(
                 pending = timeline.pending,
@@ -299,6 +402,16 @@ private fun FeedPane(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
             )
         }
+    }
+    SearchOverlay(
+        state = searchState,
+        text = searchText,
+        inputField = searchInput,
+        dockedWidth = searchWidth,
+        signedIn = feed.signedIn,
+        discovery = ui.discovery,
+        actions = searchActions,
+    )
     }
 }
 

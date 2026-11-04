@@ -13,3 +13,8 @@ fun formatPlaybackTime(millis: Long, locale: Locale = Locale.getDefault()): Stri
         String.format(locale, "%d:%02d", minutes, seconds)
     }
 }
+
+fun seekTarget(positionMs: Long, durationMs: Long, deltaMs: Long): Long {
+    val target = (positionMs + deltaMs).coerceAtLeast(0)
+    return if (durationMs > 0) target.coerceAtMost(durationMs) else target
+}

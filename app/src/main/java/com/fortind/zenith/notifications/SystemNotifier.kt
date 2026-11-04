@@ -15,6 +15,8 @@ import android.graphics.Shader
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.PendingIntentCompat
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
@@ -29,7 +31,9 @@ import java.util.Objects
 import kotlinx.coroutines.withTimeoutOrNull
 
 interface SystemNotifier {
-    suspend fun show(notifications: List<FortNotification>)
+    suspend fun show(notifications: List<FortNotification>, actions: Set<QuickAction> = emptySet())
+
+    fun showActionFailed(action: QuickAction, noteId: String)
 
     fun cancel(notificationId: String)
 
@@ -44,9 +48,33 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         createChannels()
     }
 
-    override suspend fun show(notifications: List<FortNotification>) {
-        notifications.forEach { post(it, avatar = loadAvatar(it.actor?.avatarUrl)) }
+    override suspend fun show(notifications: List<FortNotification>, actions: Set<QuickAction>) {
+        notifications.forEach { post(it, avatar = loadAvatar(it.actor?.avatarUrl), actions) }
         updateSummary()
+    }
+
+    override fun showActionFailed(action: QuickAction, noteId: String) {
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(MainActivity.EXTRA_THREAD_NOTE_ID, noteId)
+        if (action == QuickAction.Reply) intent.putExtra(MainActivity.EXTRA_OPEN_REPLY, true)
+        val tap = PendingIntent.getActivity(
+            context,
+            Objects.hash(noteId, FAILED_ACTION, action.name),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val isReply = action == QuickAction.Reply
+        val notification = NotificationCompat.Builder(context, NotificationCategory.Mentions.channelId)
+            .setSmallIcon(R.drawable.ic_stat_notification)
+            .setContentTitle(context.getString(if (isReply) R.string.notification_reply_failed_title else R.string.notification_like_failed_title))
+            .setContentText(context.getString(if (isReply) R.string.notification_reply_failed_body else R.string.notification_like_failed_body))
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setGroup(FAILED_GROUP_KEY)
+            .setContentIntent(tap)
+            .build()
+        notifyIfAllowed(Objects.hash(FAILED_ACTION, action.name, noteId), notification)
     }
 
     override fun cancel(notificationId: String) {
@@ -70,7 +98,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         }
     }
 
-    private fun post(notification: FortNotification, avatar: Bitmap?) {
+    private fun post(notification: FortNotification, avatar: Bitmap?, actions: Set<QuickAction>) {
         val resources = context.resources
         val text = notification.systemBodyText(context.getString(R.string.notifications_direct_body))
         val builder = NotificationCompat.Builder(context, notification.type.category().channelId)
@@ -86,12 +114,15 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setContentIntent(openAppIntent(notification))
         if (text != null) builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
-        addActions(builder, notification)
+        addActions(builder, notification, actions)
         notifyIfAllowed(notification.id.hashCode(), builder.build())
     }
 
-    private fun addActions(builder: NotificationCompat.Builder, notification: FortNotification) {
+    private fun addActions(builder: NotificationCompat.Builder, notification: FortNotification, actions: Set<QuickAction>) {
         val actorId = notification.actor?.id
+        val noteId = notification.noteId?.takeIf { notification.type == NotificationType.Mention || notification.type == NotificationType.Reply }
+        val canReply = noteId != null && QuickAction.Reply in actions
+        val canLike = noteId != null && QuickAction.Like in actions && !notification.hasMyReaction
         if (notification.type == NotificationType.FollowRequest && actorId != null) {
             builder.addAction(
                 0,
@@ -103,6 +134,9 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
                 context.getString(R.string.notifications_reject),
                 actionIntent(NotificationActionReceiver.ACTION_REJECT, notification.id, actorId),
             )
+        } else if (noteId != null && (canReply || canLike)) {
+            if (canReply) builder.addAction(replyAction(notification.id, noteId))
+            if (canLike) builder.addAction(likeAction(notification.id, noteId))
         } else {
             builder.addAction(
                 0,
@@ -110,6 +144,46 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
                 actionIntent(NotificationActionReceiver.ACTION_MARK_READ, notification.id, null),
             )
         }
+    }
+
+    private fun replyAction(notificationId: String, noteId: String): NotificationCompat.Action {
+        val intent = Intent(context, NotificationActionReceiver::class.java)
+            .setAction(NotificationActionReceiver.ACTION_REPLY)
+            .putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+            .putExtra(NotificationActionReceiver.EXTRA_NOTE_ID, noteId)
+        val pending = PendingIntentCompat.getBroadcast(
+            context,
+            Objects.hash(notificationId, NotificationActionReceiver.ACTION_REPLY),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT,
+            true,
+        )
+        val input = RemoteInput.Builder(NotificationActionReceiver.KEY_REPLY_TEXT)
+            .setLabel(context.getString(R.string.notification_reply_label))
+            .build()
+        return NotificationCompat.Action.Builder(0, context.getString(R.string.notification_action_reply), pending)
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(false)
+            .setShowsUserInterface(false)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .build()
+    }
+
+    private fun likeAction(notificationId: String, noteId: String): NotificationCompat.Action {
+        val intent = Intent(context, NotificationActionReceiver::class.java)
+            .setAction(NotificationActionReceiver.ACTION_LIKE)
+            .putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+            .putExtra(NotificationActionReceiver.EXTRA_NOTE_ID, noteId)
+        val pending = PendingIntent.getBroadcast(
+            context,
+            Objects.hash(notificationId, NotificationActionReceiver.ACTION_LIKE),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(0, context.getString(R.string.notification_action_like), pending)
+            .setShowsUserInterface(false)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_THUMBS_UP)
+            .build()
     }
 
     private fun updateSummary() {
@@ -209,6 +283,8 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
 
     private companion object {
         const val GROUP_KEY = "com.fortind.zenith.NOTIFICATIONS"
+        const val FAILED_GROUP_KEY = "com.fortind.zenith.ACTION_FAILED"
+        const val FAILED_ACTION = "failed"
         const val SUMMARY_ID = 0
         const val MIN_FOR_SUMMARY = 2
         const val OPEN_APP_REQUEST_CODE = 1

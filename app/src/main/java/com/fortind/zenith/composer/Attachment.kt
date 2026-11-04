@@ -22,13 +22,16 @@ data class Attachment(
 ) {
     val isReady: Boolean get() = phase == AttachmentPhase.Ready && remote != null
 
+    val needsAltText: Boolean
+        get() = altText.isBlank() && (media.mimeType.startsWith("image/") || media.mimeType.startsWith("video/"))
+
     val needsSync: Boolean
         get() = remote?.let { it.altText.orEmpty() != altText || it.isSensitive != isSensitive } ?: false
 }
 
-data class DraftAttachment(val file: NoteFile, val altText: String, val isSensitive: Boolean)
+data class DraftAttachment(val file: NoteFile, val altText: String, val isSensitive: Boolean, val owned: Boolean = true)
 
-fun Attachment.toDraft(): DraftAttachment? = remote?.takeIf { isReady && owned }?.let { DraftAttachment(it, altText, isSensitive) }
+fun Attachment.toDraft(): DraftAttachment? = remote?.takeIf { isReady }?.let { DraftAttachment(it, altText, isSensitive, owned) }
 
 fun DraftAttachment.toAttachment(): Attachment = Attachment(
     localId = file.id,
@@ -38,7 +41,7 @@ fun DraftAttachment.toAttachment(): Attachment = Attachment(
     remote = file,
     altText = altText,
     isSensitive = isSensitive,
-    owned = true,
+    owned = owned,
 )
 
 fun NoteFile.toExistingAttachment(): Attachment = Attachment(

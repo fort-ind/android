@@ -104,10 +104,17 @@ class FakeNotificationStream : NotificationStream {
 class FakeSystemNotifier : SystemNotifier {
     val shown = CopyOnWriteArrayList<FortNotification>()
     val cancelled = CopyOnWriteArrayList<String>()
+    val failed = CopyOnWriteArrayList<Pair<QuickAction, String>>()
     @Volatile var clearCount = 0
+    @Volatile var lastActions: Set<QuickAction> = emptySet()
 
-    override suspend fun show(notifications: List<FortNotification>) {
+    override suspend fun show(notifications: List<FortNotification>, actions: Set<QuickAction>) {
         shown += notifications
+        lastActions = actions
+    }
+
+    override fun showActionFailed(action: QuickAction, noteId: String) {
+        failed += action to noteId
     }
 
     override fun cancel(notificationId: String) {
@@ -137,6 +144,16 @@ class FakeNotificationWork : NotificationWork {
     @Volatile var polling = false
     val followResponses = CopyOnWriteArrayList<Triple<String, String, Boolean>>()
     @Volatile var markAllReadCount = 0
+    val quickReplies = CopyOnWriteArrayList<Pair<String, String>>()
+    val quickLikes = CopyOnWriteArrayList<String>()
+
+    override fun enqueueQuickReply(noteId: String, text: String) {
+        quickReplies += noteId to text
+    }
+
+    override fun enqueueQuickLike(noteId: String) {
+        quickLikes += noteId
+    }
 
     override fun schedulePolling() {
         polling = true

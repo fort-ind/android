@@ -60,6 +60,7 @@ data class FortNotification(
     val title: String?,
     val body: String?,
     val isDirect: Boolean = false,
+    val hasMyReaction: Boolean = false,
 ) {
     val webUrl: String?
         get() = when {
@@ -91,6 +92,7 @@ fun parseNotification(json: JSONObject): FortNotification? {
         title = json.optStringOrNull("header"),
         body = json.optStringOrNull("body") ?: json.optStringOrNull("reason") ?: json.optStringOrNull("message"),
         isDirect = note?.optStringOrNull("visibility") == DIRECT_VISIBILITY,
+        hasMyReaction = note?.optStringOrNull("myReaction") != null,
     )
 }
 

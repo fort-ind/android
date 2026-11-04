@@ -1,5 +1,7 @@
 package com.fortind.zenith.ui.feed
 
+import com.fortind.zenith.timeline.Visibility
+import com.fortind.zenith.timeline.renoteVisibilities
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -24,6 +26,7 @@ import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.net.isRateLimited
 import com.fortind.zenith.timeline.Note
+import com.fortind.zenith.timeline.NoteCollection
 import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.NoteSource
 import com.fortind.zenith.timeline.NoteUpdate
@@ -120,6 +123,7 @@ class FeedViewModel(
 
     private val active = MutableStateFlow(false)
     private val selected = MutableStateFlow(TimelineKind.Home)
+    private val collection = MutableStateFlow<NoteCollection?>(null)
     private val visible = MutableStateFlow<Set<String>>(emptySet())
     private val atTop = TimelineKind.entries.associateWith { true }.toMutableMap()
     private val loadJobs = HashMap<TimelineKind, Job>()
@@ -173,12 +177,28 @@ class FeedViewModel(
         if (timeline.status == TimelineStatus.Idle) loadFirstPage(kind)
     }
 
+    fun selectCollection(next: NoteCollection?) {
+        if (collection.value == next) {
+            if (selected.value == TimelineKind.Lists && _uiState.value.timeline(TimelineKind.Lists).status == TimelineStatus.Idle) loadFirstPage(TimelineKind.Lists)
+            return
+        }
+        loadJobs[TimelineKind.Lists]?.cancel()
+        collection.value = next
+        _uiState.update { it.copy(collection = next) }
+        updateTimeline(TimelineKind.Lists) { TimelineState(status = if (token == null) TimelineStatus.SignInRequired else TimelineStatus.Idle) }
+        atTop[TimelineKind.Lists] = true
+        if (selected.value == TimelineKind.Lists) {
+            loadFirstPage(TimelineKind.Lists)
+            _events.trySend(FeedEvent.ScrollToTop(TimelineKind.Lists))
+        }
+    }
+
     fun refresh() {
         val kind = selected.value
         val timeline = _uiState.value.timeline(kind)
         when (timeline.status) {
             TimelineStatus.Ready -> if (!timeline.refreshing) {
-                if (timeline.items.isEmpty() || timeline.gap) reload(kind) else catchUp(kind, toTop = true)
+                if (timeline.items.isEmpty() || timeline.gap || kind.oneNotePerPerson) reload(kind) else catchUp(kind, toTop = true)
             }
             TimelineStatus.Failed, TimelineStatus.Idle, TimelineStatus.Unavailable -> loadFirstPage(kind)
             TimelineStatus.Loading, TimelineStatus.SignInRequired -> Unit
@@ -417,21 +437,148 @@ class FeedViewModel(
         }
     }
 
-    fun renote(noteId: String) {
+    fun renote(noteId: String, visibility: Visibility? = null) {
         val token = token ?: return requireSignIn()
         val note = findAnywhere(noteId) ?: return
-        if (!note.canRenote(myUserId) || noteId in _uiState.value.renoted) return
+        val allowed = note.renoteVisibilities(myUserId)
+        val chosen = visibility ?: note.visibility
+        if (chosen !in allowed || noteId in _uiState.value.renoted) return
         _uiState.update { it.copy(renoted = it.renoted + noteId) }
         mutateEverywhere(noteId) { it.copy(renoteCount = it.renoteCount + 1) }
+        forgetThreadRenotes(noteId)
         viewModelScope.launch {
             try {
-                api.renote(token, noteId, note.visibility, note.localOnly)
+                api.renote(token, noteId, chosen, note.localOnly)
             } catch (e: IOException) {
                 _uiState.update { it.copy(renoted = it.renoted - noteId) }
                 mutateEverywhere(noteId) { it.copy(renoteCount = (it.renoteCount - 1).coerceAtLeast(0)) }
-                handleFailure(e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.RenoteFailed) }
+                handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.RenoteFailed) }
             }
         }
+    }
+
+    fun toggleThreadMute(noteId: String) {
+        val token = token ?: return requireSignIn()
+        val muted = noteId in _uiState.value.threadMuted
+        _uiState.update { it.copy(threadMuted = if (muted) it.threadMuted - noteId else it.threadMuted + noteId) }
+        viewModelScope.launch {
+            try {
+                if (muted) api.unmuteThread(token, noteId) else api.muteThread(token, noteId)
+                _events.trySend(if (muted) FeedEvent.ThreadUnmuted else FeedEvent.ThreadMuted)
+            } catch (e: IOException) {
+                _uiState.update { it.copy(threadMuted = if (muted) it.threadMuted + noteId else it.threadMuted - noteId) }
+                handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.ThreadMuteFailed) }
+            }
+        }
+    }
+
+    fun togglePin(noteId: String) {
+        val token = token ?: return requireSignIn()
+        val pinned = noteId in _uiState.value.pinned
+        viewModelScope.launch {
+            try {
+                session.applyUpdatedUser(if (pinned) api.unpin(token, noteId) else api.pin(token, noteId))
+                _events.trySend(if (pinned) FeedEvent.NoteUnpinned else FeedEvent.NotePinned)
+            } catch (e: HttpStatusException) {
+                when (e.apiErrorCode) {
+                    ApiErrorCodes.ALREADY_PINNED -> session.refreshUser()
+                    ApiErrorCodes.PIN_LIMIT_EXCEEDED -> _events.trySend(FeedEvent.PinLimitReached)
+                    else -> handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.PinFailed) }
+                }
+            } catch (e: IOException) {
+                handleFailure(e) { _events.trySend(FeedEvent.PinFailed) }
+            }
+        }
+    }
+
+    fun loadThreadRenotes(more: Boolean = false) {
+        val thread = _uiState.value.thread ?: return
+        val current = thread.renotes
+        if (!canLoadPeople(current, more)) return
+        val noteId = thread.noteId
+        updateThreadPeople(noteId, null, renotes = true) { it.loadingPage(more) }
+        viewModelScope.launch {
+            try {
+                val page = api.renotesOf(token, noteId, current.rows.lastOrNull()?.pagingId.takeIf { more }, THREAD_PEOPLE_PAGE)
+                val rows = page.map { ThreadPerson(it.id, it.user) }
+                updateThreadPeople(noteId, null, renotes = true) { it.withPage(rows, more) }
+            } catch (e: IOException) {
+                updateThreadPeople(noteId, null, renotes = true) { it.failedPage() }
+                handleFailure(e) {}
+            }
+        }
+    }
+
+    fun loadThreadReactions(reaction: String?, more: Boolean = false) {
+        val thread = _uiState.value.thread ?: return
+        val current = thread.reactions[reaction] ?: ThreadPeople()
+        if (!canLoadPeople(current, more)) return
+        val noteId = thread.noteId
+        updateThreadPeople(noteId, reaction, renotes = false) { it.loadingPage(more) }
+        viewModelScope.launch {
+            try {
+                val type = reaction?.let { key -> Reactions.toApi(key, instance.emojis.value?.names) ?: key }
+                val page = api.reactionsOn(token, noteId, type, current.rows.lastOrNull()?.pagingId.takeIf { more }, THREAD_PEOPLE_PAGE)
+                val rows = page.map { ThreadPerson(it.id, it.user, it.reaction) }
+                updateThreadPeople(noteId, reaction, renotes = false) { it.withPage(rows, more) }
+            } catch (e: IOException) {
+                updateThreadPeople(noteId, reaction, renotes = false) { it.failedPage() }
+                handleFailure(e) {}
+            }
+        }
+    }
+
+    private fun canLoadPeople(current: ThreadPeople, more: Boolean): Boolean = if (more) {
+        current.status == TimelineStatus.Ready && !current.loadingMore && !current.endReached && current.rows.isNotEmpty()
+    } else {
+        current.status != TimelineStatus.Loading
+    }
+
+    private fun ThreadPeople.loadingPage(more: Boolean) = if (more) copy(loadingMore = true) else copy(status = TimelineStatus.Loading)
+
+    private fun ThreadPeople.failedPage() = copy(status = if (rows.isEmpty()) TimelineStatus.Failed else TimelineStatus.Ready, loadingMore = false)
+
+    private fun ThreadPeople.withPage(page: List<ThreadPerson>, more: Boolean): ThreadPeople {
+        val known = if (more) rows.mapTo(HashSet()) { it.pagingId } else HashSet()
+        val fresh = page.filter { known.add(it.pagingId) }
+        return ThreadPeople(
+            status = TimelineStatus.Ready,
+            rows = if (more) rows + fresh else fresh,
+            endReached = page.isEmpty(),
+        )
+    }
+
+    private fun updateThreadPeople(noteId: String, reaction: String?, renotes: Boolean, transform: (ThreadPeople) -> ThreadPeople) {
+        val apply = { thread: ThreadState ->
+            if (renotes) {
+                thread.copy(renotes = transform(thread.renotes))
+            } else {
+                thread.copy(reactions = thread.reactions + (reaction to transform(thread.reactions[reaction] ?: ThreadPeople())))
+            }
+        }
+        _uiState.update { state ->
+            val thread = state.thread
+            if (thread?.noteId == noteId) state.copy(thread = apply(thread)) else state
+        }
+        threadCache[noteId]?.let { threadCache[noteId] = apply(it) }
+    }
+
+    private fun forgetThreadRenotes(noteId: String) {
+        val clear = { thread: ThreadState -> thread.copy(renotes = ThreadPeople()) }
+        _uiState.update { state ->
+            val thread = state.thread
+            if (thread?.noteId == noteId) state.copy(thread = clear(thread)) else state
+        }
+        threadCache[noteId]?.let { threadCache[noteId] = clear(it) }
+    }
+
+    private fun forgetThreadReactions(noteId: String) {
+        val clear = { thread: ThreadState -> thread.copy(reactions = emptyMap()) }
+        _uiState.update { state ->
+            val thread = state.thread
+            if (thread?.noteId == noteId) state.copy(thread = clear(thread)) else state
+        }
+        threadCache[noteId]?.let { threadCache[noteId] = clear(it) }
     }
 
     fun unrenote(noteId: String) {
@@ -454,13 +601,14 @@ class FeedViewModel(
             )
         }
         mutateEverywhere(noteId) { it.copy(renoteCount = (it.renoteCount - 1).coerceAtLeast(0)) }
+        forgetThreadRenotes(noteId)
         viewModelScope.launch {
             try {
                 api.unrenote(token, noteId)
             } catch (e: IOException) {
                 _uiState.update { it.copy(renoted = it.renoted + noteId) }
                 mutateEverywhere(noteId) { it.copy(renoteCount = it.renoteCount + 1) }
-                handleFailure(e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.RenoteFailed) }
+                handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.RenoteFailed) }
             }
         }
     }
@@ -494,7 +642,7 @@ class FeedViewModel(
             refreshPoll(token, noteId)
             if (code == ApiErrorCodes.ALREADY_EXPIRED) _events.trySend(FeedEvent.PollEnded)
         } else {
-            handleFailure(error) { _events.trySend(if (error.isRateLimited) FeedEvent.RateLimited else FeedEvent.PollVoteFailed) }
+            handleNoteFailure(noteId, error) { _events.trySend(if (error.isRateLimited) FeedEvent.RateLimited else FeedEvent.PollVoteFailed) }
         }
     }
 
@@ -513,8 +661,13 @@ class FeedViewModel(
         _uiState.update { it.copy(bookmarkChecks = it.bookmarkChecks + noteId) }
         viewModelScope.launch {
             try {
-                val bookmarked = api.isBookmarked(token, noteId)
-                _uiState.update { it.copy(bookmarked = if (bookmarked) it.bookmarked + noteId else it.bookmarked - noteId) }
+                val flags = api.noteFlags(token, noteId)
+                _uiState.update { state ->
+                    state.copy(
+                        bookmarked = if (flags.isBookmarked) state.bookmarked + noteId else state.bookmarked - noteId,
+                        threadMuted = if (flags.isThreadMuted) state.threadMuted + noteId else state.threadMuted - noteId,
+                    )
+                }
             } catch (e: IOException) {
                 handleFailure(e) {}
             } finally {
@@ -535,7 +688,7 @@ class FeedViewModel(
                 _events.trySend(if (remove) FeedEvent.BookmarkRemoved else FeedEvent.Bookmarked)
             } catch (e: IOException) {
                 _uiState.update { it.copy(bookmarked = if (remove) it.bookmarked + noteId else it.bookmarked - noteId) }
-                handleFailure(e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.BookmarkFailed) }
+                handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.BookmarkFailed) }
             }
         }
     }
@@ -604,7 +757,7 @@ class FeedViewModel(
         }
     }
 
-    private val NoteListKey.needsToken: Boolean get() = this == NoteListKey.Bookmarks
+    private val NoteListKey.needsToken: Boolean get() = this == NoteListKey.Bookmarks || this is NoteListKey.Search
 
     private fun onListPage(key: NoteListKey, notes: List<Note>) {
         if (key == NoteListKey.Bookmarks) _uiState.update { state -> state.copy(bookmarked = state.bookmarked + notes.map { it.id }) }
@@ -828,6 +981,7 @@ class FeedViewModel(
         TimelineKind.entries.forEach { atTop[it] = true }
         visible.value = emptySet()
         muteFilter = WordMuteFilter(wordMutesOf(session.state.value), (next as? FeedAuth.SignedIn)?.userId, patternGuard)
+        collection.value = null
         settingsReadAt = clock()
         val signedIn = next is FeedAuth.SignedIn
         val initial = if (signedIn) TimelineKind.Home else TimelineKind.Local
@@ -847,10 +1001,11 @@ class FeedViewModel(
         loadFirstPage(selected.value)
         coroutineScope {
             launch { watchWordMutes() }
+            launch { watchPinned() }
             launch {
-                combine(active, selected) { isActive, kind -> isActive to kind }
+                combine(active, selected, collection) { isActive, kind, chosen -> Triple(isActive, kind, chosen) }
                     .distinctUntilChanged()
-                    .collectLatest { (isActive, kind) -> if (isActive && canStream(kind)) listen(kind) }
+                    .collectLatest { (isActive, kind, chosen) -> if (isActive && canStream(kind, chosen)) listen(kind, chosen) }
             }
             launch {
                 active.collectLatest { isActive ->
@@ -860,15 +1015,20 @@ class FeedViewModel(
         }
     }
 
-    private fun canStream(kind: TimelineKind): Boolean = !kind.requiresAuth || token != null
+    private fun canStream(kind: TimelineKind, chosen: NoteCollection?): Boolean = when {
+        kind == TimelineKind.Lists -> chosen != null && token != null
+        kind.channel == null -> false
+        else -> !kind.requiresAuth || token != null
+    }
 
     private fun capturedIds(): Flow<Set<String>> = combine(visible, _uiState.map { state ->
         state.thread?.notes?.flatMap { it.captureIds.toList() }?.toSet().orEmpty()
     }.distinctUntilChanged()) { shown, thread -> (shown + thread).take(MAX_CAPTURED).toSet() }
         .distinctUntilChanged()
 
-    private suspend fun listen(kind: TimelineKind) {
-        stream.events(token, kind).collect { event ->
+    private suspend fun listen(kind: TimelineKind, chosen: NoteCollection?) {
+        val events = if (kind == TimelineKind.Lists) stream.collectionEvents(requireNotNull(token), requireNotNull(chosen)) else stream.events(token, kind)
+        events.collect { event ->
             when (event) {
                 TimelineStreamEvent.Connected -> {
                     val timeline = _uiState.value.timeline(kind)
@@ -900,10 +1060,17 @@ class FeedViewModel(
         return withContext(muteDispatcher) { filter.apply(notes) }
     }
 
+    private suspend fun rawTimeline(kind: TimelineKind, untilId: String?, sinceId: String?, limit: Int): List<Note> {
+        if (kind != TimelineKind.Lists) return api.timeline(token, kind, untilId = untilId, sinceId = sinceId, limit = limit)
+        val signedIn = token ?: return emptyList()
+        val chosen = collection.value ?: return emptyList()
+        return api.collectionNotes(signedIn, chosen, untilId, sinceId, limit)
+    }
+
     private suspend fun fetchTimeline(kind: TimelineKind, untilId: String?): TimelinePage {
         var cursor = untilId
         repeat(HARD_MUTE_EXTRA_PAGES + 1) {
-            val page = api.timeline(token, kind, untilId = cursor, sinceId = null, limit = PAGE_SIZE)
+            val page = rawTimeline(kind, untilId = cursor, sinceId = null, limit = PAGE_SIZE)
             if (page.isEmpty()) return TimelinePage(emptyList(), emptyMap(), cursor, ended = true)
             cursor = page.last().id
             val muted = applyMutes(page)
@@ -922,6 +1089,12 @@ class FeedViewModel(
 
     private fun wordMutesOf(state: SessionState): WordMutes =
         (state as? SessionState.SignedIn)?.user?.settings?.wordMutes ?: WordMutes()
+
+    private suspend fun watchPinned() {
+        session.state.map { state -> (state as? SessionState.SignedIn)?.user?.pinnedNoteIds.orEmpty().toSet() }
+            .distinctUntilChanged()
+            .collect { ids -> _uiState.update { it.copy(pinned = ids) } }
+    }
 
     private suspend fun watchWordMutes() {
         session.state.map(::wordMutesOf).distinctUntilChanged().collect { mutes ->
@@ -970,6 +1143,7 @@ class FeedViewModel(
     private fun loadFirstPage(kind: TimelineKind) {
         val timeline = _uiState.value.timeline(kind)
         if (timeline.status == TimelineStatus.SignInRequired) return
+        if (kind == TimelineKind.Lists && collection.value == null) return
         loadJobs[kind]?.cancel()
         updateTimeline(kind) { it.copy(status = TimelineStatus.Loading, loadMoreFailed = false) }
         val currentAuth = auth
@@ -1009,10 +1183,11 @@ class FeedViewModel(
             ?: return reload(kind)
         if (toTop) updateTimeline(kind) { it.copy(refreshing = true) }
         val currentAuth = auth
+        val chosen = collection.value
         viewModelScope.launch {
             try {
-                val page = api.timeline(token, kind, untilId = null, sinceId = newest.id, limit = CATCH_UP_LIMIT)
-                if (auth != currentAuth) return@launch
+                val page = rawTimeline(kind, untilId = null, sinceId = newest.id, limit = CATCH_UP_LIMIT)
+                if (auth != currentAuth || collection.value != chosen) return@launch
                 val overflow = page.size >= CATCH_UP_LIMIT
                 if (toTop && overflow) {
                     reload(kind)
@@ -1075,6 +1250,7 @@ class FeedViewModel(
         val noteId = note.id
         if (!confirmedReactions.containsKey(noteId)) confirmedReactions[noteId] = note.myReaction
         mutateEverywhere(noteId) { it.withMyReaction(desired) }
+        forgetThreadReactions(noteId)
         reactionJobs[noteId]?.cancel()
         reactionJobs[noteId] = viewModelScope.launch {
             delay(reactionDebounceMs)
@@ -1105,7 +1281,7 @@ class FeedViewModel(
         } catch (e: IOException) {
             val restore = confirmedReactions.remove(noteId)
             mutateEverywhere(noteId) { it.withMyReaction(restore) }
-            handleFailure(e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.ReactionFailed) }
+            handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.ReactionFailed) }
         }
     }
 
@@ -1168,6 +1344,15 @@ class FeedViewModel(
         _uiState.update { state -> state.copy(lists = state.lists + (key to transform(state.list(key)))) }
     }
 
+    private fun handleNoteFailure(noteId: String, error: IOException, onOther: () -> Unit) {
+        if (error is HttpStatusException && error.apiErrorCode == ApiErrorCodes.NO_SUCH_NOTE) {
+            removeEverywhere(noteId)
+            _events.trySend(FeedEvent.NoteUnavailable)
+        } else {
+            handleFailure(error, onOther)
+        }
+    }
+
     private fun handleFailure(error: IOException, onOther: () -> Unit) {
         when (error) {
             is MissingPermissionException -> _uiState.update { it.copy(needsPermission = true) }
@@ -1186,6 +1371,7 @@ class FeedViewModel(
         const val MAX_SECONDARY_LISTS = 16
         const val REACTION_DEBOUNCE_MS = 600L
         const val HARD_MUTE_EXTRA_PAGES = 4
+        const val THREAD_PEOPLE_PAGE = 20
         const val SETTINGS_REFRESH_MS = 15 * 60 * 1_000L
 
         val Factory = viewModelFactory {

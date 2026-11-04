@@ -6,6 +6,17 @@
 
 package com.fortind.zenith.ui.nav
 
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.annotation.StringRes
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tag
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.fortind.zenith.timeline.TimelineKind
+import com.fortind.zenith.ui.discovery.HashtagsPage
+import com.fortind.zenith.ui.discovery.SearchResultsPage
+import com.fortind.zenith.ui.discovery.TagPage
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.togetherWith
@@ -103,6 +114,7 @@ private const val MAX_BADGE_COUNT = 99
 private val ListPaneWidth = 440.dp
 private val RailActionMargin = 20.dp
 private val CollapsedRailWidth = 96.dp
+private val SecondaryRailMinHeight = 720.dp
 
 @Composable
 fun AppShell(
@@ -110,6 +122,8 @@ fun AppShell(
     onRequestedDestinationHandled: () -> Unit,
     requestedThreadId: String?,
     onRequestedThreadHandled: () -> Unit,
+    requestedReplyId: String?,
+    onRequestedReplyHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
     val stacks = rememberAppBackStacks()
@@ -156,12 +170,16 @@ fun AppShell(
     LaunchedEffect(hideBar) { if (hideBar) navigationState.hide() else navigationState.show() }
 
     SocialHost(
+        requestedReplyId = requestedReplyId,
+        onRequestedReplyHandled = onRequestedReplyHandled,
         selectedNoteId = stacks.openThreadId?.takeIf { twoPane },
         onOpenThread = { note -> stacks.push(AppRoute.Thread(note.id)) },
         onOpenPerson = { userId -> stacks.push(AppRoute.Person(userId)) },
         onOpenOwnProfile = { stacks.select(AppDestination.PROFILE) },
         onOpenHandle = { handle -> stacks.push(AppRoute.PersonHandle(handle.username, handle.host)) },
+        onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
     ) { ui ->
+        val feedState by ui.feed.uiState.collectAsStateWithLifecycle()
         val feedActive = stacks.tab == AppDestination.HOME || stacks.current.any { it is AppRoute.Thread }
         LifecycleStartEffect(ui.feed, feedActive) {
             ui.feed.setActive(feedActive)
@@ -206,6 +224,15 @@ fun AppShell(
                                 true
                             }
                             else -> false
+                        }
+                    }
+                    AppShortcut.Find -> {
+                        if (stacks.tab == AppDestination.SETTINGS) {
+                            false
+                        } else {
+                            stacks.showRoot(AppDestination.HOME)
+                            ui.discovery.requestSearch()
+                            true
                         }
                     }
                     AppShortcut.Dismiss -> stacks.pop()
@@ -267,6 +294,25 @@ fun AppShell(
                         },
                     )
                 }
+                if (railExpanded && LocalWindowInfo.current.containerDpSize.height >= SecondaryRailMinHeight) {
+                    RailSecondaryItem(R.string.nav_search, Icons.Default.Search, "nav:search", suiteType) {
+                        stacks.showRoot(AppDestination.HOME)
+                        ui.discovery.requestSearch()
+                    }
+                    RailSecondaryItem(R.string.nav_lists, Icons.AutoMirrored.Filled.FormatListBulleted, "nav:lists", suiteType) {
+                        stacks.showRoot(AppDestination.HOME)
+                        ui.feed.select(TimelineKind.Lists)
+                    }
+                    RailSecondaryItem(R.string.nav_hashtags, Icons.Default.Tag, "nav:hashtags", suiteType) {
+                        stacks.openIn(AppDestination.HOME, AppRoute.Hashtags)
+                    }
+                    if (feedState.signedIn) {
+                        RailSecondaryItem(R.string.nav_bookmarks, Icons.Default.BookmarkBorder, "nav:bookmarks", suiteType) {
+                            ui.pageKeys.bookmarksRequested = true
+                            stacks.showRoot(AppDestination.PROFILE)
+                        }
+                    }
+                }
             },
         ) {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -285,6 +331,24 @@ fun AppShell(
             }
         }
     }
+}
+
+@Composable
+private fun RailSecondaryItem(
+    @StringRes labelRes: Int,
+    icon: ImageVector,
+    tag: String,
+    suiteType: NavigationSuiteType,
+    onClick: () -> Unit,
+) {
+    NavigationSuiteItem(
+        selected = false,
+        onClick = onClick,
+        navigationSuiteType = suiteType,
+        modifier = Modifier.testTag(tag),
+        icon = { Icon(imageVector = icon, contentDescription = stringResource(labelRes)) },
+        label = { Text(stringResource(labelRes)) },
+    )
 }
 
 @Composable
@@ -402,6 +466,9 @@ private fun AppNavDisplay(
                                     showComposeButton = showHomeComposeButton,
                                     onBrowseGames = browseGames,
                                     onSeeAllFavorites = seeAllFavorites,
+                                    onOpenSearch = { query -> stacks.push(AppRoute.Search(query)) },
+                                    onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+                                    onOpenHandle = { username, host -> stacks.push(AppRoute.PersonHandle(username, host)) },
                                 )
                             }
                         }
@@ -478,6 +545,21 @@ private fun AppNavDisplay(
                                 )
                             }
                         }
+                        is AppRoute.Tag -> NavEntry(key = route, metadata = listMetadata) {
+                            Padded(contentPadding) { TagPage(route.tag, ui, onBack = { stacks.pop() }) }
+                        }
+                        is AppRoute.Search -> NavEntry(key = route, metadata = listMetadata) {
+                            Padded(contentPadding) { SearchResultsPage(route.query, ui, onBack = { stacks.pop() }) }
+                        }
+                        AppRoute.Hashtags -> NavEntry(route) {
+                            Padded(contentPadding) {
+                                HashtagsPage(
+                                    discovery = ui.discovery,
+                                    onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+                                    onBack = { stacks.pop() },
+                                )
+                            }
+                        }
                         is AppRoute.Thread -> NavEntry(
                             key = route,
                             metadata = ListDetailSceneStrategy.detailPane(),
@@ -494,6 +576,8 @@ private fun AppNavDisplay(
                                     onLoadMoreReplies = ui.feed::loadMoreReplies,
                                     onToggleBranch = ui.feed::toggleBranch,
                                     onLoadMoreBranch = ui.feed::loadMoreBranch,
+                                    onLoadRenotes = ui.feed::loadThreadRenotes,
+                                    onLoadReactions = ui.feed::loadThreadReactions,
                                 )
                             }
                         }

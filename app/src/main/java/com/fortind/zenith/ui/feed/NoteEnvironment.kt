@@ -1,5 +1,7 @@
 package com.fortind.zenith.ui.feed
 
+import com.fortind.zenith.timeline.LinkPreviewSource
+import com.fortind.zenith.timeline.Visibility
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,6 +49,9 @@ class NoteCallbacks(
     val hideAuthorRenotes: (Note) -> Unit,
     val blockAuthor: (Note) -> Unit,
     val report: (Note) -> Unit,
+    val renoteAs: (Note, Visibility) -> Unit = { _, _ -> },
+    val togglePin: (Note) -> Unit = {},
+    val toggleThreadMute: (Note) -> Unit = {},
 )
 
 class NoteEnvironment(
@@ -62,6 +67,9 @@ class NoteEnvironment(
     val mfm: MfmEnvironment,
     val selectedNoteId: String?,
     val playback: FeedPlayback,
+    val pinned: Set<String> = emptySet(),
+    val threadMuted: Set<String> = emptySet(),
+    val linkPreviews: LinkPreviewSource? = null,
 ) {
     val animate: Boolean get() = mfm.animate
 

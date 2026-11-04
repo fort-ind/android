@@ -41,6 +41,31 @@
             android:theme="@style/Theme.Zenith"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Zenith.Share"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".notifications.NotificationActionReceiver"
             android:exported="false" />

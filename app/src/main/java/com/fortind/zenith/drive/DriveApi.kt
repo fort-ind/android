@@ -1,5 +1,8 @@
 package com.fortind.zenith.drive
 
+import com.fortind.zenith.net.objects
+import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.translatingAuthErrors
 import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.media.LocalMedia
 import com.fortind.zenith.media.MediaReader
@@ -36,7 +39,16 @@ interface DriveApi {
     suspend fun update(token: String, fileId: String, altText: String, isSensitive: Boolean)
 
     suspend fun delete(token: String, fileId: String)
+
+    suspend fun files(token: String, folderId: String?, untilId: String?, limit: Int): List<NoteFile>
+
+    suspend fun folders(token: String, folderId: String?): List<DriveFolder>
 }
+
+data class DriveFolder(val id: String, val name: String)
+
+const val DRIVE_PAGE_SIZE = 30
+private const val DRIVE_FOLDER_LIMIT = 100
 
 class HttpDriveApi(
     private val http: FortHttp,
@@ -48,6 +60,22 @@ class HttpDriveApi(
         .writeTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
+
+    override suspend fun files(token: String, folderId: String?, untilId: String?, limit: Int): List<NoteFile> {
+        val body = JSONObject().put("i", token).put("limit", limit).put("folderId", folderId ?: JSONObject.NULL)
+        untilId?.let { body.put("untilId", it) }
+        val array = translatingAuthErrors { http.postJsonArray("/api/drive/files", body) }
+        return array.objects().mapNotNull(::parseNoteFile)
+    }
+
+    override suspend fun folders(token: String, folderId: String?): List<DriveFolder> {
+        val body = JSONObject().put("i", token).put("limit", DRIVE_FOLDER_LIMIT).put("folderId", folderId ?: JSONObject.NULL)
+        val array = translatingAuthErrors { http.postJsonArray("/api/drive/folders", body) }
+        return array.objects().mapNotNull { folder ->
+            val id = folder.optStringOrNull("id") ?: return@mapNotNull null
+            DriveFolder(id, folder.optStringOrNull("name").orEmpty())
+        }
+    }
 
     override suspend fun upload(token: String, media: LocalMedia, onProgress: (Float) -> Unit): NoteFile {
         val body = MultipartBody.Builder()

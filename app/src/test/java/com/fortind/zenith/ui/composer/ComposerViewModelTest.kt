@@ -1,5 +1,11 @@
 package com.fortind.zenith.ui.composer
 
+import com.fortind.zenith.composer.MAX_POLL_CHOICES
+import com.fortind.zenith.composer.MIN_POLL_CHOICES
+import com.fortind.zenith.composer.SharedContent
+import com.fortind.zenith.composer.failedReplySlot
+import com.fortind.zenith.composer.replyText
+import com.fortind.zenith.drive.DriveFolder
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.lifecycle.viewModelScope
@@ -52,11 +58,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -145,6 +153,18 @@ class ComposerViewModelTest {
             )
         }
 
+        var driveFiles: List<NoteFile> = emptyList()
+        var driveFolders: List<DriveFolder> = emptyList()
+        val folderCalls = CopyOnWriteArrayList<String?>()
+
+        override suspend fun files(token: String, folderId: String?, untilId: String?, limit: Int): List<NoteFile> =
+            if (untilId == null) driveFiles else emptyList()
+
+        override suspend fun folders(token: String, folderId: String?): List<DriveFolder> {
+            folderCalls += folderId
+            return driveFolders
+        }
+
         override suspend fun update(token: String, fileId: String, altText: String, isSensitive: Boolean) {
             updates += Triple(fileId, altText, isSensitive)
         }
@@ -156,7 +176,12 @@ class ComposerViewModelTest {
 
     private class FakeReader : MediaReader {
         override fun describe(uri: String): LocalMedia? =
-            if (uri.contains("unreadable")) null else LocalMedia(uri, uri.substringAfterLast('/'), "image/jpeg", 1024L)
+            when {
+                uri.contains("unreadable") -> null
+                uri.endsWith(".pdf") -> LocalMedia(uri, uri.substringAfterLast('/'), "application/pdf", 1024L)
+                uri.contains("hostile") -> throw IllegalStateException("provider threw")
+                else -> LocalMedia(uri, uri.substringAfterLast('/'), "image/jpeg", 1024L)
+            }
 
         override fun open(uri: String): InputStream = throw UnsupportedOperationException()
     }
@@ -189,7 +214,8 @@ class ComposerViewModelTest {
         override suspend fun hashtags(token: String?, query: String, limit: Int): List<String> = emptyList()
     }
 
-    private class Fixture(maxText: Int, compress: Boolean, nowMillis: Long) {
+    private class Fixture(maxText: Int, compress: Boolean, nowMillis: Long, remindAltText: Boolean) {
+        val handles = HashMap<String, NoteUser>()
         val suggestionsApi = FakeSuggestionsApi()
         val engine = SuggestionEngine(suggestionsApi, { null }, { emptyList() })
         val session = UserSessionService(FakeTokenStore("token"), FakeUserApi())
@@ -204,11 +230,15 @@ class ComposerViewModelTest {
             session, api, drafts, FakeInstance(maxText), drive, FakeReader(), settings, compressor, sanitizer, engine,
             draftDebounceMs = DEBOUNCE_MS,
             clock = { now },
+            people = suggestionsApi,
+            resolveHandle = { _, username, _ -> handles[username] },
+            remindAltText = remindAltText,
+            mentionDebounceMs = 0,
         )
     }
 
-    private suspend fun fixture(maxText: Int = 3000, compress: Boolean = false, nowMillis: Long = 1_000L): Fixture {
-        val f = Fixture(maxText, compress, nowMillis).also { viewModels += it.viewModel }
+    private suspend fun fixture(maxText: Int = 3000, compress: Boolean = false, nowMillis: Long = 1_000L, remindAltText: Boolean = false): Fixture {
+        val f = Fixture(maxText, compress, nowMillis, remindAltText).also { viewModels += it.viewModel }
         f.session.restore()
         return f
     }
@@ -253,6 +283,254 @@ class ComposerViewModelTest {
         session.applyUpdatedUser(
             CurrentUser("me", "me", null, null, null, settings = AccountSettings(defaultCw = cw, defaultCwPriority = priority)),
         )
+    }
+
+    private fun ComposerViewModel.fillPoll(vararg choices: String) {
+        setPollEnabled(true)
+        while (pollChoices.size < choices.size) addPollChoice()
+        choices.forEachIndexed { index, choice -> pollChoices[index].text.setTextAndPlaceCursorAtEnd(choice) }
+        Snapshot.sendApplyNotifications()
+    }
+
+    private fun driveFile(id: String) = NoteFile(id, "$id.png", "image/png", "https://f/$id", null, null, false, null, null, null)
+
+    @Test
+    fun aPollIsEnoughToPostAndSendsItsEnd() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.fillPoll("a", "b")
+        f.viewModel.setPollEndsAfter(3_600_000)
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        val poll = f.api.createCalls.single().poll!!
+        assertEquals(listOf("a", "b"), poll.choices)
+        assertEquals(3_600_000L, poll.expiredAfterMillis)
+    }
+
+    @Test
+    fun anInvalidPollBlocksPosting() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("text")
+        f.viewModel.fillPoll("same", "same")
+
+        f.viewModel.submit()
+
+        assertTrue(f.api.createCalls.isEmpty())
+    }
+
+    @Test
+    fun pollChoicesStayWithinTheirLimits() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.setPollEnabled(true)
+        repeat(20) { f.viewModel.addPollChoice() }
+        assertEquals(MAX_POLL_CHOICES, f.viewModel.pollChoices.size)
+
+        while (f.viewModel.pollChoices.size > MIN_POLL_CHOICES) f.viewModel.removePollChoice(f.viewModel.pollChoices.last().id)
+        f.viewModel.removePollChoice(f.viewModel.pollChoices.last().id)
+        assertEquals(MIN_POLL_CHOICES, f.viewModel.pollChoices.size)
+    }
+
+    @Test
+    fun editingAPollWithVotesAsksFirst() = runTest {
+        val f = fixture()
+        val poll = Poll(listOf(PollChoice("a", 2, false), PollChoice("b", 0, false)), false, null)
+        val note = testNote("n1", user = testUser("me"), poll = poll)
+        f.viewModel.open(ComposerTarget.Edit("n1"), note)
+
+        f.viewModel.pollChoices[1].text.setTextAndPlaceCursorAtEnd("changed")
+        Snapshot.sendApplyNotifications()
+        f.viewModel.submit()
+
+        assertEquals(ComposerPrompt.PollResetsVotes, f.viewModel.uiState.value?.prompt)
+        assertTrue(f.api.editCalls.isEmpty())
+
+        f.viewModel.confirmPrompt()
+        f.viewModel.awaitSettled()
+        assertEquals(listOf("a", "changed"), f.api.editCalls.single().second.poll?.choices)
+    }
+
+    @Test
+    fun anUnchangedPollEditsWithoutAsking() = runTest {
+        val f = fixture()
+        val poll = Poll(listOf(PollChoice("a", 2, false), PollChoice("b", 0, false)), false, 500_000L)
+        f.viewModel.open(ComposerTarget.Edit("n1"), testNote("n1", user = testUser("me"), poll = poll))
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertEquals(500_000L, f.api.editCalls.single().second.poll?.expiresAtMillis)
+    }
+
+    @Test
+    fun theReactionLimitIsSentAndAnEditKeepsIt() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("text")
+        f.viewModel.setReactionAcceptance(ReactionAcceptance.LikeOnly)
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+        assertEquals(ReactionAcceptance.LikeOnly, f.api.createCalls.single().reactionAcceptance)
+
+        f.viewModel.open(ComposerTarget.Edit("n1"), testNote("n1", user = testUser("me"), reactionAcceptance = ReactionAcceptance.NonSensitiveOnly))
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+        assertEquals(ReactionAcceptance.NonSensitiveOnly, f.api.editCalls.single().second.reactionAcceptance)
+    }
+
+    @Test
+    fun directTurnsOffDontFederateAndSendsRecipients() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.setLocalOnly(true)
+        f.viewModel.type("psst")
+
+        f.viewModel.setVisibility(Visibility.Specified)
+        assertFalse(f.viewModel.uiState.value!!.localOnly)
+        f.viewModel.setLocalOnly(true)
+        assertFalse(f.viewModel.uiState.value!!.localOnly)
+
+        f.viewModel.addRecipient(testUser("u2", "sam"))
+        f.viewModel.addRecipient(testUser("u2", "sam"))
+        f.viewModel.addRecipient(testUser("me", "me"))
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertEquals(listOf("u2"), f.api.createCalls.single().visibleUserIds)
+    }
+
+    @Test
+    fun mentionedPeopleBecomeRecipientsUnlessRemoved() = runTest {
+        val f = fixture()
+        f.handles["sam"] = testUser("u2", "sam")
+        f.handles["lee"] = testUser("u3", "lee")
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.setVisibility(Visibility.Specified)
+        f.viewModel.type("hi @sam and @lee")
+
+        f.viewModel.uiState.first { it?.recipients?.size == 2 }
+        f.viewModel.removeRecipient("u3")
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertEquals(listOf("u2"), f.api.createCalls.single().visibleUserIds)
+    }
+
+    @Test
+    fun aPublicNoteDoesNotLookUpMentions() = runTest {
+        val f = fixture()
+        f.handles["sam"] = testUser("u2", "sam")
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("hi @sam")
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertTrue(f.api.createCalls.single().visibleUserIds.isEmpty())
+    }
+
+    @Test
+    fun aReplyAddressesEveryoneMentionedInTheParent() = runTest {
+        val f = fixture()
+        val parent = testNote("p1", user = testUser("u1")).copy(textMfm = MfmParser.parse("hi @sam"))
+
+        f.viewModel.open(ComposerTarget.Reply("p1"), parent)
+
+        assertEquals("@u1 @sam ", f.viewModel.text.text.toString())
+    }
+
+    @Test
+    fun aQuoteCanPostWithNoText() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.Quote("p1"), parent())
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+
+        assertEquals("p1", f.api.createCalls.single().renoteId)
+    }
+
+    @Test
+    fun drivePicksCarryAcrossFoldersAndAreNotOwned() = runTest {
+        val f = fixture()
+        f.drive.driveFolders = listOf(DriveFolder("d1", "Art"))
+        f.drive.driveFiles = listOf(driveFile("f1"), driveFile("f2"))
+        f.viewModel.open(ComposerTarget.NewPost, null)
+
+        f.viewModel.openDrive()
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready }
+        f.viewModel.toggleDriveFile(driveFile("f1"), slots = 16)
+        f.viewModel.openDriveFolder(DriveFolder("d1", "Art"))
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready && it.drive.path.size == 1 }
+        f.viewModel.toggleDriveFile(driveFile("f2"), slots = 16)
+        assertEquals(listOf(null, "d1"), f.drive.folderCalls.toList())
+        assertEquals(2, f.viewModel.uiState.value?.drive?.selected?.size)
+
+        f.viewModel.attachDriveSelection()
+
+        val state = f.viewModel.uiState.value!!
+        assertNull(state.drive)
+        assertEquals(listOf("f1", "f2"), state.attachments.map { it.remote?.id })
+
+        f.viewModel.removeAttachment(state.attachments.first().localId)
+        f.viewModel.close(keepDraft = false)
+        yield()
+        assertTrue(f.drive.deleted.isEmpty())
+    }
+
+    @Test
+    fun aDriveTileMenuOpensAndClosesWithoutClosingThePicker() = runTest {
+        val f = fixture()
+        f.drive.driveFiles = listOf(driveFile("f1"))
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.openDrive()
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready }
+
+        f.viewModel.openDriveMenu("f1")
+        assertEquals("f1", f.viewModel.uiState.value?.drive?.menuFileId)
+        f.viewModel.closeDriveMenu()
+
+        assertEquals(null, f.viewModel.uiState.value?.drive?.menuFileId)
+        assertEquals(DriveStatus.Ready, f.viewModel.uiState.value?.drive?.status)
+    }
+
+    @Test
+    fun theDrivePickerStopsAtTheFreeSlots() = runTest {
+        val f = fixture()
+        f.drive.driveFiles = listOf(driveFile("f1"), driveFile("f2"))
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.openDrive()
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready }
+
+        f.viewModel.toggleDriveFile(driveFile("f1"), slots = 1)
+        f.viewModel.toggleDriveFile(driveFile("f2"), slots = 1)
+
+        assertEquals(listOf("f1"), f.viewModel.uiState.value?.drive?.selected?.map { it.id })
+    }
+
+    @Test
+    fun missingAltTextAsksOnceThenPosts() = runTest {
+        val f = fixture(remindAltText = true)
+        f.drive.driveFiles = listOf(driveFile("f1"))
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.openDrive()
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready }
+        f.viewModel.toggleDriveFile(driveFile("f1"), slots = 16)
+        f.viewModel.attachDriveSelection()
+
+        f.viewModel.submit()
+        assertEquals(ComposerPrompt.MissingAltText, f.viewModel.uiState.value?.prompt)
+        assertTrue(f.api.createCalls.isEmpty())
+
+        f.viewModel.dismissPrompt()
+        assertNull(f.viewModel.uiState.value?.prompt)
+
+        f.viewModel.submit()
+        f.viewModel.confirmPrompt()
+        f.viewModel.awaitSettled()
+        assertEquals(1, f.api.createCalls.size)
     }
 
     @Test
@@ -1017,6 +1295,102 @@ class ComposerViewModelTest {
 
         assertTrue(f.viewModel.hasUnsavedChanges())
         f.drive.gate!!.complete(Unit)
+    }
+
+    @Test
+    fun aSharedLinkOpensWithTheCaretOnTheEmptyFirstLine() = runTest {
+        val f = fixture()
+
+        f.viewModel.openShare(SharedContent("\nTitle\nhttps://a.example/", caretAtStart = true, uris = emptyList()))
+        f.viewModel.uiState.first { it != null }
+
+        assertEquals("\nTitle\nhttps://a.example/", f.viewModel.text.text.toString())
+        assertEquals(0, f.viewModel.text.selection.start)
+        assertFalse(f.viewModel.hasUnsavedChanges())
+    }
+
+    @Test
+    fun plainSharedTextKeepsTheCaretAtTheEnd() = runTest {
+        val f = fixture()
+
+        f.viewModel.openShare(SharedContent("hello", caretAtStart = false, uris = emptyList()))
+        f.viewModel.uiState.first { it != null }
+
+        assertEquals(5, f.viewModel.text.selection.start)
+    }
+
+    @Test
+    fun aShareIsNeverSavedAsADraft() = runTest {
+        val f = fixture()
+        f.drafts.drafts["me/new"] = ComposerDraft(text = "my own draft")
+
+        f.viewModel.openShare(SharedContent("shared", caretAtStart = false, uris = emptyList()))
+        f.viewModel.uiState.first { it != null }
+        f.viewModel.type("shared and edited")
+        withContext(Dispatchers.Default) { delay(DEBOUNCE_MS * 3) }
+        f.viewModel.close(keepDraft = true)
+
+        assertEquals(mapOf("me/new" to "my own draft"), f.drafts.drafts.mapValues { it.value.text })
+    }
+
+    @Test
+    fun sharedFilesUploadAtOnce() = runTest {
+        val f = fixture()
+
+        f.viewModel.openShare(SharedContent("", caretAtStart = false, uris = listOf("content://media/a.jpg", "content://media/b.jpg")))
+        f.viewModel.uiState.first { it != null && it.attachments.size == 2 }
+        f.viewModel.awaitUploads()
+
+        assertTrue(f.viewModel.uiState.value!!.attachments.all { it.owned && it.isReady })
+    }
+
+    @Test
+    fun filesThatAreNotMediaAreRefusedAndSaySo() = runTest {
+        val f = fixture()
+        val uris = listOf("content://media/a.jpg", "content://other/doc.pdf", "content://hostile/x", "content://unreadable/y")
+
+        f.viewModel.openShare(SharedContent("", caretAtStart = false, uris = uris))
+        val state = f.viewModel.uiState.first { it != null && it.attachments.isNotEmpty() }!!
+
+        assertEquals(listOf("a.jpg"), state.attachments.map { it.media.name })
+        assertEquals(ComposerFailure.UnsupportedShare, state.failure)
+    }
+
+    @Test
+    fun aRefusedFileSaysSoInTheComposer() = runTest {
+        val f = fixture()
+
+        f.viewModel.openShare(SharedContent("", caretAtStart = false, uris = emptyList(), refusedFiles = true))
+        val state = f.viewModel.uiState.first { it != null }!!
+
+        assertEquals(ComposerFailure.UnsupportedShare, state.failure)
+        assertTrue(state.attachments.isEmpty())
+    }
+
+    @Test
+    fun aFailedQuickReplyComesBackOnceWithItsPrefix() = runTest {
+        val f = fixture()
+        val note = parent()
+        f.drafts.drafts["me/${failedReplySlot(note.id)}"] = ComposerDraft(text = "typed in the shade")
+
+        f.viewModel.open(ComposerTarget.Reply(note.id), note)
+        val state = f.viewModel.uiState.first { it != null }!!
+
+        assertEquals(note.visibility, state.visibility)
+        assertEquals(replyText(note, "typed in the shade", "me"), f.viewModel.text.text.toString())
+        assertFalse(f.drafts.drafts.containsKey("me/${failedReplySlot(note.id)}"))
+    }
+
+    @Test
+    fun aFailedReplyToADirectNoteStaysDirect() = runTest {
+        val f = fixture()
+        val note = parent(visibility = Visibility.Specified)
+        f.drafts.drafts["me/${failedReplySlot(note.id)}"] = ComposerDraft(text = "private")
+
+        f.viewModel.open(ComposerTarget.Reply(note.id), note)
+        val state = f.viewModel.uiState.first { it != null }!!
+
+        assertEquals(Visibility.Specified, state.visibility)
     }
 
     private companion object {

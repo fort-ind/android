@@ -19,6 +19,8 @@ class AppShortcutsTest {
         assertNull(shortcutFor(KeyEvent.KEYCODE_1, command = false))
         assertNull(shortcutFor(KeyEvent.KEYCODE_N, command = false))
         assertNull(shortcutFor(KeyEvent.KEYCODE_R, command = false))
+        assertNull(shortcutFor(KeyEvent.KEYCODE_F, command = false))
+        assertEquals(AppShortcut.Find, shortcutFor(KeyEvent.KEYCODE_F, command = true))
     }
 
     @Test

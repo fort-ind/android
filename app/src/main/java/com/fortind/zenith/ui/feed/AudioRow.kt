@@ -43,7 +43,7 @@ import kotlinx.coroutines.delay
 private const val POSITION_TICK_MS = 250L
 
 @Stable
-private class PlayerProgress {
+internal class PlayerProgress {
     var isPlaying by mutableStateOf(false)
     var positionMs by mutableLongStateOf(0L)
     var durationMs by mutableLongStateOf(C.TIME_UNSET)
@@ -54,7 +54,7 @@ private class PlayerProgress {
 }
 
 @Composable
-private fun rememberPlayerProgress(player: Player?): PlayerProgress {
+internal fun rememberPlayerProgress(player: Player?): PlayerProgress {
     val progress = remember(player) { PlayerProgress() }
     if (player != null) {
         DisposableEffect(player) {
@@ -90,7 +90,7 @@ fun AudioRow(file: NoteFile, playback: FeedPlayback, modifier: Modifier = Modifi
     val title = file.name ?: stringResource(R.string.note_audio)
     val position = formatPlaybackTime(progress.positionMs)
     val duration = formatPlaybackTime(if (progress.known) progress.durationMs else 0L)
-    Surface(shape = MaterialTheme.shapes.large, color = colors.surfaceContainerHighest, modifier = modifier.fillMaxWidth()) {
+    Surface(shape = MaterialTheme.shapes.large, color = colors.surfaceContainerHighest, modifier = modifier.fillMaxWidth().playbackKeys(playback, file)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),

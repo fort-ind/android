@@ -280,6 +280,7 @@ fun PersonMenuItems(
     item(stringResource(R.string.person_menu_share), false) { actions.share(user) }
     if (signedIn && detail != null && user.id != myUserId) {
         val name = user.displayName
+        item(stringResource(R.string.person_menu_add_to_list), false) { actions.addToList(user) }
         if (detail.isMuted) {
             item(stringResource(R.string.person_menu_unmute, name), false) { actions.moderate(detail, ModerationAction.Unmute) }
         } else {

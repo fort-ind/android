@@ -24,6 +24,14 @@ sealed interface NoteListKey {
         override val isPrimary: Boolean = false
         override val ownerId: String = userId
     }
+
+    data class Tag(val tag: String) : NoteListKey {
+        override val isPrimary: Boolean = false
+    }
+
+    data class Search(val search: NoteSearch) : NoteListKey {
+        override val isPrimary: Boolean = false
+    }
 }
 
 class NotePage(val notes: List<Note>, val nextCursor: String?)
@@ -40,6 +48,8 @@ class NotesApiSource(private val api: NotesApi) : NoteSource {
         }
         is NoteListKey.UserNotes -> api.userNotes(token, key.userId, key.tab, cursor, limit).let { NotePage(it, it.lastOrNull()?.id) }
         is NoteListKey.Pinned -> NotePage(emptyList(), null)
+        is NoteListKey.Tag -> api.notesByTag(token, key.tag, cursor, limit).let { NotePage(it, it.lastOrNull()?.id) }
+        is NoteListKey.Search -> api.searchNotes(requireNotNull(token), key.search, cursor, limit).let { NotePage(it, it.lastOrNull()?.id) }
     }
 }
 

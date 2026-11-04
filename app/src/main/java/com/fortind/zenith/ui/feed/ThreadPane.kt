@@ -2,6 +2,19 @@
 
 package com.fortind.zenith.ui.feed
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.fortind.zenith.ui.Avatar
+import com.fortind.zenith.ui.discovery.PersonName
+import com.fortind.zenith.ui.people.SegmentTabs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +84,8 @@ fun ThreadPane(
     onLoadMoreReplies: () -> Unit,
     onToggleBranch: (String) -> Unit,
     onLoadMoreBranch: (String) -> Unit,
+    onLoadRenotes: (Boolean) -> Unit,
+    onLoadReactions: (String?, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -101,7 +116,7 @@ fun ThreadPane(
                 thread == null -> Unit
                 thread.note == null && thread.loading -> FeedLoading()
                 thread.note == null -> ThreadFailed(onRetry)
-                else -> ThreadContent(thread, thread.note, environment, callbacks, onLoadMoreReplies, onToggleBranch, onLoadMoreBranch)
+                else -> ThreadContent(thread, thread.note, environment, callbacks, onLoadMoreReplies, onToggleBranch, onLoadMoreBranch, onLoadRenotes, onLoadReactions)
             }
         }
     }
@@ -116,8 +131,26 @@ private fun ThreadContent(
     onLoadMoreReplies: () -> Unit,
     onToggleBranch: (String) -> Unit,
     onLoadMoreBranch: (String) -> Unit,
+    onLoadRenotes: (Boolean) -> Unit,
+    onLoadReactions: (String?, Boolean) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    var tab by rememberSaveable(thread.noteId) { mutableStateOf(ThreadTab.Replies) }
+    var reactionFilter by rememberSaveable(thread.noteId) { mutableStateOf<String?>(null) }
+    val filterKey = reactionFilter?.takeIf { it in focal.reactions }
+    val people = when (tab) {
+        ThreadTab.Replies -> null
+        ThreadTab.Renotes -> thread.renotes
+        ThreadTab.Reactions -> thread.reactions[filterKey] ?: ThreadPeople()
+    }
+    val idle = people?.status == TimelineStatus.Idle
+    val loadRenotes by rememberUpdatedState(onLoadRenotes)
+    val loadReactions by rememberUpdatedState(onLoadReactions)
+    LaunchedEffect(tab, filterKey, idle) {
+        if (idle) {
+            if (tab == ThreadTab.Renotes) loadRenotes(false) else loadReactions(filterKey, false)
+        }
+    }
     val rows = remember(thread.replies, thread.branches) { thread.replyRows() }
     val lineColor = MaterialTheme.colorScheme.outlineVariant
     val focalIndex = thread.ancestors.size
@@ -151,6 +184,22 @@ private fun ThreadContent(
                 ThreadDivider()
             }
         }
+        stickyHeader(key = "thread:tabs", contentType = "tabs") {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                ThreadTabs(tab, focal, onSelect = { tab = it })
+            }
+        }
+        if (people != null) {
+            if (tab == ThreadTab.Reactions && focal.reactions.isNotEmpty()) {
+                item(key = "reactions:filters", contentType = "filters") {
+                    ReactionFilters(focal, filterKey, environment, itemModifier) { reactionFilter = it }
+                }
+            }
+            threadPeople(people, itemModifier, environment, focal, callbacks) {
+                if (tab == ThreadTab.Renotes) onLoadRenotes(it) else onLoadReactions(filterKey, it)
+            }
+            return@LazyColumn
+        }
         if (thread.loading && thread.replies.isEmpty()) {
             item(key = "replies:loading", contentType = "loading") { FeedLoading() }
         }
@@ -176,6 +225,95 @@ private fun ThreadContent(
                 val loadMore by rememberUpdatedState(onLoadMoreReplies)
                 LaunchedEffect(thread.repliesLoadingMore, thread.replies.size) { if (!thread.repliesLoadingMore) loadMore() }
                 FeedLoading()
+            }
+        }
+    }
+}
+
+private enum class ThreadTab { Replies, Renotes, Reactions }
+
+@Composable
+private fun ThreadTabs(selected: ThreadTab, focal: Note, onSelect: (ThreadTab) -> Unit) {
+    val tabs = ThreadTab.entries
+    SegmentTabs(
+        count = tabs.size,
+        isSelected = { tabs[it] == selected },
+        onSelect = { onSelect(tabs[it]) },
+        label = { index -> threadTabLabel(tabs[index], focal) },
+        description = { index -> threadTabLabel(tabs[index], focal) },
+        testTag = { "thread:tab:${tabs[it].name}" },
+    )
+}
+
+@Composable
+private fun threadTabLabel(tab: ThreadTab, focal: Note): String = when (tab) {
+    ThreadTab.Replies -> stringResource(R.string.thread_tab_replies)
+    ThreadTab.Renotes -> stringResource(R.string.thread_tab_renotes, focal.renoteCount)
+    ThreadTab.Reactions -> stringResource(R.string.thread_tab_reactions, focal.reactionCount)
+}
+
+@Composable
+private fun ReactionFilters(focal: Note, selected: String?, environment: NoteEnvironment, modifier: Modifier, onSelect: (String?) -> Unit) {
+    val sorted = remember(focal.reactions) { focal.reactions.entries.sortedByDescending { it.value } }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        FilterChip(selected = selected == null, onClick = { onSelect(null) }, label = { Text(stringResource(R.string.thread_reactions_all)) })
+        sorted.forEach { (key, count) ->
+            ReactionChip(
+                reactionKey = key,
+                count = count,
+                selected = selected == key,
+                enabled = true,
+                note = focal,
+                environment = environment,
+                onClick = { onSelect(key) },
+            )
+        }
+    }
+}
+
+private fun LazyListScope.threadPeople(
+    people: ThreadPeople,
+    itemModifier: Modifier,
+    environment: NoteEnvironment,
+    focal: Note,
+    callbacks: NoteCallbacks,
+    onLoad: (Boolean) -> Unit,
+) {
+    when {
+        people.status == TimelineStatus.Failed -> item(key = "people:failed", contentType = "message") {
+            TextButton(onClick = { onLoad(false) }) { Text(stringResource(R.string.feed_retry)) }
+        }
+        people.rows.isEmpty() && people.status == TimelineStatus.Ready -> item(key = "people:empty", contentType = "message") {
+            Text(
+                text = stringResource(R.string.thread_people_empty),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = itemModifier.padding(24.dp),
+            )
+        }
+        people.rows.isEmpty() -> item(key = "people:loading", contentType = "loading") { FeedLoading() }
+        else -> {
+            items(people.rows, key = { "person:${it.pagingId}" }, contentType = { "person" }) { person ->
+                ListItem(
+                    onClick = { callbacks.openProfile(person.user) },
+                    leadingContent = { Avatar(name = person.user.displayName, url = person.user.avatarUrl, size = 40.dp) },
+                    supportingContent = { Text(person.user.fullHandle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = person.reaction?.let { reaction -> { ReactionGlyph(reaction, focal, environment, sizeDp = 24) } },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = itemModifier,
+                ) {
+                    PersonName(person.user)
+                }
+            }
+            if (!people.endReached) {
+                item(key = "people:more", contentType = "more") {
+                    val load by rememberUpdatedState(onLoad)
+                    LaunchedEffect(people.loadingMore, people.rows.size) { if (!people.loadingMore) load(true) }
+                    FeedLoading()
+                }
             }
         }
     }

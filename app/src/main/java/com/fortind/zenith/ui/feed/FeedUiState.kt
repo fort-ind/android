@@ -1,6 +1,8 @@
 package com.fortind.zenith.ui.feed
 
+import com.fortind.zenith.timeline.NoteUser
 import com.fortind.zenith.timeline.Note
+import com.fortind.zenith.timeline.NoteCollection
 import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.timeline.findNote
@@ -23,6 +25,15 @@ data class TimelineState(
     val hasPending: Boolean get() = pending.isNotEmpty() || gap
 }
 
+data class ThreadPerson(val pagingId: String, val user: NoteUser, val reaction: String? = null)
+
+data class ThreadPeople(
+    val status: TimelineStatus = TimelineStatus.Idle,
+    val rows: List<ThreadPerson> = emptyList(),
+    val loadingMore: Boolean = false,
+    val endReached: Boolean = false,
+)
+
 data class ReplyBranch(
     val children: List<Note> = emptyList(),
     val expanded: Boolean = false,
@@ -43,6 +54,8 @@ data class ThreadState(
     val repliesLoadingMore: Boolean = false,
     val repliesEnd: Boolean = false,
     val branches: Map<String, ReplyBranch> = emptyMap(),
+    val renotes: ThreadPeople = ThreadPeople(),
+    val reactions: Map<String?, ThreadPeople> = emptyMap(),
 ) {
     val notes: List<Note> get() = ancestors + listOfNotNull(note) + replies + branches.values.flatMap { it.children }
 
@@ -70,6 +83,7 @@ data class FeedUiState(
     val signedIn: Boolean = false,
     val myUserId: String? = null,
     val selected: TimelineKind = TimelineKind.Home,
+    val collection: NoteCollection? = null,
     val lists: Map<NoteListKey, TimelineState> = TimelineKind.entries.associate { NoteListKey.Timeline(it) to TimelineState() },
     val thread: ThreadState? = null,
     val renoted: Set<String> = emptySet(),
@@ -77,6 +91,8 @@ data class FeedUiState(
     val needsPermission: Boolean = false,
     val bookmarked: Set<String> = emptySet(),
     val bookmarkChecks: Set<String> = emptySet(),
+    val threadMuted: Set<String> = emptySet(),
+    val pinned: Set<String> = emptySet(),
 ) {
     fun list(key: NoteListKey): TimelineState = lists[key] ?: TimelineState()
 
@@ -125,6 +141,20 @@ sealed interface FeedEvent {
     data object SignInRequired : FeedEvent
 
     data object NoteUnavailable : FeedEvent
+
+    data object ThreadMuted : FeedEvent
+
+    data object ThreadUnmuted : FeedEvent
+
+    data object ThreadMuteFailed : FeedEvent
+
+    data object NotePinned : FeedEvent
+
+    data object NoteUnpinned : FeedEvent
+
+    data object PinLimitReached : FeedEvent
+
+    data object PinFailed : FeedEvent
 
     data class ScrollToTop(val kind: TimelineKind) : FeedEvent
 }

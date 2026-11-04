@@ -94,6 +94,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
+import androidx.core.net.toUri
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
@@ -141,6 +142,7 @@ import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
 import com.fortind.zenith.account.SettingsEditor
 import com.fortind.zenith.ui.account.AccountSettingsViewModel
+import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.pointerHover
 import kotlinx.coroutines.launch
 
@@ -406,9 +408,11 @@ private fun SettingsList(
             leadingIcon = { SearchLeadingIcon(searchBarState) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { textFieldState.clearText() }) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.settings_search_clear))
-                    }
+                    TooltipIconButton(
+                        label = stringResource(R.string.settings_search_clear),
+                        icon = Icons.Default.Close,
+                        onClick = { textFieldState.clearText() },
+                    )
                 }
             },
         )
@@ -499,9 +503,11 @@ private fun SettingsList(
 private fun SearchLeadingIcon(searchBarState: SearchBarState) {
     val scope = rememberCoroutineScope()
     if (searchBarState.currentValue == SearchBarValue.Expanded) {
-        IconButton(onClick = { scope.launch { searchBarState.animateToCollapsed() } }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_search_back))
-        }
+        TooltipIconButton(
+            label = stringResource(R.string.settings_search_back),
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            onClick = { scope.launch { searchBarState.animateToCollapsed() } },
+        )
     } else {
         Icon(Icons.Default.Search, contentDescription = null)
     }
@@ -902,8 +908,12 @@ private fun NotificationSettings(
     }
 
     val openSystemSettings = {
-        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+        } else {
+            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri())
+        }
         try {
             context.startActivity(intent)
         } catch (_: ActivityNotFoundException) {

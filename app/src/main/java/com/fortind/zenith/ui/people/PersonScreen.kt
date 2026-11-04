@@ -78,6 +78,8 @@ import com.fortind.zenith.ui.feed.TimelineStatus
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.home.ReauthorizeBanner
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.rememberTopBarReveal
+import com.fortind.zenith.ui.revealTopBarOnWheel
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
 
@@ -147,6 +149,12 @@ fun PersonPage(
     LaunchedEffect(ui.feed, detail?.pinnedNotes, pinnedIdle) {
         detail?.pinnedNotes?.let { ui.feed.seedList(pinnedKey, it) }
     }
+    LaunchedEffect(ui.pageKeys.bookmarksRequested, own != null) {
+        if (ui.pageKeys.bookmarksRequested && own != null) {
+            tab = PersonTab.Bookmarks
+            ui.pageKeys.bookmarksRequested = false
+        }
+    }
     LaunchedEffect(tab) {
         if (listState.firstVisibleItemIndex > TABS_ITEM_INDEX) listState.scrollToItem(TABS_ITEM_INDEX)
     }
@@ -169,9 +177,15 @@ fun PersonPage(
     }
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val topBarReveal = rememberTopBarReveal(
+        behavior = scrollBehavior,
+        reduceMotion = reduceMotion,
+        canScrollBack = { listState.canScrollBackward },
+    )
     Scaffold(
         modifier = Modifier
             .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .revealTopBarOnWheel(topBarReveal)
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Tab) {
                     moveTab(if (event.isShiftPressed) -1 else 1)

@@ -27,4 +27,17 @@ class PlaybackTimeTest {
         assertEquals("0:00", format(-1))
         assertEquals("0:00", format(Long.MIN_VALUE))
     }
+
+    @Test
+    fun aSeekStaysInsideTheFile() {
+        assertEquals(15_000L, seekTarget(10_000L, 60_000L, 5_000L))
+        assertEquals(5_000L, seekTarget(10_000L, 60_000L, -5_000L))
+        assertEquals(0L, seekTarget(2_000L, 60_000L, -5_000L))
+        assertEquals(60_000L, seekTarget(58_000L, 60_000L, 5_000L))
+    }
+
+    @Test
+    fun anUnknownDurationDoesNotCapASeek() {
+        assertEquals(15_000L, seekTarget(10_000L, -1L, 5_000L))
+    }
 }

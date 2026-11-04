@@ -67,6 +67,7 @@ import com.fortind.zenith.timeline.Note
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.runtime.LaunchedEffect
 import com.fortind.zenith.timeline.Visibility
+import com.fortind.zenith.timeline.firstPreviewLink
 import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.contextMenuTrigger
 import com.fortind.zenith.ui.mfm.MfmContent
@@ -396,6 +397,8 @@ private fun NoteBody(note: Note, environment: NoteEnvironment, callbacks: NoteCa
                 onVote = { choices -> callbacks.vote(note, choices) },
             )
         }
+        val linkUrl = remember(note.textMfm) { firstPreviewLink(note.textMfm) }
+        if (linkUrl != null) LinkPreviewSlot(linkUrl, environment, callbacks)
         val quoted = note.renote
         if (quoted != null && !note.isPureRenote) QuoteCard(quoted, environment, callbacks)
     }
@@ -526,6 +529,21 @@ fun NoteMenuItems(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
         MenuItem(R.string.note_menu_open_original) {
             onDismiss()
             callbacks.openUrl(url)
+        }
+    }
+    if (mine && (note.visibility == Visibility.Public || note.visibility == Visibility.Home)) {
+        MenuItem(if (note.id in environment.pinned) R.string.note_menu_unpin else R.string.note_menu_pin) {
+            onDismiss()
+            callbacks.togglePin(note)
+        }
+    }
+    if (signedIn && !note.deleted) {
+        MenuItem(
+            labelRes = if (note.id in environment.threadMuted) R.string.note_menu_unmute_thread else R.string.note_menu_mute_thread,
+            enabled = note.id !in environment.bookmarkChecks,
+        ) {
+            onDismiss()
+            callbacks.toggleThreadMute(note)
         }
     }
     if (signedIn && !mine && !note.deleted) {

@@ -1,5 +1,13 @@
 package com.fortind.zenith.ui.feed
 
+import com.fortind.zenith.net.ApiErrorCodes
+import com.fortind.zenith.timeline.NoteReactionRow
+import com.fortind.zenith.timeline.Visibility
+import com.fortind.zenith.timeline.renoteVisibilities
+import com.fortind.zenith.timeline.CollectionKind
+import com.fortind.zenith.timeline.NoteCollection
+import com.fortind.zenith.timeline.NoteSearch
+import com.fortind.zenith.timeline.SearchMedia
 import androidx.lifecycle.viewModelScope
 import com.fortind.zenith.account.FakeModerationApi
 import com.fortind.zenith.account.AccountSettings
@@ -276,6 +284,272 @@ class FeedViewModelTest {
         yield()
 
         assertEquals(calls, f.api.calls.size)
+    }
+
+    @Test
+    fun aRenoteUsesTheChosenVisibilityWithinTheRules() = runTest {
+        val f = fixture()
+        val note = testNote("n1", user = testUser("other"))
+        f.api.timelines[TimelineKind.Home] = listOf(note)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.renote("n1", Visibility.Followers)
+        awaitTrue { f.api.renoteCalls.size == 1 }
+
+        assertEquals(Visibility.Followers, f.api.renoteVisibility)
+    }
+
+    @Test
+    fun aRenoteCannotWidenAHomeNote() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", user = testUser("other"), visibility = Visibility.Home))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.renote("n1", Visibility.Public)
+
+        assertTrue(f.api.renoteCalls.isEmpty())
+    }
+
+    @Test
+    fun theRenoteRulesMatchTheServer() {
+        val other = testUser("other")
+        val mine = testUser("me")
+        assertEquals(
+            listOf(Visibility.Public, Visibility.Home, Visibility.Followers),
+            testNote("n", user = other).renoteVisibilities("me"),
+        )
+        assertEquals(listOf(Visibility.Home, Visibility.Followers), testNote("n", user = other, visibility = Visibility.Home).renoteVisibilities("me"))
+        assertEquals(listOf(Visibility.Followers), testNote("n", user = mine, visibility = Visibility.Followers).renoteVisibilities("me"))
+        assertTrue(testNote("n", user = other, visibility = Visibility.Followers).renoteVisibilities("me").isEmpty())
+        assertTrue(testNote("n", user = mine, visibility = Visibility.Specified).renoteVisibilities("me").isEmpty())
+        assertTrue(testNote("n", user = other).renoteVisibilities(null).isEmpty())
+    }
+
+    @Test
+    fun pinningAppliesTheServersAnswer() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.togglePin("n1")
+        awaitTrue { "n1" in f.viewModel.uiState.value.pinned }
+
+        f.viewModel.togglePin("n1")
+        awaitTrue { "n1" !in f.viewModel.uiState.value.pinned }
+        assertEquals(listOf("pin:n1", "unpin:n1"), f.api.pinCalls.toList())
+    }
+
+    @Test
+    fun thePinLimitIsNamed() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(1)
+        val events = collectEvents(f.viewModel)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.api.pinFailure =HttpStatusException(400, ApiErrorCodes.PIN_LIMIT_EXCEEDED)
+
+        f.viewModel.togglePin("n1")
+
+        awaitTrue { FeedEvent.PinLimitReached in events }
+    }
+
+    @Test
+    fun aThreadMuteFlipsBackOnFailure() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.toggleThreadMute("n1")
+        awaitTrue { "n1" in f.api.threadMutedIds }
+        assertTrue("n1" in f.viewModel.uiState.value.threadMuted)
+
+        f.api.muteThreadFailure = IOException("offline")
+        f.viewModel.toggleThreadMute("n1")
+        awaitTrue { "n1" in f.viewModel.uiState.value.threadMuted }
+    }
+
+    @Test
+    fun theMenuCheckReadsThreadMuteState() = runTest {
+        val f = fixture()
+        f.api.threadMutedIds += "n1"
+        f.api.timelines[TimelineKind.Home] = page(1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.checkBookmarked("n1")
+
+        awaitTrue { "n1" in f.viewModel.uiState.value.threadMuted }
+    }
+
+    @Test
+    fun aNoteThatIsGoneDisappearsEverywhere() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(2, 1)
+        val events = collectEvents(f.viewModel)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.api.renoteFailure =HttpStatusException(400, ApiErrorCodes.NO_SUCH_NOTE)
+
+        f.viewModel.renote("n1")
+
+        f.viewModel.awaitTimeline(TimelineKind.Home) { it.items.map(Note::id) == listOf("n2") }
+        awaitTrue { FeedEvent.NoteUnavailable in events }
+    }
+
+    @Test
+    fun threadRenotesAndReactionsLoadOnDemand() = runTest {
+        val f = fixture()
+        f.api.notes["n1"] = testNote("n1")
+        f.api.renoteRows = listOf(testNote("r1", user = testUser("u2")))
+        f.api.reactionRows = listOf(NoteReactionRow("x1", testUser("u3"), "❤"), NoteReactionRow("x2", testUser("u4"), "🎉"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n1")
+        awaitTrue { f.viewModel.uiState.value.thread?.loading == false }
+
+        f.viewModel.loadThreadRenotes()
+        awaitTrue { f.viewModel.uiState.value.thread?.renotes?.status == TimelineStatus.Ready }
+        assertEquals("u2", f.viewModel.uiState.value.thread?.renotes?.rows?.single()?.user?.id)
+
+        f.viewModel.loadThreadReactions("🎉")
+        awaitTrue { f.viewModel.uiState.value.thread?.reactions?.get("🎉")?.status == TimelineStatus.Ready }
+        assertEquals(listOf("u4"), f.viewModel.uiState.value.thread?.reactions?.get("🎉")?.rows?.map { it.user.id })
+
+        f.viewModel.loadThreadRenotes(more = true)
+        awaitTrue { f.viewModel.uiState.value.thread?.renotes?.endReached == true }
+    }
+
+    @Test
+    fun renotingForgetsTheLoadedRenoteList() = runTest {
+        val f = fixture()
+        f.api.notes["n1"] = testNote("n1", user = testUser("other"))
+        f.api.renoteRows = listOf(testNote("r1", user = testUser("u2")))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n1")
+        awaitTrue { f.viewModel.uiState.value.thread?.loading == false }
+        f.viewModel.loadThreadRenotes()
+        awaitTrue { f.viewModel.uiState.value.thread?.renotes?.status == TimelineStatus.Ready }
+
+        f.viewModel.renote("n1")
+
+        assertEquals(TimelineStatus.Idle, f.viewModel.uiState.value.thread?.renotes?.status)
+    }
+
+    @Test
+    fun aChosenListLoadsAndHiddenWordsApplyToIt() = runTest {
+        val f = fixture(settings = muted(hard = "hide"))
+        val list = NoteCollection(CollectionKind.UserList, "l1")
+        f.api.collectionPages[list] = listOf(testNote("n2", text = "hide"), testNote("n1", text = "plain"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.select(TimelineKind.Lists)
+        assertTrue(f.api.collectionCalls.isEmpty())
+        f.viewModel.selectCollection(list)
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Lists)
+        assertEquals(listOf("n1"), timeline.items.map { it.id })
+        assertEquals(list, f.viewModel.uiState.value.collection)
+    }
+
+    @Test
+    fun switchingListsReplacesTheNotes() = runTest {
+        val f = fixture()
+        val first = NoteCollection(CollectionKind.UserList, "l1")
+        val second = NoteCollection(CollectionKind.Antenna, "a1")
+        f.api.collectionPages[first] = page(1)
+        f.api.collectionPages[second] = page(2)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.select(TimelineKind.Lists)
+        f.viewModel.selectCollection(first)
+        f.viewModel.awaitTimeline(TimelineKind.Lists) { it.items.map(Note::id) == listOf("n1") }
+
+        f.viewModel.selectCollection(second)
+
+        f.viewModel.awaitTimeline(TimelineKind.Lists) { it.items.map(Note::id) == listOf("n2") }
+    }
+
+    @Test
+    fun anAntennaIsNotReadUntilItsSegmentIsOpen() = runTest {
+        val f = fixture()
+        val antenna = NoteCollection(CollectionKind.Antenna, "a1")
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.selectCollection(antenna)
+
+        assertTrue(f.api.collectionCalls.isEmpty())
+        f.viewModel.select(TimelineKind.Lists)
+        awaitTrue { f.api.collectionCalls.toList() == listOf(antenna) }
+    }
+
+    @Test
+    fun aChosenListStreamsWhileOpen() = runTest {
+        val f = fixture()
+        val list = NoteCollection(CollectionKind.UserList, "l1")
+        f.api.collectionPages[list] = page(1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.setActive(true)
+        f.viewModel.select(TimelineKind.Lists)
+        f.viewModel.selectCollection(list)
+        f.viewModel.awaitTimeline(TimelineKind.Lists)
+        f.stream.collectionStream.subscriptionCount.first { it > 0 }
+
+        f.stream.collectionStream.emit(TimelineStreamEvent.Posted(testNote("n2")))
+
+        f.viewModel.awaitTimeline(TimelineKind.Lists) { it.items.size == 2 }
+        assertEquals(listOf(list), f.stream.collectionSubscriptions.toList())
+    }
+
+    @Test
+    fun theFollowingTimelineHasNoStreamAndRefreshesInFull() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Following] = page(2, 1)
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.setActive(true)
+
+        f.viewModel.select(TimelineKind.Following)
+        f.viewModel.awaitTimeline(TimelineKind.Following)
+        assertFalse(f.stream.subscriptions.any { it.second == TimelineKind.Following })
+        val before = f.api.calls.size
+
+        f.viewModel.refresh()
+
+        awaitTrue { f.api.calls.size == before + 1 }
+        assertEquals(null, f.api.calls.last().sinceId)
+    }
+
+    @Test
+    fun searchNeedsATokenAndTagsDoNot() = runTest {
+        val guest = fixture(token = null)
+        guest.viewModel.awaitTimeline(TimelineKind.Local)
+        guest.viewModel.loadList(NoteListKey.Search(NoteSearch("x")))
+        guest.viewModel.loadList(NoteListKey.Tag("linux"))
+
+        awaitTrue { guest.api.tagCalls.isNotEmpty() }
+        assertTrue(guest.api.searchCalls.isEmpty())
+        assertEquals(null to "linux", guest.api.tagCalls.single())
+    }
+
+    @Test
+    fun searchResultsPageByTheLastNote() = runTest {
+        val f = fixture()
+        f.api.searchResults = (60 downTo 1).map { testNote("n$it") }
+        val key = NoteListKey.Search(NoteSearch("x", SearchMedia.Image, onlyHere = true))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.loadList(key)
+        awaitTrue { f.viewModel.uiState.value.list(key).items.size == FeedViewModel.PAGE_SIZE }
+        f.viewModel.loadMoreList(key)
+        awaitTrue { f.viewModel.uiState.value.list(key).items.size == 60 }
+
+        assertEquals(setOf(NoteSearch("x", SearchMedia.Image, onlyHere = true)), f.api.searchCalls.toSet())
+    }
+
+    @Test
+    fun hiddenWordsDoNotFilterSearchOrTagResults() = runTest {
+        val f = fixture(settings = muted(hard = "hide"))
+        f.api.searchResults = listOf(testNote("n1", text = "hide"))
+        val key = NoteListKey.Tag("linux")
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.loadList(key)
+
+        awaitTrue { f.viewModel.uiState.value.list(key).items.size == 1 }
     }
 
     @Test
@@ -1034,7 +1308,7 @@ class FeedViewModelTest {
         val f = fixture()
         f.api.failures[TimelineKind.Home] = TokenRejectedException(401)
 
-        f.viewModel.uiState.first { it.authResolved }
+        f.viewModel
         f.session.state.first { it == SessionState.SignedOut }
     }
 

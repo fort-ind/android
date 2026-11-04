@@ -13,7 +13,6 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.captionBar
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,8 +32,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.auth.SessionState
-import com.fortind.zenith.settings.AppSettings
-import com.fortind.zenith.settings.ThemeMode
 import com.fortind.zenith.ui.CustomTabUriHandler
 import com.fortind.zenith.ui.ZoomableContent
 import com.fortind.zenith.ui.login.LoginScreen
@@ -44,7 +40,7 @@ import com.fortind.zenith.ui.nav.AppRoute
 import com.fortind.zenith.ui.nav.AppShell
 import com.fortind.zenith.ui.nav.AppShortcutDispatcher
 import com.fortind.zenith.ui.nav.destinationKeyCode
-import com.fortind.zenith.ui.theme.ZenithTheme
+import com.fortind.zenith.ui.theme.SettingsTheme
 import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.launch
 
@@ -54,6 +50,7 @@ private val DEFAULT_DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 class MainActivity : ComponentActivity() {
     private val requestedDestination = mutableStateOf<AppDestination?>(null)
     private val requestedThreadId = mutableStateOf<String?>(null)
+    private val requestedReplyId = mutableStateOf<String?>(null)
     private val shortcuts = AppShortcutDispatcher()
 
     private val container get() = (application as ZenithApplication).container
@@ -63,37 +60,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
-            val app = LocalContext.current.applicationContext as ZenithApplication
-            val settings by app.container.settingsStore.settings
-                .collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
-            val appIcon by app.container.appIconSwitcher.selected.collectAsStateWithLifecycle()
-            val current = settings
-            if (current == null) {
-                Box(Modifier.fillMaxSize())
-            } else {
-                val systemDark = isSystemInDarkTheme()
-                val darkTheme = when (current.themeMode) {
-                    ThemeMode.SYSTEM -> systemDark
-                    ThemeMode.LIGHT -> false
-                    ThemeMode.DARK -> true
-                }
-                DisposableEffect(darkTheme) {
-                    applySystemBarStyle(darkTheme)
-                    onDispose {}
-                }
-                ZenithTheme(
-                    darkTheme = darkTheme,
-                    dynamicColor = current.dynamicColor,
-                    appIcon = appIcon,
-                ) {
-                    ZenithRoot(
-                        requestedDestination = requestedDestination.value,
-                        onRequestedDestinationHandled = { requestedDestination.value = null },
-                        requestedThreadId = requestedThreadId.value,
-                        onRequestedThreadHandled = { requestedThreadId.value = null },
-                        shortcuts = shortcuts,
-                    )
-                }
+            SettingsTheme(onDarkTheme = ::applySystemBarStyle) {
+                ZenithRoot(
+                    requestedDestination = requestedDestination.value,
+                    onRequestedDestinationHandled = { requestedDestination.value = null },
+                    requestedThreadId = requestedThreadId.value,
+                    onRequestedThreadHandled = { requestedThreadId.value = null },
+                    requestedReplyId = requestedReplyId.value,
+                    onRequestedReplyHandled = { requestedReplyId.value = null },
+                    shortcuts = shortcuts,
+                )
             }
         }
     }
@@ -145,6 +121,7 @@ class MainActivity : ComponentActivity() {
         val noteId = intent?.getStringExtra(EXTRA_THREAD_NOTE_ID)?.takeIf(AppRoute::isValidNoteId)
         if (noteId != null) {
             requestedThreadId.value = noteId
+            if (intent.getBooleanExtra(EXTRA_OPEN_REPLY, false)) requestedReplyId.value = noteId
         } else {
             destinationFrom(intent)?.let { requestedDestination.value = it }
         }
@@ -159,6 +136,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_DESTINATION = "com.fortind.zenith.extra.DESTINATION"
         const val EXTRA_THREAD_NOTE_ID = "com.fortind.zenith.extra.THREAD_NOTE_ID"
+        const val EXTRA_OPEN_REPLY = "com.fortind.zenith.extra.OPEN_REPLY"
         const val DESTINATION_NOTIFICATIONS = "notifications"
     }
 }
@@ -169,6 +147,8 @@ fun ZenithRoot(
     onRequestedDestinationHandled: () -> Unit,
     requestedThreadId: String?,
     onRequestedThreadHandled: () -> Unit,
+    requestedReplyId: String?,
+    onRequestedReplyHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
     val app = LocalContext.current.applicationContext as ZenithApplication
@@ -201,6 +181,8 @@ fun ZenithRoot(
                     onRequestedDestinationHandled = onRequestedDestinationHandled,
                     requestedThreadId = requestedThreadId,
                     onRequestedThreadHandled = onRequestedThreadHandled,
+                    requestedReplyId = requestedReplyId,
+                    onRequestedReplyHandled = onRequestedReplyHandled,
                     shortcuts = shortcuts,
                 )
             }

@@ -48,6 +48,15 @@ class FeedPlayback(context: Context) : ViewModel() {
         player?.pause()
     }
 
+    fun toggle(file: NoteFile) {
+        if (current?.id == file.id && player?.isPlaying == true) pause() else play(file)
+    }
+
+    fun seekBy(deltaMs: Long) {
+        val exo = player ?: return
+        exo.seekTo(seekTarget(exo.currentPosition, exo.duration, deltaMs))
+    }
+
     fun enterFullscreen(file: NoteFile) {
         play(file)
         fullscreen = true

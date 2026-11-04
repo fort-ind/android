@@ -40,6 +40,20 @@ fun MacrobenchmarkScope.browseFeed() {
     device.pressBack()
     device.waitForIdle()
     browsePerson()
+    browseDiscovery()
+}
+
+private fun MacrobenchmarkScope.browseDiscovery() {
+    device.findObject(By.res("search:field"))?.click() ?: return
+    if (!device.wait(Until.hasObject(By.textStartsWith("#")), FEED_TIMEOUT_MS)) {
+        device.pressBack()
+        device.waitForIdle()
+        return
+    }
+    device.findObject(By.textStartsWith("#"))?.click()
+    device.wait(Until.hasObject(By.res(NOTE)), FEED_TIMEOUT_MS)
+    device.pressBack()
+    device.waitForIdle()
 }
 
 private fun MacrobenchmarkScope.browsePerson() {

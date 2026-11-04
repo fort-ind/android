@@ -1,5 +1,22 @@
 package com.fortind.zenith.ui.composer
 
+import androidx.compose.runtime.mutableStateListOf
+import com.fortind.zenith.autocomplete.SuggestionsApi
+import com.fortind.zenith.composer.MAX_POLL_CHOICES
+import com.fortind.zenith.composer.MIN_POLL_CHOICES
+import com.fortind.zenith.composer.PollDraft
+import com.fortind.zenith.composer.SharedContent
+import com.fortind.zenith.composer.failedReplySlot
+import com.fortind.zenith.composer.isPostableMime
+import com.fortind.zenith.composer.mentionsIn
+import com.fortind.zenith.composer.pollEditResetsVotes
+import com.fortind.zenith.composer.problem
+import com.fortind.zenith.composer.replyPrefix
+import com.fortind.zenith.composer.replyText
+import com.fortind.zenith.drive.DRIVE_PAGE_SIZE
+import com.fortind.zenith.drive.DriveFolder
+import com.fortind.zenith.mfm.MfmParser
+import com.fortind.zenith.timeline.NoteUser
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
@@ -60,6 +77,7 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -100,7 +118,30 @@ sealed interface ComposerTarget {
     data class Edit(val noteId: String) : ComposerTarget {
         override val draftKey: String? = null
     }
+
+    data object Share : ComposerTarget {
+        override val draftKey: String? = null
+    }
 }
+
+class PollChoiceField(val id: Long, initial: String) {
+    val text = TextFieldState(initial)
+}
+
+enum class ComposerPrompt { MissingAltText, PollResetsVotes }
+
+enum class DriveStatus { Loading, Ready, Failed }
+
+data class DrivePickerState(
+    val path: List<DriveFolder> = emptyList(),
+    val status: DriveStatus = DriveStatus.Loading,
+    val folders: List<DriveFolder> = emptyList(),
+    val files: List<NoteFile> = emptyList(),
+    val loadingMore: Boolean = false,
+    val endReached: Boolean = false,
+    val selected: List<NoteFile> = emptyList(),
+    val menuFileId: String? = null,
+)
 
 enum class ComposerFailure {
     Generic,
@@ -114,6 +155,8 @@ enum class ComposerFailure {
     SignInRequired,
     TooManyAttachments,
     UnreadableFile,
+    UnsupportedShare,
+    PollAlreadyEnded,
 }
 
 data class ComposerUiState(
@@ -131,6 +174,15 @@ data class ComposerUiState(
     val posting: Boolean = false,
     val failure: ComposerFailure? = null,
     val dropsEndedPoll: Boolean = false,
+    val pollEnabled: Boolean = false,
+    val pollMultiple: Boolean = false,
+    val pollEndsAfter: Long? = null,
+    val pollEndsAt: Long? = null,
+    val reactionAcceptance: ReactionAcceptance = ReactionAcceptance.All,
+    val recipients: List<NoteUser> = emptyList(),
+    val prompt: ComposerPrompt? = null,
+    val confirmedPrompts: Set<ComposerPrompt> = emptySet(),
+    val drive: DrivePickerState? = null,
 ) {
     val settingsLocked: Boolean get() = target is ComposerTarget.Edit
 
@@ -141,13 +193,17 @@ data class ComposerUiState(
         get() = if (visibilityLocked) {
             listOf(contextNote?.visibility ?: visibility)
         } else {
-            listOf(Visibility.Public, Visibility.Home, Visibility.Followers)
+            listOf(Visibility.Public, Visibility.Home, Visibility.Followers, Visibility.Specified)
         }
+
+    val showsRecipients: Boolean get() = visibility == Visibility.Specified && !visibilityLocked
+
+    val isQuote: Boolean get() = target is ComposerTarget.Quote
 
     fun pollHasEnded(nowMillis: Long): Boolean =
         settingsLocked && contextNote?.poll?.expiresAtMillis?.let { it <= nowMillis } == true
 
-    val needsContext: Boolean get() = target !is ComposerTarget.NewPost
+    val needsContext: Boolean get() = target !is ComposerTarget.NewPost && target !is ComposerTarget.Share
 
     val attachmentsReady: Boolean get() = attachments.all { it.isReady }
 
@@ -173,10 +229,26 @@ class ComposerViewModel(
     private val suggestionEngine: SuggestionEngine,
     private val draftDebounceMs: Long = DRAFT_DEBOUNCE_MS,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val people: SuggestionsApi = NoPeople,
+    private val resolveHandle: suspend (String?, String, String?) -> NoteUser? = { _, _, _ -> null },
+    private val remindAltText: Boolean = true,
+    private val mentionDebounceMs: Long = MENTION_DEBOUNCE_MS,
+    private val cleanupScope: CoroutineScope? = null,
 ) : ViewModel() {
 
     val text = TextFieldState()
     val cw = TextFieldState()
+    val recipientQuery = TextFieldState()
+    val pollChoices = mutableStateListOf<PollChoiceField>()
+
+    private val _recipientResults = MutableStateFlow<List<NoteUser>>(emptyList())
+    val recipientResults: StateFlow<List<NoteUser>> = _recipientResults.asStateFlow()
+
+    private var nextPollChoiceId = 0L
+    private val mentionLookups = HashMap<String, NoteUser>()
+    private val removedRecipients = HashSet<String>()
+    private var driveJob: Job? = null
+    private var driveLastPath: List<DriveFolder> = emptyList()
 
     private val _uiState = MutableStateFlow<ComposerUiState?>(null)
     val uiState: StateFlow<ComposerUiState?> = _uiState.asStateFlow()
@@ -199,20 +271,256 @@ class ComposerViewModel(
     private val myUserId: String?
         get() = (session.state.value as? SessionState.SignedIn)?.user?.id
 
+    private val myUsername: String?
+        get() = (session.state.value as? SessionState.SignedIn)?.user?.username
+
     init {
         autosave()
         watchSuggestions()
+        watchRecipientSearch()
+        watchMentions()
+    }
+
+    private fun seedPollChoices(choices: List<String>) {
+        pollChoices.clear()
+        choices.forEach { pollChoices += PollChoiceField(nextPollChoiceId++, it) }
+    }
+
+    fun setPollEnabled(enabled: Boolean) {
+        if (enabled) {
+            if (pollChoices.isEmpty()) seedPollChoices(listOf("", ""))
+        } else {
+            pollChoices.clear()
+        }
+        _uiState.update { state -> state?.copy(pollEnabled = enabled, pollMultiple = false, pollEndsAfter = null, pollEndsAt = null) }
+    }
+
+    fun addPollChoice() {
+        if (pollChoices.size < MAX_POLL_CHOICES) pollChoices += PollChoiceField(nextPollChoiceId++, "")
+    }
+
+    fun removePollChoice(id: Long) {
+        if (pollChoices.size > MIN_POLL_CHOICES) pollChoices.removeAll { it.id == id }
+    }
+
+    fun setPollMultiple(multiple: Boolean) {
+        _uiState.update { it?.copy(pollMultiple = multiple) }
+    }
+
+    fun setPollEndsAfter(millis: Long?) {
+        _uiState.update { it?.copy(pollEndsAfter = millis, pollEndsAt = null) }
+    }
+
+    fun setPollEndsAt(millis: Long) {
+        _uiState.update { it?.copy(pollEndsAfter = null, pollEndsAt = millis) }
+    }
+
+    fun pollDraft(state: ComposerUiState): PollDraft? = if (state.pollEnabled) {
+        PollDraft(pollChoices.map { it.text.text.toString() }, state.pollMultiple, state.pollEndsAfter, state.pollEndsAt)
+    } else {
+        null
+    }
+
+    fun now(): Long = clock()
+
+    fun setReactionAcceptance(acceptance: ReactionAcceptance) {
+        _uiState.update { it?.copy(reactionAcceptance = acceptance) }
+    }
+
+    fun addRecipient(user: NoteUser) {
+        if (user.id == myUserId) return
+        removedRecipients -= user.id
+        _uiState.update { state ->
+            if (state == null || state.recipients.any { it.id == user.id }) state else state.copy(recipients = state.recipients + user)
+        }
+        recipientQuery.clearText()
+        _recipientResults.value = emptyList()
+    }
+
+    fun removeRecipient(userId: String) {
+        removedRecipients += userId
+        _uiState.update { state -> state?.copy(recipients = state.recipients.filterNot { it.id == userId }) }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun watchRecipientSearch() {
+        viewModelScope.launch {
+            snapshotFlow { recipientQuery.text.toString().trim().removePrefix("@") }
+                .distinctUntilChanged()
+                .collectLatest { query ->
+                    if (query.length < MIN_RECIPIENT_QUERY) {
+                        _recipientResults.value = emptyList()
+                        return@collectLatest
+                    }
+                    delay(SUGGESTION_DEBOUNCE_MS)
+                    val found = try {
+                        people.users(session.token(), query, RECIPIENT_RESULTS)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: IOException) {
+                        emptyList()
+                    }
+                    val chosen = _uiState.value?.recipients.orEmpty().mapTo(HashSet()) { it.id }
+                    _recipientResults.value = found.filter { it.id != myUserId && it.id !in chosen }
+                }
+        }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun watchMentions() {
+        viewModelScope.launch {
+            snapshotFlow { text.text.toString() }
+                .debounce(mentionDebounceMs)
+                .collectLatest { addMentionedRecipients() }
+        }
+    }
+
+    private suspend fun addMentionedRecipients() {
+        val state = _uiState.value ?: return
+        if (state.visibility != Visibility.Specified || state.target is ComposerTarget.Edit) return
+        val mentions = withContext(Dispatchers.Default) { mentionsIn(MfmParser.parse(text.text.toString())) }
+        if (mentions.isEmpty()) return
+        val token = session.token()
+        mentions.forEach { mention ->
+            val key = mention.acct.lowercase()
+            val user = mentionLookups[key] ?: try {
+                resolveHandle(token, mention.username, mention.host)?.also { mentionLookups[key] = it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IOException) {
+                null
+            }
+            if (user != null && user.id != myUserId && user.id !in removedRecipients) {
+                _uiState.update { current ->
+                    if (current == null || current.recipients.any { it.id == user.id }) current else current.copy(recipients = current.recipients + user)
+                }
+            }
+        }
+    }
+
+    fun openDrive() {
+        _uiState.update { it?.copy(drive = DrivePickerState(path = driveLastPath)) }
+        loadDriveFolder(driveLastPath)
+    }
+
+    fun closeDrive() {
+        driveJob?.cancel()
+        _uiState.update { it?.copy(drive = null) }
+    }
+
+    fun openDriveFolder(folder: DriveFolder) {
+        val current = _uiState.value?.drive ?: return
+        navigateDrive(current.path + folder)
+    }
+
+    fun driveUp() {
+        val current = _uiState.value?.drive ?: return
+        if (current.path.isNotEmpty()) navigateDrive(current.path.dropLast(1))
+    }
+
+    fun reloadDrive() {
+        val current = _uiState.value?.drive ?: return
+        navigateDrive(current.path)
+    }
+
+    private fun navigateDrive(path: List<DriveFolder>) {
+        driveLastPath = path
+        updateDrive { it.copy(path = path, status = DriveStatus.Loading, folders = emptyList(), files = emptyList(), endReached = false, loadingMore = false) }
+        loadDriveFolder(path)
+    }
+
+    private fun loadDriveFolder(path: List<DriveFolder>) {
+        driveJob?.cancel()
+        driveJob = viewModelScope.launch {
+            try {
+                val token = session.token() ?: return@launch fail(ComposerFailure.SignInRequired)
+                val folderId = path.lastOrNull()?.id
+                val folders = drive.folders(token, folderId)
+                val files = drive.files(token, folderId, null, DRIVE_PAGE_SIZE)
+                updateDrive { it.copy(status = DriveStatus.Ready, folders = folders, files = files, endReached = files.isEmpty()) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                updateDrive { it.copy(status = DriveStatus.Failed) }
+                if (e is MissingPermissionException) fail(ComposerFailure.MissingPermission)
+            }
+        }
+    }
+
+    fun loadMoreDrive() {
+        val current = _uiState.value?.drive ?: return
+        val cursor = current.files.lastOrNull()?.id ?: return
+        if (current.loadingMore || current.endReached) return
+        updateDrive { it.copy(loadingMore = true) }
+        driveJob = viewModelScope.launch {
+            try {
+                val token = session.token() ?: return@launch fail(ComposerFailure.SignInRequired)
+                val page = drive.files(token, current.path.lastOrNull()?.id, cursor, DRIVE_PAGE_SIZE)
+                updateDrive { state ->
+                    val known = state.files.mapTo(HashSet()) { it.id }
+                    state.copy(files = state.files + page.filter { known.add(it.id) }, loadingMore = false, endReached = page.isEmpty())
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IOException) {
+                updateDrive { it.copy(loadingMore = false) }
+            }
+        }
+    }
+
+    fun toggleDriveFile(file: NoteFile, slots: Int) {
+        updateDrive { state ->
+            when {
+                state.selected.any { it.id == file.id } -> state.copy(selected = state.selected.filterNot { it.id == file.id })
+                state.selected.size < slots -> state.copy(selected = state.selected + file)
+                else -> state
+            }
+        }
+    }
+
+    fun openDriveMenu(fileId: String) {
+        updateDrive { it.copy(menuFileId = fileId) }
+    }
+
+    fun closeDriveMenu() {
+        updateDrive { it.copy(menuFileId = null) }
+    }
+
+    fun attachDriveSelection() {
+        val current = _uiState.value ?: return
+        val picked = current.drive?.selected.orEmpty()
+        val attached = current.attachments.mapNotNullTo(HashSet()) { it.remote?.id }
+        val room = (MAX_ATTACHMENTS - current.attachments.size).coerceAtLeast(0)
+        val added = picked.filter { it.id !in attached }.take(room).map(NoteFile::toExistingAttachment)
+        driveJob?.cancel()
+        _uiState.update { state -> state?.copy(attachments = state.attachments + added, drive = null) }
+    }
+
+    private fun updateDrive(transform: (DrivePickerState) -> DrivePickerState) {
+        _uiState.update { state -> state?.copy(drive = state.drive?.let(transform)) }
+    }
+
+    fun confirmPrompt() {
+        val prompt = _uiState.value?.prompt ?: return
+        _uiState.update { it?.copy(prompt = null, confirmedPrompts = it.confirmedPrompts + prompt) }
+        submit()
+    }
+
+    fun dismissPrompt() {
+        _uiState.update { it?.copy(prompt = null) }
     }
 
     @OptIn(ExperimentalFoundationApi::class)
-    fun open(target: ComposerTarget, note: Note?, seed: Note? = null) {
+    fun open(target: ComposerTarget, note: Note?, seed: Note? = null, shared: SharedContent? = null) {
         if (seed == null && _uiState.value?.target == target) return
         viewModelScope.launch {
             myUserId?.let { drafts.adopt(it) }
             val stored = if (seed == null) target.draftKey?.let { drafts.load(storageKey(it)) } else null
-            baseline = initialDraft(target, note)
+            baseline = initialDraft(target, note).let { if (shared != null) it.copy(text = shared.text) else it }
+            val failedReply = if (seed == null && target is ComposerTarget.Reply && note != null) takeFailedReply(target.noteId) else null
             val draft = when {
                 seed != null -> seedDraft(seed)
+                failedReply != null && note != null -> (stored ?: baseline).copy(text = replyText(note, failedReply, myUsername))
                 else -> stored ?: baseline
             }
             val existingFiles = when {
@@ -224,7 +532,13 @@ class ComposerViewModel(
             baselineFiles = if (target is ComposerTarget.Edit) attachments.map { it.localId } else emptyList()
             cancelUploads()
             val limits = instance.meta.value
+            mentionLookups.clear()
+            removedRecipients.clear()
+            recipientQuery.clearText()
+            _recipientResults.value = emptyList()
+            seedPollChoices(draft.poll?.choices.orEmpty())
             text.setTextAndPlaceCursorAtEnd(draft.text)
+            if (shared?.caretAtStart == true) text.edit { selection = TextRange.Zero }
             text.undoState.clearHistory()
             cw.setTextAndPlaceCursorAtEnd(draft.cw.orEmpty())
             val opened = ComposerUiState(
@@ -239,9 +553,40 @@ class ComposerViewModel(
                 attachments = attachments,
                 maxFileSizeBytes = limits?.maxFileSizeBytes ?: DEFAULT_MAX_FILE_SIZE_BYTES,
                 maxAltLength = limits?.maxAltTextLength ?: DEFAULT_MAX_ALT_TEXT_LENGTH,
+                pollEnabled = draft.poll != null,
+                pollMultiple = draft.poll?.multiple == true,
+                pollEndsAfter = draft.poll?.endsAfterMillis,
+                pollEndsAt = draft.poll?.endsAtMillis,
+                reactionAcceptance = draft.reactionAcceptance,
+                recipients = draft.recipients,
             )
             _uiState.value = opened.copy(dropsEndedPoll = opened.pollHasEnded(clock()))
+            if (shared?.refusedFiles == true) _uiState.update { it?.copy(failure = ComposerFailure.UnsupportedShare) }
+            shared?.uris?.takeIf { it.isNotEmpty() }?.let { addShared(it) }
         }
+    }
+
+    fun openShare(shared: SharedContent) = open(ComposerTarget.Share, null, shared = shared)
+
+    private suspend fun takeFailedReply(noteId: String): String? {
+        val key = storageKey(failedReplySlot(noteId))
+        val text = drafts.load(key)?.text?.takeIf { it.isNotBlank() } ?: return null
+        drafts.clear(key)
+        return text
+    }
+
+    private suspend fun addShared(uris: List<String>) {
+        val media = withContext(Dispatchers.IO) { uris.mapNotNull(::describeShared) }.filter { isPostableMime(it.mimeType) }
+        if (media.size < uris.size) _uiState.update { it?.copy(failure = ComposerFailure.UnsupportedShare) }
+        addMedia(media)
+    }
+
+    private fun describeShared(uri: String): LocalMedia? = try {
+        reader.describe(uri)
+    } catch (_: IOException) {
+        null
+    } catch (_: RuntimeException) {
+        null
     }
 
     fun redraft(deleted: Note) {
@@ -255,11 +600,18 @@ class ComposerViewModel(
     }
 
     fun setVisibility(visibility: Visibility) {
-        _uiState.update { state -> state?.takeIf { visibility in it.visibilityOptions }?.copy(visibility = visibility) ?: state }
+        _uiState.update { state ->
+            state?.takeIf { visibility in it.visibilityOptions }?.copy(
+                visibility = visibility,
+                localOnly = state.localOnly && visibility != Visibility.Specified,
+            ) ?: state
+        }
     }
 
     fun setLocalOnly(localOnly: Boolean) {
-        _uiState.update { state -> if (state?.settingsLocked == true) state else state?.copy(localOnly = localOnly) }
+        _uiState.update { state ->
+            if (state?.settingsLocked == true || state?.visibility == Visibility.Specified) state else state?.copy(localOnly = localOnly)
+        }
     }
 
     fun setCwEnabled(enabled: Boolean) {
@@ -348,7 +700,7 @@ class ComposerViewModel(
         cancelUploads()
         val key = state.target.draftKey?.let(::storageKey)
         val draft = currentDraft(state).takeUnless { it == baseline } ?: ComposerDraft()
-        viewModelScope.launch {
+        (cleanupScope ?: viewModelScope).launch {
             if (key != null) {
                 if (keepDraft) drafts.save(key, draft) else drafts.clear(key)
             }
@@ -360,10 +712,21 @@ class ComposerViewModel(
         val state = _uiState.value ?: return
         if (state.posting) return
         if (!state.dropsEndedPoll && state.pollHasEnded(clock())) {
-            _uiState.update { it?.copy(dropsEndedPoll = true) }
+            pollChoices.clear()
+            _uiState.update { it?.copy(dropsEndedPoll = true, pollEnabled = false) }
             return
         }
-        val note = buildNote(state) ?: return
+        if (buildNote(state) == null) return
+        val edited = state.contextNote?.takeIf { state.target is ComposerTarget.Edit }
+        val prompt = when {
+            remindAltText && state.target !is ComposerTarget.Edit && state.attachments.any { it.needsAltText } -> ComposerPrompt.MissingAltText
+            !state.dropsEndedPoll && pollEditResetsVotes(edited?.poll, pollDraft(state)) -> ComposerPrompt.PollResetsVotes
+            else -> null
+        }
+        if (prompt != null && prompt !in state.confirmedPrompts) {
+            _uiState.update { it?.copy(prompt = prompt) }
+            return
+        }
         _uiState.update { it?.copy(posting = true, failure = null) }
         viewModelScope.launch {
             val token = session.token()
@@ -372,6 +735,8 @@ class ComposerViewModel(
                 return@launch
             }
             try {
+                addMentionedRecipients()
+                val note = _uiState.value?.let(::buildNote) ?: return@launch fail(ComposerFailure.Generic)
                 state.attachments.filter { it.needsSync }.forEach { attachment ->
                     attachment.remote?.let { drive.update(token, it.id, attachment.altText, attachment.isSensitive) }
                 }
@@ -485,7 +850,7 @@ class ComposerViewModel(
     private fun deleteFromDrive(attachments: List<Attachment>) {
         val files = attachments.filter { it.owned }.mapNotNull { it.remote?.id }
         if (files.isEmpty()) return
-        viewModelScope.launch {
+        (cleanupScope ?: viewModelScope).launch {
             val token = session.token() ?: return@launch
             files.forEach { id -> deleteQuietly(token, id) }
         }
@@ -508,7 +873,9 @@ class ComposerViewModel(
         val body = text.text.toString().trimEnd()
         val warning = if (state.cwEnabled) cw.text.toString() else null
         val fileIds = state.attachments.mapNotNull { it.remote?.id }
-        if (body.isBlank() && fileIds.isEmpty()) return null
+        val poll = pollDraft(state)
+        if (poll?.problem(clock()) != null) return null
+        if (body.isBlank() && fileIds.isEmpty() && poll == null && !state.isQuote) return null
         if (body.length > state.textLimit) return null
         if (warning != null && warning.length > state.cwLimit) return null
         val edited = state.contextNote?.takeIf { state.target is ComposerTarget.Edit }
@@ -520,9 +887,9 @@ class ComposerViewModel(
             replyId = (state.target as? ComposerTarget.Reply)?.noteId,
             renoteId = (state.target as? ComposerTarget.Quote)?.noteId ?: edited?.renote?.id,
             fileIds = fileIds,
-            visibleUserIds = state.visibleUserIds,
-            poll = edited?.poll?.takeUnless { state.dropsEndedPoll }?.toBody(),
-            reactionAcceptance = edited?.reactionAcceptance ?: ReactionAcceptance.All,
+            visibleUserIds = (state.visibleUserIds + state.recipients.map { it.id }).distinct(),
+            poll = poll?.toBody(),
+            reactionAcceptance = state.reactionAcceptance,
         )
     }
 
@@ -540,9 +907,11 @@ class ComposerViewModel(
             cw = note.cw,
             visibility = note.visibility,
             localOnly = note.localOnly,
+            poll = note.poll?.takeUnless { poll -> poll.expiresAtMillis?.let { it <= clock() } == true }?.toDraft(clock()),
+            reactionAcceptance = note.reactionAcceptance,
         )
         target is ComposerTarget.Reply -> ComposerDraft(
-            text = if (note.user.id == myUserId) "" else "${note.user.handle} ",
+            text = replyPrefix(note, myUsername),
             cw = defaultWarning(note.cw),
             visibility = note.visibility,
             localOnly = note.localOnly,
@@ -559,6 +928,8 @@ class ComposerViewModel(
         cw = seed.cw,
         visibility = seed.visibility,
         localOnly = seed.localOnly,
+        poll = seed.poll?.toDraft(clock()),
+        reactionAcceptance = seed.reactionAcceptance,
     )
 
     private fun recipients(target: ComposerTarget, note: Note?): List<String> {
@@ -573,6 +944,9 @@ class ComposerViewModel(
         visibility = state.visibility,
         localOnly = state.localOnly,
         attachments = state.attachments.mapNotNull(Attachment::toDraft),
+        poll = pollDraft(state),
+        reactionAcceptance = state.reactionAcceptance,
+        recipients = state.recipients,
     )
 
     private fun attachmentSignature(state: ComposerUiState): List<String> = state.attachments.map { it.remote?.id ?: it.localId }
@@ -580,7 +954,12 @@ class ComposerViewModel(
     @OptIn(FlowPreview::class)
     private fun autosave() {
         viewModelScope.launch {
-            combine(snapshotFlow { text.text.toString() }, snapshotFlow { cw.text.toString() }, _uiState) { _, _, state -> state }
+            combine(
+                snapshotFlow { text.text.toString() },
+                snapshotFlow { cw.text.toString() },
+                snapshotFlow { pollChoices.map { it.text.text.toString() } },
+                _uiState,
+            ) { _, _, _, state -> state }
                 .debounce(draftDebounceMs)
                 .collect {
                     val state = _uiState.value ?: return@collect
@@ -599,6 +978,7 @@ class ComposerViewModel(
             ApiErrorCodes.CONTAINS_PROHIBITED_WORDS -> ComposerFailure.ProhibitedWords
             ApiErrorCodes.NO_SUCH_REPLY_TARGET, ApiErrorCodes.NO_SUCH_RENOTE_TARGET, ApiErrorCodes.NO_SUCH_NOTE -> ComposerFailure.TargetGone
             ApiErrorCodes.MAX_LENGTH, ApiErrorCodes.MAX_CW_LENGTH -> ComposerFailure.TooLong
+            ApiErrorCodes.CANNOT_CREATE_ALREADY_EXPIRED_POLL -> ComposerFailure.PollAlreadyEnded
             else -> ComposerFailure.Generic
         }
         else -> ComposerFailure.Generic
@@ -615,6 +995,17 @@ class ComposerViewModel(
     companion object {
         const val DRAFT_DEBOUNCE_MS = 400L
         const val SUGGESTION_DEBOUNCE_MS = 200L
+        const val MENTION_DEBOUNCE_MS = 1_000L
+        const val MIN_RECIPIENT_QUERY = 2
+        const val RECIPIENT_RESULTS = 6
+
+        private val NoPeople = object : SuggestionsApi {
+            override suspend fun users(token: String?, query: String, limit: Int) = emptyList<NoteUser>()
+
+            override suspend fun frequentUsers(token: String, userId: String, limit: Int) = emptyList<NoteUser>()
+
+            override suspend fun hashtags(token: String?, query: String, limit: Int) = emptyList<String>()
+        }
         private const val PROGRESS_STEP = 0.02f
         private const val HTTP_PAYLOAD_TOO_LARGE = 413
 
@@ -636,6 +1027,9 @@ class ComposerViewModel(
                         customEmoji = { app.container.emojiRepository.emojis.value },
                         unicodeEmoji = app.container.unicodeEmoji::groups,
                     ),
+                    people = app.container.suggestionsApi,
+                    resolveHandle = { token, username, host -> app.container.usersApi.showByHandle(token, username, host).user },
+                    cleanupScope = app.container.scope,
                 )
             }
         }

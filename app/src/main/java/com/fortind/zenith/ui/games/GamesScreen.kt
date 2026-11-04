@@ -43,7 +43,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemShapes
@@ -112,6 +111,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.games.Game
+import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.pointerHover
 import com.fortind.zenith.games.GameCategory
 import com.fortind.zenith.games.GameSection
@@ -211,9 +211,11 @@ fun GamesContent(
             leadingIcon = { SearchLeadingIcon(searchBarState) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { textFieldState.clearText() }) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.games_search_clear))
-                    }
+                    TooltipIconButton(
+                        label = stringResource(R.string.games_search_clear),
+                        icon = Icons.Default.Close,
+                        onClick = { textFieldState.clearText() },
+                    )
                 }
             },
         )
@@ -308,9 +310,11 @@ fun GamesContent(
 private fun SearchLeadingIcon(searchBarState: SearchBarState) {
     val scope = rememberCoroutineScope()
     if (searchBarState.currentValue == SearchBarValue.Expanded) {
-        IconButton(onClick = { scope.launch { searchBarState.animateToCollapsed() } }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.games_search_back))
-        }
+        TooltipIconButton(
+            label = stringResource(R.string.games_search_back),
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            onClick = { scope.launch { searchBarState.animateToCollapsed() } },
+        )
     } else {
         Icon(Icons.Default.Search, contentDescription = null)
     }

@@ -7,6 +7,8 @@ sealed interface AppShortcut {
 
     data object NewPost : AppShortcut
 
+    data object Find : AppShortcut
+
     data object Refresh : AppShortcut
 
     data object Dismiss : AppShortcut
@@ -30,6 +32,7 @@ fun shortcutFor(keyCode: Int, command: Boolean, shift: Boolean = false): AppShor
     !command -> null
     keyCode == KeyEvent.KEYCODE_N -> AppShortcut.NewPost
     keyCode == KeyEvent.KEYCODE_R -> AppShortcut.Refresh
+    keyCode == KeyEvent.KEYCODE_F -> AppShortcut.Find
     keyCode == KeyEvent.KEYCODE_TAB -> AppShortcut.MoveTab(if (shift) -1 else 1)
     else -> DestinationKeyCodes.indexOf(keyCode).takeIf { it >= 0 }?.let { AppShortcut.Destination(AppDestination.entries[it]) }
 }

@@ -3,6 +3,7 @@ package com.fortind.zenith.notifications
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.app.RemoteInput
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -17,12 +18,15 @@ import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.net.HttpStatusException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
 
 interface NotificationWork {
     fun schedulePolling()
     fun cancelPolling()
     fun enqueueFollowRequestResponse(notificationId: String, userId: String, accept: Boolean)
     fun enqueueMarkAllRead()
+    fun enqueueQuickReply(noteId: String, text: String)
+    fun enqueueQuickLike(noteId: String)
 }
 
 class WorkManagerNotificationWork(private val context: Context) : NotificationWork {
@@ -61,6 +65,30 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
             OneTimeWorkRequestBuilder<MarkAllReadWorker>()
                 .setConstraints(needsNetwork)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+                .build()
+        )
+    }
+
+    override fun enqueueQuickReply(noteId: String, text: String) {
+        workManager.enqueue(
+            OneTimeWorkRequestBuilder<QuickReplyWorker>()
+                .setConstraints(needsNetwork)
+                .setInputData(
+                    Data.Builder()
+                        .putString(QuickReplyWorker.KEY_NOTE_ID, noteId)
+                        .putString(QuickReplyWorker.KEY_TEXT, text)
+                        .build()
+                )
+                .build()
+        )
+    }
+
+    override fun enqueueQuickLike(noteId: String) {
+        workManager.enqueue(
+            OneTimeWorkRequestBuilder<QuickLikeWorker>()
+                .setConstraints(needsNetwork)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+                .setInputData(Data.Builder().putString(QuickLikeWorker.KEY_NOTE_ID, noteId).build())
                 .build()
         )
     }
@@ -134,11 +162,47 @@ class MarkAllReadWorker(context: Context, params: WorkerParameters) : CoroutineW
     }
 }
 
+class QuickReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val noteId = inputData.getString(KEY_NOTE_ID) ?: return Result.failure()
+        val text = inputData.getString(KEY_TEXT) ?: return Result.failure()
+        applicationContext.container.quickActions.reply(noteId, text)
+        return Result.success()
+    }
+
+    companion object {
+        const val KEY_NOTE_ID = "note_id"
+        const val KEY_TEXT = "text"
+    }
+}
+
+class QuickLikeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val noteId = inputData.getString(KEY_NOTE_ID) ?: return Result.failure()
+        val actions = applicationContext.container.quickActions
+        return when (actions.like(noteId)) {
+            QuickOutcome.Done -> Result.success()
+            QuickOutcome.Retry -> if (runAttemptCount < MAX_ATTEMPTS) {
+                Result.retry()
+            } else {
+                actions.likeGaveUp(noteId)
+                Result.failure()
+            }
+        }
+    }
+
+    companion object {
+        const val KEY_NOTE_ID = "note_id"
+        private const val MAX_ATTEMPTS = 3
+    }
+}
+
 class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val work = context.container.notificationWork
         val notificationId = intent.getStringExtra(EXTRA_NOTIFICATION_ID)
         val userId = intent.getStringExtra(EXTRA_USER_ID)
+        val noteId = intent.getStringExtra(EXTRA_NOTE_ID)
         when (intent.action) {
             ACTION_ACCEPT -> if (notificationId != null && userId != null) {
                 work.enqueueFollowRequestResponse(notificationId, userId, accept = true)
@@ -147,6 +211,30 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 work.enqueueFollowRequestResponse(notificationId, userId, accept = false)
             }
             ACTION_MARK_READ -> work.enqueueMarkAllRead()
+            ACTION_REPLY -> if (notificationId != null && noteId != null) reply(context, intent, notificationId, noteId)
+            ACTION_LIKE -> if (notificationId != null && noteId != null) {
+                context.container.systemNotifier.cancel(notificationId)
+                work.enqueueQuickLike(noteId)
+            }
+        }
+    }
+
+    private fun reply(context: Context, intent: Intent, notificationId: String, noteId: String) {
+        val container = context.container
+        container.systemNotifier.cancel(notificationId)
+        val typed = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(KEY_REPLY_TEXT)?.toString()?.trim()
+        if (typed.isNullOrEmpty()) return
+        if (typed.length <= MAX_QUEUED_REPLY) {
+            container.notificationWork.enqueueQuickReply(noteId, typed)
+            return
+        }
+        val pending = goAsync()
+        container.scope.launch {
+            try {
+                container.quickActions.replyTooLong(noteId, typed)
+            } finally {
+                pending.finish()
+            }
         }
     }
 
@@ -154,6 +242,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val ACTION_ACCEPT = "com.fortind.zenith.action.ACCEPT_FOLLOW_REQUEST"
         const val ACTION_REJECT = "com.fortind.zenith.action.REJECT_FOLLOW_REQUEST"
         const val ACTION_MARK_READ = "com.fortind.zenith.action.MARK_ALL_READ"
+        const val ACTION_REPLY = "com.fortind.zenith.action.QUICK_REPLY"
+        const val ACTION_LIKE = "com.fortind.zenith.action.QUICK_LIKE"
+        const val EXTRA_NOTE_ID = "note_id"
+        const val KEY_REPLY_TEXT = "reply_text"
+        private const val MAX_QUEUED_REPLY = 3_000
         const val EXTRA_NOTIFICATION_ID = "notification_id"
         const val EXTRA_USER_ID = "user_id"
     }

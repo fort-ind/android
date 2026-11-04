@@ -1,5 +1,11 @@
 package com.fortind.zenith
 
+import com.fortind.zenith.discovery.CollectionsApi
+import com.fortind.zenith.discovery.DataStoreDismissedAnnouncementsStore
+import com.fortind.zenith.discovery.DiscoveryApi
+import com.fortind.zenith.discovery.DismissedAnnouncementsStore
+import com.fortind.zenith.discovery.HttpCollectionsApi
+import com.fortind.zenith.discovery.HttpDiscoveryApi
 import android.app.Application
 import android.content.Context
 import android.os.Build
@@ -12,6 +18,7 @@ import com.fortind.zenith.account.AccountApi
 import com.fortind.zenith.account.HttpAccountApi
 import com.fortind.zenith.account.HttpModerationApi
 import com.fortind.zenith.account.ModerationApi
+import com.fortind.zenith.emoji.DEFAULT_LIKE
 import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.auth.DataStoreScopeStampStore
 import com.fortind.zenith.auth.HttpMiAuthApi
@@ -48,6 +55,7 @@ import com.fortind.zenith.notifications.AndroidSystemNotifier
 import com.fortind.zenith.notifications.AppForegroundTracker
 import com.fortind.zenith.notifications.DataStoreNotificationSyncStore
 import com.fortind.zenith.notifications.HttpNotificationsApi
+import com.fortind.zenith.notifications.NotificationQuickActions
 import com.fortind.zenith.notifications.NotificationStream
 import com.fortind.zenith.notifications.NotificationSyncCoordinator
 import com.fortind.zenith.notifications.NotificationSyncStore
@@ -67,11 +75,15 @@ import com.fortind.zenith.settings.AppIconSwitcher
 import com.fortind.zenith.settings.DataStoreSettingsStore
 import com.fortind.zenith.settings.PackageManagerAppIconSwitcher
 import com.fortind.zenith.settings.SettingsStore
+import com.fortind.zenith.timeline.CachingLinkPreviews
+import com.fortind.zenith.timeline.HttpLinkPreviewApi
 import com.fortind.zenith.timeline.HttpNotesApi
+import com.fortind.zenith.timeline.LinkPreviewSource
 import com.fortind.zenith.timeline.NotesApi
 import com.fortind.zenith.timeline.StreamingTimelineStream
 import com.fortind.zenith.timeline.TimelineStream
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -95,11 +107,15 @@ class AppContainer(application: Application) {
     val usersApi: UsersApi = HttpUsersApi(http)
     val followApi: FollowApi = HttpFollowApi(http)
     val suggestionsApi: SuggestionsApi = HttpSuggestionsApi(http)
+    val collectionsApi: CollectionsApi = HttpCollectionsApi(http)
+    val discoveryApi: DiscoveryApi = HttpDiscoveryApi(http)
+    val dismissedAnnouncements: DismissedAnnouncementsStore = DataStoreDismissedAnnouncementsStore(application)
     val mediaReader: MediaReader = ContentResolverMediaReader(application.contentResolver, File(application.cacheDir, "staged"))
     val driveApi: DriveApi = HttpDriveApi(http, okHttpClient, mediaReader)
     val mediaCompressor: MediaCompressor = AndroidMediaCompressor(application)
     val mediaSanitizer: MediaSanitizer = AndroidMediaSanitizer(application, mediaReader)
     val timelineStream: TimelineStream = StreamingTimelineStream(streaming)
+    val linkPreviews: LinkPreviewSource = CachingLinkPreviews(HttpLinkPreviewApi(http) { Locale.getDefault().toLanguageTag() }, scope)
     val emojiRepository = EmojiRepository(HttpInstanceApi(http), File(application.cacheDir, "instance"), scope)
     val unicodeEmoji: UnicodeEmojiSource = AssetUnicodeEmojiSource(application.assets)
     val recentReactions: RecentReactionsStore = DataStoreRecentReactionsStore(application)
@@ -111,6 +127,13 @@ class AppContainer(application: Application) {
     private val notificationSyncStore: NotificationSyncStore = DataStoreNotificationSyncStore(application)
     val systemNotifier: SystemNotifier = AndroidSystemNotifier(application)
     val notificationWork: NotificationWork = WorkManagerNotificationWork(application)
+    val quickActions = NotificationQuickActions(
+        session = sessionService,
+        notes = notesApi,
+        drafts = draftStore,
+        notifier = systemNotifier,
+        defaultLike = { emojiRepository.meta.value?.defaultLike ?: DEFAULT_LIKE },
+    )
     val notificationSyncer = NotificationSyncer(
         session = sessionService,
         api = notificationsApi,

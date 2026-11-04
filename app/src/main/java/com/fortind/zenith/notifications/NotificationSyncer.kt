@@ -31,14 +31,14 @@ class NotificationSyncer(
             val baseline = syncStore.lastSeenMillis()
             val newest = page.maxOfOrNull { it.createdAtMillis } ?: return SyncOutcome.Done
             syncStore.advanceLastSeenMillis(newest)
-            if (baseline == 0L || foreground.inForeground) return SyncOutcome.Done
-            val fresh = page.filter { it.createdAtMillis > baseline }
-            if (fresh.isEmpty()) return SyncOutcome.Done
             val unread = api.unreadCount(token)
-            val toShow = fresh
+            if (unread == 0) notifier.clearAll()
+            if (baseline == 0L || foreground.inForeground) return SyncOutcome.Done
+            val toShow = page
+                .filter { it.createdAtMillis > baseline }
                 .take(unread)
                 .filter { it.type.category() in current.notificationCategories }
-            if (toShow.isNotEmpty()) notifier.show(toShow)
+            if (toShow.isNotEmpty()) notifier.show(toShow, allowedActions())
             SyncOutcome.Done
         } catch (_: TokenRejectedException) {
             session.signOut()
@@ -48,6 +48,11 @@ class NotificationSyncer(
         } catch (_: IOException) {
             SyncOutcome.Retry
         }
+    }
+
+    private suspend fun allowedActions(): Set<QuickAction> = buildSet {
+        if (session.hasScope(SCOPE_WRITE_NOTES)) add(QuickAction.Reply)
+        if (session.hasScope(SCOPE_WRITE_REACTIONS)) add(QuickAction.Like)
     }
 
     suspend fun acknowledgeSeen() {

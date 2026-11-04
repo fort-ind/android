@@ -35,9 +35,11 @@ enum class AppDestination(
 sealed interface AppRoute {
     fun encode(): String
 
-    val isDetailPage: Boolean get() = this is Thread || this is Person || this is PersonHandle || this is FollowList
+    val isDetailPage: Boolean
+        get() = this is Thread || this is Person || this is PersonHandle || this is FollowList || this is Tag || this is Search || this is Hashtags
 
-    val isListPane: Boolean get() = this is Home || this is Notifications || this is Profile || this is Person || this is PersonHandle
+    val isListPane: Boolean
+        get() = this is Home || this is Notifications || this is Profile || this is Person || this is PersonHandle || this is Tag || this is Search
 
     data object Home : AppRoute {
         override fun encode() = "home"
@@ -75,7 +77,21 @@ sealed interface AppRoute {
         override fun encode() = "$FOLLOWS_PREFIX${kind.name}:$userId"
     }
 
+    data class Tag(val tag: String) : AppRoute {
+        override fun encode() = "$TAG_PREFIX$tag"
+    }
+
+    data class Search(val query: String) : AppRoute {
+        override fun encode() = "$SEARCH_PREFIX$query"
+    }
+
+    data object Hashtags : AppRoute {
+        override fun encode() = "hashtags"
+    }
+
     companion object {
+        private const val TAG_PREFIX = "tag:"
+        private const val SEARCH_PREFIX = "search:"
         private const val THREAD_PREFIX = "thread:"
         private const val PERSON_PREFIX = "person:"
         private const val HANDLE_PREFIX = "handle:"
@@ -92,6 +108,9 @@ sealed interface AppRoute {
             encoded == "profile" -> Profile
             encoded == "settings" -> Settings()
             encoded == "settings:edit" -> Settings(openEditProfile = true)
+            encoded == "hashtags" -> Hashtags
+            encoded.startsWith(TAG_PREFIX) -> encoded.removePrefix(TAG_PREFIX).takeIf(String::isNotEmpty)?.let(::Tag)
+            encoded.startsWith(SEARCH_PREFIX) -> encoded.removePrefix(SEARCH_PREFIX).takeIf(String::isNotEmpty)?.let(::Search)
             encoded.startsWith(THREAD_PREFIX) -> encoded.removePrefix(THREAD_PREFIX).takeIf(::isValidNoteId)?.let(::Thread)
             encoded.startsWith(PERSON_PREFIX) -> encoded.removePrefix(PERSON_PREFIX).takeIf(::isValidNoteId)?.let(::Person)
             encoded.startsWith(HANDLE_PREFIX) -> Handle.matchEntire(encoded.removePrefix(HANDLE_PREFIX))?.let { match ->

@@ -1,5 +1,6 @@
 package com.fortind.zenith.timeline
 
+import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.mfm.MfmParser
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
@@ -140,6 +141,7 @@ class FakeNotesApi : NotesApi {
 
     override suspend fun renote(token: String, noteId: String, visibility: Visibility, localOnly: Boolean) {
         renoteCalls += noteId
+        renoteVisibility = visibility
         renoteFailure?.let { throw it }
     }
 
@@ -169,7 +171,46 @@ class FakeNotesApi : NotesApi {
         voteFailures[choice]?.let { throw it }
     }
 
-    override suspend fun isBookmarked(token: String, noteId: String): Boolean = noteId in bookmarkedIds
+    val threadMutedIds = mutableSetOf<String>()
+    val pinCalls = CopyOnWriteArrayList<String>()
+    var pinFailure: IOException? = null
+    var renoteVisibility: Visibility? = null
+    var muteThreadFailure: IOException? = null
+    var renoteRows: List<Note> = emptyList()
+    var reactionRows: List<NoteReactionRow> = emptyList()
+    val reactionQueries = CopyOnWriteArrayList<String?>()
+
+    override suspend fun noteFlags(token: String, noteId: String) = NoteFlags(noteId in bookmarkedIds, noteId in threadMutedIds)
+
+    override suspend fun muteThread(token: String, noteId: String) {
+        muteThreadFailure?.let { throw it }
+        threadMutedIds += noteId
+    }
+
+    override suspend fun unmuteThread(token: String, noteId: String) {
+        muteThreadFailure?.let { throw it }
+        threadMutedIds -= noteId
+    }
+
+    override suspend fun pin(token: String, noteId: String): CurrentUser {
+        pinCalls += "pin:$noteId"
+        pinFailure?.let { throw it }
+        return CurrentUser("me", "me", null, null, null, pinnedNoteIds = listOf(noteId))
+    }
+
+    override suspend fun unpin(token: String, noteId: String): CurrentUser {
+        pinCalls += "unpin:$noteId"
+        pinFailure?.let { throw it }
+        return CurrentUser("me", "me", null, null, null)
+    }
+
+    override suspend fun renotesOf(token: String?, noteId: String, untilId: String?, limit: Int): List<Note> =
+        if (untilId == null) renoteRows else emptyList()
+
+    override suspend fun reactionsOn(token: String?, noteId: String, type: String?, untilId: String?, limit: Int): List<NoteReactionRow> {
+        reactionQueries += type
+        return if (untilId == null) reactionRows.filter { type == null || it.reaction == type } else emptyList()
+    }
 
     override suspend fun bookmark(token: String, noteId: String) {
         bookmarkCalls += noteId
@@ -192,6 +233,31 @@ class FakeNotesApi : NotesApi {
 
     val userNotePages = mutableMapOf<Pair<String, UserNotesTab>, List<Note>>()
 
+    val collectionPages = mutableMapOf<NoteCollection, List<Note>>()
+    val collectionCalls = CopyOnWriteArrayList<NoteCollection>()
+    val searchCalls = CopyOnWriteArrayList<NoteSearch>()
+    val tagCalls = CopyOnWriteArrayList<Pair<String?, String>>()
+    var searchResults: List<Note> = emptyList()
+
+    override suspend fun collectionNotes(token: String, collection: NoteCollection, untilId: String?, sinceId: String?, limit: Int): List<Note> {
+        collectionCalls += collection
+        val all = collectionPages[collection].orEmpty()
+        val older = if (untilId == null) all else all.dropWhile { it.id != untilId }.drop(1)
+        return older.take(limit)
+    }
+
+    override suspend fun searchNotes(token: String, search: NoteSearch, untilId: String?, limit: Int): List<Note> {
+        searchCalls += search
+        val older = if (untilId == null) searchResults else searchResults.dropWhile { it.id != untilId }.drop(1)
+        return older.take(limit)
+    }
+
+    override suspend fun notesByTag(token: String?, tag: String, untilId: String?, limit: Int): List<Note> {
+        tagCalls += token to tag
+        val older = if (untilId == null) searchResults else searchResults.dropWhile { it.id != untilId }.drop(1)
+        return older.take(limit)
+    }
+
     override suspend fun userNotes(token: String?, userId: String, tab: UserNotesTab, untilId: String?, limit: Int): List<Note> {
         val all = userNotePages[userId to tab].orEmpty()
         val older = if (untilId == null) all else all.dropWhile { it.id != untilId }.drop(1)
@@ -208,6 +274,14 @@ class FakeTimelineStream : TimelineStream {
     override fun events(token: String?, kind: TimelineKind): Flow<TimelineStreamEvent> {
         subscriptions += token to kind
         return events
+    }
+
+    val collectionSubscriptions = CopyOnWriteArrayList<NoteCollection>()
+    val collectionStream = MutableSharedFlow<TimelineStreamEvent>(extraBufferCapacity = 16)
+
+    override fun collectionEvents(token: String, collection: NoteCollection): Flow<TimelineStreamEvent> {
+        collectionSubscriptions += collection
+        return collectionStream
     }
 
     override fun updates(token: String?, captured: Flow<Set<String>>): Flow<NoteUpdate> = channelFlow {
