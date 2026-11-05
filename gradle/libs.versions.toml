@@ -27,6 +27,7 @@ media3 = "1.11.1"
 exifinterface = "1.4.2"
 navigation3 = "1.2.1"
 navigationevent = "1.2.0"
+leakcanary = "2.14"
 
 [libraries]
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
@@ -81,6 +82,7 @@ androidx-media3-transformer = { group = "androidx.media3", name = "media3-transf
 androidx-media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }
 androidx-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
+leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
