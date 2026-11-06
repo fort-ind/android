@@ -274,7 +274,7 @@ fun SocialHost(
         onRequestedReplyHandled()
     }
 
-    CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter) {
+    CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit()) {
         content(ui)
     }
 

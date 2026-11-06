@@ -1,38 +1,16 @@
 package com.fortind.zenith.ui.feed
 
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.platform.testTag
-import com.fortind.zenith.timeline.Visibility
-import com.fortind.zenith.timeline.renoteVisibilities
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Reply
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.outlined.AddReaction
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
@@ -41,22 +19,15 @@ import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -64,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.Reactions
-import com.fortind.zenith.timeline.canRenote
 import com.fortind.zenith.ui.mfm.CustomEmojiImage
 import com.fortind.zenith.ui.mfm.EmojiAspects
 import com.fortind.zenith.ui.pointerHover
@@ -98,12 +68,6 @@ fun rememberNoteActionLabels(): NoteActionLabels {
         NoteActionLabels(react, like, renote, unrenote, quote, reply, more, copyLink, openBrowser)
     }
 }
-
-private val RenoteTargets = listOf(
-    Triple(Visibility.Public, R.string.note_renote_public, Icons.Default.Public),
-    Triple(Visibility.Home, R.string.note_renote_home, Icons.Default.Home),
-    Triple(Visibility.Followers, R.string.note_renote_followers, Icons.Default.Lock),
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -218,172 +182,5 @@ fun ReactionGlyph(reactionKey: String, note: Note?, environment: NoteEnvironment
     val ratio = EmojiAspects.ratio(url).coerceIn(0.5f, 6f)
     Box(modifier = Modifier.height(sizeDp.dp).width((sizeDp * ratio).dp)) {
         CustomEmojiImage(name, url, environment.animate)
-    }
-}
-
-@Composable
-fun NoteActionRow(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks) {
-    val labels = rememberNoteActionLabels()
-    val colors = MaterialTheme.colorScheme
-    val renoted = note.id in environment.renoted
-    var renoteMenu by remember { mutableStateOf(false) }
-    var moreMenu by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CountedAction(
-            label = labels.reply,
-            count = note.repliesCount,
-            onClick = { callbacks.reply(note) },
-        ) { Icon(Icons.AutoMirrored.Outlined.Reply, contentDescription = null, modifier = Modifier.size(20.dp)) }
-        Box {
-            CountedAction(
-                label = if (renoted) labels.unrenote else labels.renote,
-                count = note.renoteCount,
-                tint = if (renoted) colors.primary else Color.Unspecified,
-                enabled = note.canRenote(environment.myUserId) || !environment.signedIn,
-                onClick = {
-                    if (!environment.signedIn) {
-                        callbacks.renote(note)
-                    } else {
-                        callbacks.checkRenoted(note)
-                        renoteMenu = true
-                    }
-                },
-            ) { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(20.dp)) }
-            DropdownMenu(expanded = renoteMenu, onDismissRequest = { renoteMenu = false }) {
-                val allowed = note.renoteVisibilities(environment.myUserId)
-                Text(
-                    text = stringResource(R.string.note_renote_to),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-                RenoteTargets.forEach { (visibility, labelRes, icon) ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(labelRes)) },
-                        leadingIcon = { Icon(icon, contentDescription = null) },
-                        onClick = {
-                            renoteMenu = false
-                            callbacks.renoteAs(note, visibility)
-                        },
-                        enabled = !renoted && visibility in allowed,
-                        modifier = Modifier.testTag("renote:${visibility.name}"),
-                    )
-                }
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(labels.quote) },
-                    leadingIcon = { Icon(Icons.Default.FormatQuote, contentDescription = null) },
-                    onClick = {
-                        renoteMenu = false
-                        callbacks.quote(note)
-                    },
-                )
-                if (renoted) {
-                    DropdownMenuItem(
-                        text = { Text(labels.unrenote) },
-                        onClick = {
-                            renoteMenu = false
-                            callbacks.unrenote(note)
-                        },
-                    )
-                }
-            }
-        }
-        ReactButton(note, labels, callbacks)
-        Spacer(Modifier.weight(1f))
-        Box {
-            TooltipIconButton(label = labels.more, icon = Icons.Default.MoreHoriz, onClick = { moreMenu = true })
-            DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                NoteMenuItems(note, environment, callbacks) { moreMenu = false }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-private fun ReactButton(note: Note, labels: NoteActionLabels, callbacks: NoteCallbacks) {
-    val haptics = LocalHapticFeedback.current
-    var hovered by remember { mutableStateOf(false) }
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-        tooltip = { PlainTooltip { Text(labels.react) } },
-        state = rememberTooltipState(),
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .pointerHover { hovered = it }
-                .combinedClickable(
-                    interactionSource = null,
-                    indication = ripple(),
-                    role = Role.Button,
-                    onClickLabel = labels.react,
-                    onLongClickLabel = labels.like,
-                    onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        callbacks.reactDefault(note)
-                    },
-                    onClick = { callbacks.openReactionPicker(note) },
-                )
-                .semantics { contentDescription = labels.react },
-        ) {
-            Icon(
-                Icons.Outlined.AddReaction,
-                contentDescription = null,
-                tint = if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CountedAction(
-    label: String,
-    count: Int,
-    onClick: () -> Unit,
-    tint: Color = Color.Unspecified,
-    enabled: Boolean = true,
-    icon: @Composable () -> Unit,
-) {
-    val color = when {
-        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        tint != Color.Unspecified -> tint
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-        tooltip = { PlainTooltip { Text(label) } },
-        state = rememberTooltipState(),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier
-                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                .clip(CircleShape)
-                .combinedClickable(
-                    interactionSource = null,
-                    indication = ripple(),
-                    enabled = enabled,
-                    role = Role.Button,
-                    onClickLabel = label,
-                    onClick = onClick,
-                )
-                .semantics { contentDescription = if (count > 0) "$label, $count" else label }
-                .padding(horizontal = 12.dp),
-        ) {
-            CompositionLocalProvider(LocalContentColor provides color) {
-                icon()
-                if (count > 0) Text(count.toString(), style = MaterialTheme.typography.labelLarge)
-            }
-        }
     }
 }

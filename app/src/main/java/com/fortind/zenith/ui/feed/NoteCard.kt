@@ -216,7 +216,7 @@ private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCa
             if (showReplyContext) note.reply?.let { ReplyContext(it) }
             NoteContent(note, environment, callbacks, focal)
             if (note.reactions.isNotEmpty()) ReactionChips(note, environment, callbacks)
-            NoteActionRow(note, environment, callbacks)
+            NoteActionBar(note, environment, callbacks)
         }
     }
 }
