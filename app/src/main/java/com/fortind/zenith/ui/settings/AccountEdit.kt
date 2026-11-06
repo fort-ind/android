@@ -3,8 +3,6 @@
 package com.fortind.zenith.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +81,7 @@ import com.fortind.zenith.ui.StatusMessage
 import com.fortind.zenith.ui.login.AuthPageEffects
 import com.fortind.zenith.ui.login.ErrorMessage
 import com.fortind.zenith.ui.login.LoginViewModel
+import com.fortind.zenith.ui.media.PickOsMedia
 import com.fortind.zenith.ui.rememberReduceMotion
 import java.text.DateFormat
 import java.util.Date
@@ -180,13 +179,12 @@ internal fun EditProfileContent(user: CurrentUser, form: ProfileFormState, saveS
     }
     val enabled = !saveState.saving
     val problems = form.toForm().problems
-    val pickAvatar = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) form.avatarUri = uri.toString()
+    val pickAvatar = rememberLauncherForActivityResult(PickOsMedia(imagesOnly = true)) { uris ->
+        uris.firstOrNull()?.let { form.avatarUri = it.toString() }
     }
-    val pickBanner = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) form.bannerUri = uri.toString()
+    val pickBanner = rememberLauncherForActivityResult(PickOsMedia(imagesOnly = true)) { uris ->
+        uris.firstOrNull()?.let { form.bannerUri = it.toString() }
     }
-    val imageOnly = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (saveState.saving) {
@@ -209,8 +207,8 @@ internal fun EditProfileContent(user: CurrentUser, form: ProfileFormState, saveS
             bannerModel = form.bannerUri ?: user.bannerUrl,
             avatarModel = form.avatarUri ?: user.avatarUrl,
             name = user.displayName,
-            onPickBanner = if (enabled) ({ pickBanner.launch(imageOnly) }) else null,
-            onPickAvatar = if (enabled) ({ pickAvatar.launch(imageOnly) }) else null,
+            onPickBanner = if (enabled) ({ pickBanner.launch(Unit) }) else null,
+            onPickAvatar = if (enabled) ({ pickAvatar.launch(Unit) }) else null,
         )
         CountedField(
             state = form.name,
