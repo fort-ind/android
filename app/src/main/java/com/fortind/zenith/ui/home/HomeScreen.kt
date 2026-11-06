@@ -256,6 +256,7 @@ private fun FeedPane(
     val listCallbacks = remember(feedViewModel) {
         TimelineListCallbacks(
             onLoadMore = { feedViewModel.loadMore() },
+            onLoadNewer = { feedViewModel.loadNewer() },
             onRetry = { feedViewModel.retry() },
             onRefresh = feedViewModel::refresh,
             onShowPending = { feedViewModel.showPending() },

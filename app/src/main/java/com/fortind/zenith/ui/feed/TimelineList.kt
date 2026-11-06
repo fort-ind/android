@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 private const val LOAD_MORE_THRESHOLD = 5
+private const val LOAD_NEWER_THRESHOLD = 5
 private const val VISIBLE_DEBOUNCE_MS = 500L
 private const val NOTE_PREFIX_EXCLUDED = "feed:"
 
@@ -63,6 +64,7 @@ class TimelineListCallbacks(
     val onLogIn: () -> Unit,
     val onAtTop: (Boolean) -> Unit,
     val onVisibleNotes: (Set<String>) -> Unit,
+    val onLoadNewer: () -> Unit = {},
 )
 
 @OptIn(FlowPreview::class)
@@ -104,6 +106,13 @@ fun TimelineList(
             .filter { it }
             .collect { current.onLoadMore() }
     }
+    val newerRowIndex by rememberUpdatedState(listOf(fullHeader, stickyHeader, header, banner).count { it != null } + pinned.size)
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex <= newerRowIndex + LOAD_NEWER_THRESHOLD }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect { current.onLoadNewer() }
+    }
     LaunchedEffect(listState) {
         snapshotFlow {
             listState.layoutInfo.visibleItemsInfo.mapNotNull { (it.key as? String)?.takeUnless { key -> key.startsWith(NOTE_PREFIX_EXCLUDED) } }.toSet()
@@ -113,7 +122,7 @@ fun TimelineList(
             .collect { current.onVisibleNotes(it) }
     }
     val firstId = timeline.items.firstOrNull()?.id
-    val pinnedToTop = atTop
+    val pinnedToTop = atTop && !timeline.headTrimmed
     LaunchedEffect(firstId) {
         if (firstId != null && pinnedToTop) listState.requestScrollToItem(0)
     }
@@ -189,6 +198,9 @@ fun TimelineList(
                 FeedMessage(timeline.status, kind, current.onRetry, current.onLogIn, emptyBody = emptyBody)
             }
             else -> {
+                if (timeline.headTrimmed) {
+                    item(key = "feed:newer", contentType = "newer") { FeedNewerRow(timeline, current.onLoadNewer) }
+                }
                 itemsIndexed(timeline.items, key = { _, note -> note.id }, contentType = { _, note -> noteContentType(note) }) { index, note ->
                     Column(modifier = if (reduceMotion) itemModifier else itemModifier.animateItem()) {
                         if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

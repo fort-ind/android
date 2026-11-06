@@ -125,7 +125,8 @@ class AppContainer(application: Application) {
     val appIconSwitcher: AppIconSwitcher = PackageManagerAppIconSwitcher(application)
     val foregroundTracker = AppForegroundTracker()
     private val notificationSyncStore: NotificationSyncStore = DataStoreNotificationSyncStore(application)
-    val systemNotifier: SystemNotifier = AndroidSystemNotifier(application)
+    private val androidNotifier = AndroidSystemNotifier(application)
+    val systemNotifier: SystemNotifier = androidNotifier
     val notificationWork: NotificationWork = WorkManagerNotificationWork(application)
     val quickActions = NotificationQuickActions(
         session = sessionService,
@@ -152,6 +153,7 @@ class AppContainer(application: Application) {
 
     init {
         http.onPermissionDenied = { scope.launch { sessionService.markScopesStale() } }
+        scope.launch { androidNotifier.ensureChannels() }
     }
 }
 

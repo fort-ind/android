@@ -88,10 +88,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -105,6 +103,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.unit.toRect
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -267,7 +266,13 @@ fun GamesContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .onGloballyPositioned { contentTopInWindow = it.positionInWindow().y }
+            .then(
+                if (tabletopHinge != null) {
+                    Modifier.onLayoutRectChanged { contentTopInWindow = it.boundsInWindow.top.toFloat() }
+                } else {
+                    Modifier
+                },
+            )
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.F) {
                     scope.launch { searchBarState.animateToExpanded() }
@@ -398,7 +403,13 @@ private fun GameGrid(
         verticalArrangement = Arrangement.spacedBy(if (segmented) ListItemDefaults.SegmentedGap else 8.dp),
         modifier = Modifier
             .fillMaxSize()
-            .onGloballyPositioned { gridBoundsInWindow = it.boundsInWindow() },
+            .then(
+                if (bookHinge != null) {
+                    Modifier.onLayoutRectChanged { gridBoundsInWindow = it.boundsInWindow.toRect() }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         sections.forEach { section ->
             stickyHeader(key = "header:${section.letter}", contentType = "header") {

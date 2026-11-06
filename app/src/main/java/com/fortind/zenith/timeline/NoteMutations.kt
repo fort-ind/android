@@ -14,6 +14,12 @@ fun mergeOlder(existing: List<Note>, incoming: List<Note>): List<Note> {
     return if (fresh.isEmpty()) existing else existing + fresh
 }
 
+fun trimNewest(items: List<Note>, max: Int): List<Note> =
+    if (items.size <= max) items else items.subList(items.size - max, items.size).toList()
+
+fun trimOldest(items: List<Note>, max: Int): List<Note> =
+    if (items.size <= max) items else items.subList(0, max).toList()
+
 fun Note.mapNote(id: String, transform: (Note) -> Note): Note {
     val self = if (this.id == id) transform(this) else this
     val renote = self.renote?.mapNote(id, transform)

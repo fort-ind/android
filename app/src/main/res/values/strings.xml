@@ -163,6 +163,8 @@
     <string name="feed_sign_in_body">posts from people you follow show up here once you\'re logged in. Local and Global are open to everyone!</string>
     <string name="feed_log_in">Log in</string>
     <string name="feed_load_more_failed">Couldn\'t load older posts :(</string>
+    <string name="feed_load_newer">Load newer posts</string>
+    <string name="feed_load_newer_failed">Couldn\'t load newer posts :(</string>
     <string name="feed_caught_up">you\'re all caught up :D</string>
     <string name="feed_permission_title">one more thing..</string>
     <string name="feed_permission_body">to react and renote, fort.android needs your OK on %1$s. you\'ll hop over there and right back.</string>

@@ -255,6 +255,24 @@ fun FeedMessage(status: TimelineStatus, kind: TimelineKind?, onRetry: () -> Unit
 }
 
 @Composable
+fun FeedNewerRow(timeline: TimelineState, onLoad: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        when {
+            timeline.loadingNewer -> FeedLoading()
+            timeline.loadNewerFailed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    stringResource(R.string.feed_load_newer_failed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onLoad) { Text(stringResource(R.string.feed_retry)) }
+            }
+            else -> TextButton(onClick = onLoad) { Text(stringResource(R.string.feed_load_newer)) }
+        }
+    }
+}
+
+@Composable
 fun FeedFooter(timeline: TimelineState, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
         when {

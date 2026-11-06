@@ -49,6 +49,8 @@ import com.fortind.zenith.timeline.isRenoteOf
 import com.fortind.zenith.timeline.mapNote
 import com.fortind.zenith.timeline.mergeNewer
 import com.fortind.zenith.timeline.mergeOlder
+import com.fortind.zenith.timeline.trimNewest
+import com.fortind.zenith.timeline.trimOldest
 import com.fortind.zenith.timeline.removeAuthoredBy
 import com.fortind.zenith.timeline.removeNote
 import com.fortind.zenith.timeline.removePureRenotesBy
@@ -222,8 +224,13 @@ class FeedViewModel(
                 val page = fetchTimeline(kind, untilId = timeline.cursor ?: last.id)
                 if (auth != currentAuth) return@launch
                 updateTimeline(kind) {
+                    val merged = mergeOlder(it.items, page.notes)
+                    val windowed = trimNewest(merged, MAX_LOADED)
+                    val trimmed = windowed.size < merged.size
                     it.copy(
-                        items = mergeOlder(it.items, page.notes),
+                        items = windowed,
+                        headTrimmed = it.headTrimmed || trimmed,
+                        newerCursor = if (trimmed) null else it.newerCursor,
                         loadingMore = false,
                         endReached = page.ended,
                         cursor = page.cursor,
@@ -236,9 +243,58 @@ class FeedViewModel(
         }
     }
 
+    fun loadNewer(kind: TimelineKind = selected.value) {
+        val timeline = _uiState.value.timeline(kind)
+        val head = timeline.items.firstOrNull() ?: return
+        if (!timeline.headTrimmed || timeline.loadingNewer || timeline.status != TimelineStatus.Ready || timeline.refreshing) return
+        updateTimeline(kind) { it.copy(loadingNewer = true, loadNewerFailed = false) }
+        val currentAuth = auth
+        val chosen = collection.value
+        viewModelScope.launch {
+            try {
+                var since = timeline.newerCursor ?: head.id
+                var kept = emptyList<Note>()
+                var softMuted = emptyMap<String, List<String>>()
+                var reachedHead = false
+                for (attempt in 0..HARD_MUTE_EXTRA_PAGES) {
+                    val page = rawTimeline(kind, untilId = null, sinceId = since, limit = PAGE_SIZE)
+                    if (page.isEmpty()) {
+                        reachedHead = true
+                        break
+                    }
+                    since = page.first().id
+                    val muted = applyMutes(page)
+                    if (muted.kept.isNotEmpty()) {
+                        kept = muted.kept
+                        softMuted = muted.softMuted
+                        break
+                    }
+                }
+                if (auth != currentAuth || collection.value != chosen) return@launch
+                updateTimeline(kind) { current ->
+                    if (!current.headTrimmed || current.items.firstOrNull()?.id != head.id) return@updateTimeline current.copy(loadingNewer = false)
+                    val merged = mergeNewer(current.items, kept)
+                    val windowed = trimOldest(merged, MAX_LOADED)
+                    val cut = windowed.size < merged.size
+                    current.copy(
+                        items = windowed,
+                        headTrimmed = !reachedHead,
+                        newerCursor = if (reachedHead) null else since,
+                        loadingNewer = false,
+                        endReached = current.endReached && !cut,
+                        cursor = if (cut) null else current.cursor,
+                        softMuted = current.softMuted + softMuted,
+                    )
+                }
+            } catch (e: IOException) {
+                handleFailure(e) { updateTimeline(kind) { it.copy(loadingNewer = false, loadNewerFailed = true) } }
+            }
+        }
+    }
+
     fun showPending(kind: TimelineKind = selected.value) {
         val timeline = _uiState.value.timeline(kind)
-        if (timeline.gap) {
+        if (timeline.gap || timeline.headTrimmed) {
             reload(kind)
             return
         }
@@ -252,7 +308,7 @@ class FeedViewModel(
         atTop[kind] = isAtTop
         if (isAtTop && !was) {
             val timeline = _uiState.value.timeline(kind)
-            if (timeline.pending.isNotEmpty() && !timeline.gap) {
+            if (timeline.pending.isNotEmpty() && !timeline.gap && !timeline.headTrimmed) {
                 updateTimeline(kind) { it.copy(items = mergeNewer(it.items, it.pending), pending = emptyList()) }
             }
         }
@@ -1052,6 +1108,7 @@ class FeedViewModel(
             when {
                 timeline.status != TimelineStatus.Ready -> current
                 timeline.items.any { it.id == note.id } -> current
+                timeline.headTrimmed -> current
                 atTop[kind] == true && !timeline.gap -> timeline.copy(items = mergeNewer(timeline.items, listOf(note)))
                 timeline.pending.size >= MAX_PENDING -> timeline.copy(gap = true)
                 else -> timeline.copy(pending = mergeNewer(timeline.pending, listOf(note)))
@@ -1186,6 +1243,10 @@ class FeedViewModel(
 
     private fun catchUp(kind: TimelineKind, toTop: Boolean) {
         val timeline = _uiState.value.timeline(kind)
+        if (timeline.headTrimmed) {
+            if (toTop) reload(kind)
+            return
+        }
         val newest = (timeline.pending + timeline.items).maxWithOrNull(compareBy<Note> { it.createdAtMillis }.thenBy { it.id })
             ?: return reload(kind)
         if (toTop) updateTimeline(kind) { it.copy(refreshing = true) }
@@ -1372,6 +1433,7 @@ class FeedViewModel(
     companion object {
         const val PAGE_SIZE = 30
         const val CATCH_UP_LIMIT = 100
+        const val MAX_LOADED = 150
         const val MAX_PENDING = 200
         const val MAX_CAPTURED = 60
         const val THREAD_ANCESTORS = 30

@@ -44,16 +44,20 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
     private val manager = NotificationManagerCompat.from(context)
     private val systemManager = context.getSystemService(NotificationManager::class.java)
 
-    init {
-        createChannels()
+    private val channels by lazy { createChannels() }
+
+    fun ensureChannels() {
+        channels
     }
 
     override suspend fun show(notifications: List<FortNotification>, actions: Set<QuickAction>) {
+        ensureChannels()
         notifications.forEach { post(it, avatar = loadAvatar(it.actor?.avatarUrl), actions) }
         updateSummary()
     }
 
     override fun showActionFailed(action: QuickAction, noteId: String) {
+        ensureChannels()
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(MainActivity.EXTRA_THREAD_NOTE_ID, noteId)

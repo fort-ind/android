@@ -921,6 +921,67 @@ class FeedViewModelTest {
         assertEquals(listOf("t1"), f.api.unrenoteCalls)
     }
 
+    private suspend fun Fixture.scrollPastTheWindow() {
+        api.timelines[TimelineKind.Home] = (300 downTo 1).map { testNote("n$it") }
+        viewModel.awaitTimeline(TimelineKind.Home)
+        repeat(5) { step ->
+            viewModel.loadMore()
+            val cursor = "n${271 - 30 * (step + 1)}"
+            viewModel.awaitTimeline(TimelineKind.Home) { !it.loadingMore && it.cursor == cursor }
+        }
+    }
+
+    @Test
+    fun scrollingPastTheWindowDropsTheNewestNotesAndRemembersIt() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = (300 downTo 1).map { testNote("n$it") }
+
+        f.scrollPastTheWindow()
+
+        val timeline = f.viewModel.uiState.value.timeline(TimelineKind.Home)
+        assertEquals(FeedViewModel.MAX_LOADED, timeline.items.size)
+        assertEquals("n270", timeline.items.first().id)
+        assertEquals("n121", timeline.items.last().id)
+        assertTrue(timeline.headTrimmed)
+    }
+
+    @Test
+    fun loadingNewerBringsBackTheDroppedNotesAndTrimsTheOldestEnd() = runTest {
+        val f = fixture()
+        f.scrollPastTheWindow()
+
+        f.viewModel.loadNewer()
+        val first = f.viewModel.awaitTimeline(TimelineKind.Home) { !it.loadingNewer && it.items.first().id == "n300" }
+
+        assertEquals(FeedViewModel.MAX_LOADED, first.items.size)
+        assertEquals("n151", first.items.last().id)
+        assertTrue(first.headTrimmed)
+        assertNull(first.cursor)
+        assertFalse(first.endReached)
+
+        f.viewModel.loadNewer()
+        val second = f.viewModel.awaitTimeline(TimelineKind.Home) { !it.loadingNewer && !it.headTrimmed }
+
+        assertEquals("n300", second.items.first().id)
+        f.viewModel.loadMore()
+        awaitTrue { f.api.calls.last().untilId == "n151" }
+    }
+
+    @Test
+    fun streamedPostsAreNotMergedIntoATrimmedHead() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = (300 downTo 1).map { testNote("n$it") }
+        f.startStreaming()
+        f.scrollPastTheWindow()
+        f.viewModel.setAtTop(TimelineKind.Home, true)
+
+        f.stream.events.emit(TimelineStreamEvent.Posted(testNote("n999")))
+
+        val timeline = f.viewModel.uiState.value.timeline(TimelineKind.Home)
+        assertTrue(timeline.items.none { it.id == "n999" })
+        assertTrue(timeline.pending.isEmpty())
+    }
+
     private fun pollNote(id: String = "p1", multiple: Boolean = false, votes: List<Int> = listOf(2, 0, 1), voted: Set<Int> = emptySet()) = testNote(
         id,
         poll = Poll(

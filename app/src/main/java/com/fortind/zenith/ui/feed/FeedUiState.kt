@@ -21,6 +21,10 @@ data class TimelineState(
     val gap: Boolean = false,
     val cursor: String? = null,
     val softMuted: Map<String, List<String>> = emptyMap(),
+    val headTrimmed: Boolean = false,
+    val newerCursor: String? = null,
+    val loadingNewer: Boolean = false,
+    val loadNewerFailed: Boolean = false,
 ) {
     val hasPending: Boolean get() = pending.isNotEmpty() || gap
 }
