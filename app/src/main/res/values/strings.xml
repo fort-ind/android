@@ -19,6 +19,9 @@
     <string name="login_error_network">Couldn\'t reach %1$s. Check your connection and try again.</string>
     <string name="login_error_rejected">%1$s didn\'t accept the sign-in.</string>
     <string name="login_error_no_browser">No browser is available to open the sign-in page.</string>
+    <string name="login_manual_body">No browser opened here, so the sign-in link was copied. Paste it into any browser, approve the sign-in, then come back to the app.</string>
+    <string name="login_manual_copy">Copy link</string>
+    <string name="login_manual_clip_label">Sign-in link</string>
 
     <string name="profile_edit_profile">Edit profile</string>
     <string name="profile_log_out">Log out</string>

@@ -22,13 +22,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class LoginError { Cancelled, TimedOut, Network, Rejected, NoBrowser }
+enum class LoginError { Cancelled, TimedOut, Network, Rejected }
 
 data class LoginUiState(
     val signingIn: Boolean = false,
     val error: LoginError? = null,
+    val manualUrl: String? = null,
 )
 
 sealed interface LoginEvent {
@@ -78,8 +80,8 @@ class LoginViewModel(
     }
 
     fun onAuthPageLaunchFailed() {
-        authJob?.cancel()
-        fail(LoginError.NoBrowser)
+        val session = savedState.get<String>(KEY_SESSION) ?: return
+        _uiState.update { it.copy(manualUrl = MiAuthUrl.authorize(session = session)) }
     }
 
     fun onReturnedToApp() {

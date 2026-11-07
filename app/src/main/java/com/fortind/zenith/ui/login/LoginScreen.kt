@@ -1,5 +1,8 @@
 package com.fortind.zenith.ui.login
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
 import com.fortind.zenith.ui.theme.isThemeDark
 import androidx.compose.foundation.layout.Arrangement
@@ -13,10 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +84,7 @@ fun AuthPageEffects(viewModel: LoginViewModel) {
     val context = LocalContext.current
     val darkTheme = isThemeDark()
     val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
+    val clipLabel = stringResource(R.string.login_manual_clip_label)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -87,6 +93,7 @@ fun AuthPageEffects(viewModel: LoginViewModel) {
                     if (launchCustomTab(context, event.url, darkTheme, toolbarColor)) {
                         viewModel.onAuthPageLaunched()
                     } else {
+                        copyLink(context, clipLabel, event.url)
                         viewModel.onAuthPageLaunchFailed()
                     }
                 }
@@ -203,6 +210,7 @@ private fun Actions(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         state.error?.let { ErrorMessage(it) }
+        state.manualUrl?.let { ManualLinkCard(url = it) }
 
         val signingInLabel = stringResource(R.string.login_signing_in)
         Button(
@@ -253,7 +261,6 @@ internal fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
         LoginError.TimedOut -> stringResource(R.string.login_error_timed_out)
         LoginError.Network -> stringResource(R.string.login_error_network, FortInstance.HOST)
         LoginError.Rejected -> stringResource(R.string.login_error_rejected, FortInstance.HOST)
-        LoginError.NoBrowser -> stringResource(R.string.login_error_no_browser)
     }
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
@@ -269,6 +276,52 @@ internal fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(16.dp),
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ManualLinkCard(url: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val clipLabel = stringResource(R.string.login_manual_clip_label)
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.login_manual_body),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SelectionContainer {
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            FilledTonalButton(
+                onClick = { copyLink(context, clipLabel, url) },
+                shapes = ButtonDefaults.shapes(),
+                contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MediumContainerHeight),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = ButtonDefaults.MediumContainerHeight),
+            ) {
+                Text(stringResource(R.string.login_manual_copy), style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+private fun copyLink(context: Context, label: String, url: String) {
+    context.getSystemService(ClipboardManager::class.java)
+        ?.setPrimaryClip(ClipData.newPlainText(label, url))
 }
 
 private enum class LogoShape { Idle, SigningIn, Error }
