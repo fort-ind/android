@@ -109,6 +109,7 @@ import com.fortind.zenith.timeline.ReactionAcceptance
 import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.contextMenuTrigger
 import com.fortind.zenith.ui.discovery.PersonName
+import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.media.NetworkImage
 import com.fortind.zenith.ui.rememberReduceMotion
@@ -275,7 +276,7 @@ internal fun PollDateSheet(visible: Boolean, nowMillis: Long, onChoose: (Long) -
 }
 
 @Composable
-internal fun RecipientEditor(viewModel: ComposerViewModel, state: ComposerUiState, results: List<NoteUser>) {
+internal fun RecipientEditor(viewModel: ComposerViewModel, state: ComposerUiState, results: List<NoteUser>, environment: NoteEnvironment?) {
     Column(modifier = Modifier.fillMaxWidth().testTag("composer:recipients"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (state.recipients.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -284,7 +285,7 @@ internal fun RecipientEditor(viewModel: ComposerViewModel, state: ComposerUiStat
                     InputChip(
                         selected = false,
                         onClick = { viewModel.removeRecipient(person.id) },
-                        label = { PersonName(person) },
+                        label = { PersonName(person, environment) },
                         avatar = { Avatar(name = person.displayName, url = person.avatarUrl, size = 24.dp) },
                         trailingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         modifier = Modifier.semantics { contentDescription = remove },
@@ -312,7 +313,7 @@ internal fun RecipientEditor(viewModel: ComposerViewModel, state: ComposerUiStat
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                PersonName(person)
+                PersonName(person, environment)
             }
         }
     }

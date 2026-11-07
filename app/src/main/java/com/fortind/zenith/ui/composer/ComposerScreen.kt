@@ -522,7 +522,7 @@ private fun ComposerContent(
             ) {
                 val context = state.contextNote
                 if (context != null && environment != null && state.target !is ComposerTarget.Edit) ContextCard(context, environment)
-                if (state.showsRecipients) RecipientEditor(viewModel, state, recipientResults)
+                if (state.showsRecipients) RecipientEditor(viewModel, state, recipientResults, environment)
                 if (state.dropsEndedPoll && !state.pollEnabled) EndedPollWarning()
                 AnimatedVisibility(
                     visible = state.cwEnabled,

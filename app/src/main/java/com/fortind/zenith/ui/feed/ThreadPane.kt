@@ -339,7 +339,7 @@ private fun LazyListScope.threadPeople(
 }
 
 private val ThreadIndent = 16.dp
-private val ThreadLineOffset = 36.dp
+private val ThreadLineOffset = 22.dp
 private val BranchLabelStart = 68.dp
 
 private fun Modifier.threadIndent(depth: Int, lineColor: Color): Modifier =

@@ -8,6 +8,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.unit.DpOffset
 import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.ui.contextMenuTrigger
+import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.people.PeopleActions
@@ -384,7 +385,15 @@ private fun SearchRow(
 
 @Composable
 internal fun PersonName(person: NoteUser) {
-    val environment = LocalNoteEnvironment.current
+    PersonName(person, LocalNoteEnvironment.current)
+}
+
+@Composable
+internal fun PersonName(person: NoteUser, environment: NoteEnvironment?) {
+    if (environment == null) {
+        Text(person.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        return
+    }
     val nameEnvironment = remember(person, environment.mfm) { environment.mfm.withEmoji(environment.userEmoji(person)) }
     MfmContent(
         nodes = person.nameMfm.ifEmpty { listOf(MfmText(person.username)) },
