@@ -6,13 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
@@ -23,23 +19,18 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.fortind.zenith.R
 import com.fortind.zenith.people.UserDetail
 import com.fortind.zenith.people.UserRole
 import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.mfm.MfmContent
-import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import java.text.DateFormat
 import java.text.ParseException
 import java.text.SimpleDateFormat
@@ -128,26 +119,4 @@ private fun monthAndDay(birthday: String): String? = try {
     SimpleDateFormat(pattern, Locale.getDefault()).format(parsed)
 } catch (_: ParseException) {
     null
-}
-
-@Composable
-fun PersonAboutPane(userId: String, people: PeopleViewModel, modifier: Modifier = Modifier) {
-    val state by people.uiState.collectAsStateWithLifecycle()
-    val detail = state.person(userId).detail ?: return
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Column(modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                text = stringResource(R.string.person_about_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.semantics { heading() },
-            )
-            PersonAboutContent(detail, LocalNoteEnvironment.current)
-        }
-    }
 }

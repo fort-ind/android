@@ -93,15 +93,14 @@ import com.fortind.zenith.ui.home.HomeDetailPlaceholder
 import com.fortind.zenith.ui.home.HomeScreen
 import com.fortind.zenith.ui.notifications.NotificationsScreen
 import com.fortind.zenith.ui.notifications.NotificationsViewModel
-import com.fortind.zenith.ui.people.AboutColumnWidth
-import com.fortind.zenith.ui.people.AboutPlacement
 import com.fortind.zenith.ui.people.FollowListScreen
 import com.fortind.zenith.ui.people.PeopleViewModel
-import com.fortind.zenith.ui.people.PersonAboutPane
 import com.fortind.zenith.ui.people.PersonByHandlePage
+import com.fortind.zenith.ui.people.PersonLayout
 import com.fortind.zenith.ui.people.PersonListWidth
 import com.fortind.zenith.ui.people.PersonPage
-import com.fortind.zenith.ui.people.rememberAboutPlacement
+import com.fortind.zenith.ui.people.PersonPostsPane
+import com.fortind.zenith.ui.people.rememberPersonLayout
 import com.fortind.zenith.ui.profile.ProfileScreen
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.settings.SettingsScreen
@@ -412,7 +411,7 @@ private fun AppNavDisplay(
     val holder = rememberSaveableStateHolder()
     val reduceMotion = rememberReduceMotion()
     val people by ui.people.uiState.collectAsStateWithLifecycle()
-    val aboutPlacement = rememberAboutPlacement()
+    val personLayout = rememberPersonLayout()
     val browseGames = { stacks.select(AppDestination.GAMES) }
     val seeAllFavorites = {
         gamesViewModel.showFavorites()
@@ -420,15 +419,20 @@ private fun AppNavDisplay(
     }
     val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
         Padded(contentPadding) {
-            val aboutUserId = when (val list = stacks.current.lastOrNull { it.isListPane }) {
-                is AppRoute.Person -> list.userId
-                is AppRoute.PersonHandle -> people.handles[PeopleViewModel.handleKey(list.username, list.host)]
+            val listRoute = stacks.current.lastOrNull { it.isListPane }
+            val personUserId = when (listRoute) {
+                is AppRoute.Person -> listRoute.userId
+                is AppRoute.PersonHandle -> people.handles[PeopleViewModel.handleKey(listRoute.username, listRoute.host)]
                 AppRoute.Profile -> people.myUserId
                 else -> null
             }
             when {
-                stacks.current.lastOrNull { it.isListPane } == AppRoute.Home -> HomeDetailPlaceholder(ui, browseGames, seeAllFavorites)
-                aboutPlacement == AboutPlacement.DetailPane && aboutUserId != null -> PersonAboutPane(aboutUserId, ui.people)
+                listRoute == AppRoute.Home -> HomeDetailPlaceholder(ui, browseGames, seeAllFavorites)
+                personLayout == PersonLayout.Split && personUserId != null -> PersonPostsPane(
+                    userId = personUserId,
+                    ui = ui,
+                    isOwn = listRoute == AppRoute.Profile,
+                )
                 else -> ThreadPlaceholder()
             }
         }
@@ -436,9 +440,7 @@ private fun AppNavDisplay(
     val listMetadata = ListDetailSceneStrategy.listPane(detailPlaceholder = detailPlaceholder) +
         ListDetailSceneStrategy.preferredPaneSize(width = ListPaneWidth)
     val personMetadata = ListDetailSceneStrategy.listPane(detailPlaceholder = detailPlaceholder) +
-        ListDetailSceneStrategy.preferredPaneSize(
-            width = if (aboutPlacement == AboutPlacement.Column) PersonListWidth + AboutColumnWidth else PersonListWidth,
-        )
+        ListDetailSceneStrategy.preferredPaneSize(width = PersonListWidth)
     val strategy = rememberListDetailSceneStrategy<AppRoute>(
         backNavigationBehavior = BackNavigationBehavior.PopUntilContentChange,
         paneExpansionDragHandle = { state -> PaneDragHandle(state) },

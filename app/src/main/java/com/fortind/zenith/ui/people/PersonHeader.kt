@@ -98,7 +98,6 @@ fun PersonHeader(
     pending: PendingRequests?,
     actions: PeopleActions,
     onOpenList: (FollowListKind) -> Unit,
-    aboutInHeader: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var contextOffset by remember { mutableStateOf<DpOffset?>(null) }
@@ -145,7 +144,7 @@ fun PersonHeader(
                 PersonTags(detail)
                 if (own != null) OwnActions(own)
                 PersonCounts(detail, environment.myUserId, pending.takeIf { own != null }, onOpenList)
-                if (aboutInHeader) PersonAboutContent(detail, environment)
+                PersonAboutContent(detail, environment)
             }
         }
         contextOffset?.let { offset ->

@@ -6,12 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -32,7 +30,6 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -66,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.people.FollowListKind
+import com.fortind.zenith.people.UserDetail
 import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.UserNotesTab
 import com.fortind.zenith.ui.PrimaryButton
@@ -83,10 +81,9 @@ import com.fortind.zenith.ui.revealTopBarOnWheel
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
 
-val AboutColumnWidth: Dp = 300.dp
 val PersonListWidth: Dp = 440.dp
 
-enum class AboutPlacement { Header, DetailPane, Column }
+enum class PersonLayout { Stacked, Split }
 
 enum class PersonTab(val labelRes: Int, val descriptionRes: Int, val notesTab: UserNotesTab?) {
     Notes(R.string.person_tab_notes, R.string.person_tab_notes, UserNotesTab.Notes),
@@ -96,19 +93,17 @@ enum class PersonTab(val labelRes: Int, val descriptionRes: Int, val notesTab: U
 }
 
 @Composable
-fun rememberAboutPlacement(): AboutPlacement {
+fun rememberPersonLayout(): PersonLayout {
     val size = currentWindowAdaptiveInfoV2().windowSizeClass
-    return when {
-        size.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXTRA_LARGE_LOWER_BOUND) -> AboutPlacement.Column
-        size.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND) -> AboutPlacement.DetailPane
-        else -> AboutPlacement.Header
-    }
+    return if (size.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)) PersonLayout.Split else PersonLayout.Stacked
 }
 
 private fun PersonTab.listKey(userId: String): NoteListKey = when (val tab = notesTab) {
     null -> NoteListKey.Bookmarks
     else -> NoteListKey.UserNotes(userId, tab)
 }
+
+private val UserDetail.limited: Boolean get() = isSuspended || hasMoved
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -120,20 +115,14 @@ fun PersonPage(
     own: OwnProfileActions? = null,
 ) {
     val people by ui.people.uiState.collectAsStateWithLifecycle()
-    val feed by ui.feed.uiState.collectAsStateWithLifecycle()
     val person = people.person(userId)
     val detail = person.detail
     val user = person.user
     val environment = LocalNoteEnvironment.current
     val reduceMotion = rememberReduceMotion()
-    val placement = rememberAboutPlacement()
-    val wide = currentWindowAdaptiveInfoV2().windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) && placement == AboutPlacement.Header
-    val tabs = remember(own != null) { if (own != null) PersonTab.entries.toList() else PersonTab.entries.filter { it != PersonTab.Bookmarks } }
-    var tab by rememberSaveable(userId) { mutableStateOf(PersonTab.Notes) }
+    val layout = rememberPersonLayout()
+    val wide = currentWindowAdaptiveInfoV2().windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) && layout == PersonLayout.Stacked
     val listState = rememberSaveable(userId, saver = LazyListState.Saver) { LazyListState() }
-    val key = tab.listKey(userId)
-    val timeline = feed.list(key)
-    val pinnedKey = NoteListKey.Pinned(userId)
     val status = person.status
 
     LaunchedEffect(ui.people, userId) { ui.people.open(userId) }
@@ -141,39 +130,10 @@ fun PersonPage(
         if (status == PersonStatus.Idle) ui.people.open(userId)
     }
     LaunchedEffect(ui.people, own != null) { if (own != null) ui.people.refreshPending() }
-    val listIdle = timeline.status == TimelineStatus.Idle
-    LaunchedEffect(ui.feed, key, listIdle, feed.signedIn) {
-        if (listIdle && (key != NoteListKey.Bookmarks || feed.signedIn)) ui.feed.loadList(key)
-    }
-    val pinnedIdle = feed.list(pinnedKey).status == TimelineStatus.Idle
-    LaunchedEffect(ui.feed, detail?.pinnedNotes, pinnedIdle) {
-        detail?.pinnedNotes?.let { ui.feed.seedList(pinnedKey, it) }
-    }
-    LaunchedEffect(ui.pageKeys.bookmarksRequested, own != null) {
-        if (ui.pageKeys.bookmarksRequested && own != null) {
-            tab = PersonTab.Bookmarks
-            ui.pageKeys.bookmarksRequested = false
-        }
-    }
-    LaunchedEffect(tab) {
-        if (listState.firstVisibleItemIndex > TABS_ITEM_INDEX) listState.scrollToItem(TABS_ITEM_INDEX)
-    }
 
-    val refresh = {
-        ui.people.refresh(userId)
-        ui.feed.loadList(key)
-    }
-    val currentRefresh by rememberUpdatedState(refresh)
-    val currentTabs by rememberUpdatedState(tabs)
-    val currentTab by rememberUpdatedState(tab)
-    val moveTab = { step: Int ->
-        val index = currentTabs.indexOf(currentTab)
-        tab = currentTabs[(index + step).mod(currentTabs.size)]
-    }
-    DisposableEffect(ui.pageKeys, userId) {
-        val target = PageKeyTarget(onRefresh = { currentRefresh() }, onMoveTab = { moveTab(it) })
-        ui.pageKeys.target = target
-        onDispose { if (ui.pageKeys.target === target) ui.pageKeys.target = null }
+    val refresh: () -> Unit = {
+        val target = ui.pageKeys.target
+        if (target != null) target.onRefresh() else ui.people.refresh(userId)
     }
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -186,14 +146,6 @@ fun PersonPage(
         modifier = Modifier
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .revealTopBarOnWheel(topBarReveal)
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Tab) {
-                    moveTab(if (event.isShiftPressed) -1 else 1)
-                    true
-                } else {
-                    false
-                }
-            }
             .testTag("person:page"),
         contentWindowInsets = WindowInsets(0),
         topBar = {
@@ -241,62 +193,21 @@ fun PersonPage(
                             pending = people.pending,
                             actions = ui.peopleActions,
                             onOpenList = onOpenList,
-                            aboutInHeader = placement == AboutPlacement.Header,
                         )
                     }
-                    val limited = detail != null && (detail.isSuspended || detail.hasMoved)
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        if (placement == AboutPlacement.Column && detail != null) {
-                            Column(
-                                modifier = Modifier
-                                    .width(AboutColumnWidth)
-                                    .fillMaxHeight()
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                            ) {
-                                Text(stringResource(R.string.person_about_title), style = MaterialTheme.typography.titleMedium)
-                                PersonAboutContent(detail, environment)
-                            }
-                            VerticalDivider()
-                        }
-                        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                            if (limited) {
-                                LimitedAccount(header, detail, ui.peopleActions)
-                            } else {
-                                val listCallbacks = remember(ui.feed, key) {
-                                    TimelineListCallbacks(
-                                        onLoadMore = { ui.feed.loadMoreList(key) },
-                                        onRetry = { ui.feed.loadList(key) },
-                                        onRefresh = { currentRefresh() },
-                                        onShowPending = {},
-                                        onLogIn = ui.feed::logIn,
-                                        onAtTop = {},
-                                        onVisibleNotes = {},
-                                    )
-                                }
-                                TimelineList(
-                                    kind = null,
-                                    timeline = timeline,
-                                    listState = listState,
-                                    environment = environment,
-                                    noteCallbacks = ui.callbacks,
-                                    callbacks = listCallbacks,
-                                    reduceMotion = reduceMotion,
-                                    fullHeader = header,
-                                    stickyHeader = {
-                                        PersonTabs(tabs = tabs, selected = tab, onSelect = { tab = it })
-                                    },
-                                    pinned = if (tab == PersonTab.Notes) feed.list(pinnedKey).items else emptyList(),
-                                    banner = if (feed.needsPermission) {
-                                        { ReauthorizeBanner(onDismiss = ui.feed::permissionPromptHandled) }
-                                    } else {
-                                        null
-                                    },
-                                    emptyBody = if (tab == PersonTab.Bookmarks) R.string.bookmarks_empty_body else R.string.person_notes_empty,
-                                )
-                            }
-                        }
+                    when {
+                        detail != null && detail.limited -> LimitedAccount(header, detail, ui.peopleActions)
+                        layout == PersonLayout.Split -> Column(
+                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        ) { header() }
+                        else -> PersonNotes(
+                            userId = userId,
+                            ui = ui,
+                            isOwn = own != null,
+                            listState = listState,
+                            header = header,
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                 }
             }
@@ -304,7 +215,123 @@ fun PersonPage(
     }
 }
 
-private const val TABS_ITEM_INDEX = 1
+@Composable
+fun PersonPostsPane(userId: String, ui: SocialUi, isOwn: Boolean) {
+    val people by ui.people.uiState.collectAsStateWithLifecycle()
+    val detail = people.person(userId).detail
+    val listState = rememberSaveable(userId, saver = LazyListState.Saver) { LazyListState() }
+    if (detail?.limited != true) {
+        PersonNotes(
+            userId = userId,
+            ui = ui,
+            isOwn = isOwn,
+            listState = listState,
+            header = null,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PersonNotes(
+    userId: String,
+    ui: SocialUi,
+    isOwn: Boolean,
+    listState: LazyListState,
+    header: (@Composable () -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val people by ui.people.uiState.collectAsStateWithLifecycle()
+    val feed by ui.feed.uiState.collectAsStateWithLifecycle()
+    val detail = people.person(userId).detail
+    val environment = LocalNoteEnvironment.current
+    val reduceMotion = rememberReduceMotion()
+    val tabs = remember(isOwn) { if (isOwn) PersonTab.entries.toList() else PersonTab.entries.filter { it != PersonTab.Bookmarks } }
+    var tab by rememberSaveable(userId) { mutableStateOf(PersonTab.Notes) }
+    val key = tab.listKey(userId)
+    val timeline = feed.list(key)
+    val pinnedKey = NoteListKey.Pinned(userId)
+    val tabsIndex = if (header == null) 0 else 1
+
+    val listIdle = timeline.status == TimelineStatus.Idle
+    LaunchedEffect(ui.feed, key, listIdle, feed.signedIn) {
+        if (listIdle && (key != NoteListKey.Bookmarks || feed.signedIn)) ui.feed.loadList(key)
+    }
+    val pinnedIdle = feed.list(pinnedKey).status == TimelineStatus.Idle
+    LaunchedEffect(ui.feed, detail?.pinnedNotes, pinnedIdle) {
+        detail?.pinnedNotes?.let { ui.feed.seedList(pinnedKey, it) }
+    }
+    LaunchedEffect(ui.pageKeys.bookmarksRequested, isOwn) {
+        if (ui.pageKeys.bookmarksRequested && isOwn) {
+            tab = PersonTab.Bookmarks
+            ui.pageKeys.bookmarksRequested = false
+        }
+    }
+    LaunchedEffect(tab) {
+        if (listState.firstVisibleItemIndex > tabsIndex) listState.scrollToItem(tabsIndex)
+    }
+
+    val refresh = {
+        ui.people.refresh(userId)
+        ui.feed.loadList(key)
+    }
+    val currentRefresh by rememberUpdatedState(refresh)
+    val currentTabs by rememberUpdatedState(tabs)
+    val currentTab by rememberUpdatedState(tab)
+    val moveTab = { step: Int ->
+        val index = currentTabs.indexOf(currentTab)
+        tab = currentTabs[(index + step).mod(currentTabs.size)]
+    }
+    DisposableEffect(ui.pageKeys, userId) {
+        val target = PageKeyTarget(onRefresh = { currentRefresh() }, onMoveTab = { moveTab(it) })
+        ui.pageKeys.target = target
+        onDispose { if (ui.pageKeys.target === target) ui.pageKeys.target = null }
+    }
+
+    val listCallbacks = remember(ui.feed, key) {
+        TimelineListCallbacks(
+            onLoadMore = { ui.feed.loadMoreList(key) },
+            onRetry = { ui.feed.loadList(key) },
+            onRefresh = { currentRefresh() },
+            onShowPending = {},
+            onLogIn = ui.feed::logIn,
+            onAtTop = {},
+            onVisibleNotes = {},
+        )
+    }
+    Box(
+        modifier = modifier.onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Tab) {
+                moveTab(if (event.isShiftPressed) -1 else 1)
+                true
+            } else {
+                false
+            }
+        },
+    ) {
+        TimelineList(
+            kind = null,
+            timeline = timeline,
+            listState = listState,
+            environment = environment,
+            noteCallbacks = ui.callbacks,
+            callbacks = listCallbacks,
+            reduceMotion = reduceMotion,
+            fullHeader = header,
+            stickyHeader = {
+                PersonTabs(tabs = tabs, selected = tab, onSelect = { tab = it })
+            },
+            pinned = if (tab == PersonTab.Notes) feed.list(pinnedKey).items else emptyList(),
+            banner = if (feed.needsPermission) {
+                { ReauthorizeBanner(onDismiss = ui.feed::permissionPromptHandled) }
+            } else {
+                null
+            },
+            emptyBody = if (tab == PersonTab.Bookmarks) R.string.bookmarks_empty_body else R.string.person_notes_empty,
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -372,7 +399,7 @@ fun SegmentTabs(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun LimitedAccount(header: @Composable () -> Unit, detail: com.fortind.zenith.people.UserDetail, actions: PeopleActions) {
+private fun LimitedAccount(header: @Composable () -> Unit, detail: UserDetail, actions: PeopleActions) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
