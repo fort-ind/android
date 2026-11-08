@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 interface NotificationWork {
     fun schedulePolling()
     fun cancelPolling()
+    fun cancelActions()
     fun enqueueFollowRequestResponse(notificationId: String, userId: String, accept: Boolean)
     fun enqueueMarkAllRead()
     fun enqueueQuickReply(noteId: String, text: String)
@@ -45,9 +46,14 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
         workManager.cancelUniqueWork(POLL_WORK_NAME)
     }
 
+    override fun cancelActions() {
+        workManager.cancelAllWorkByTag(ACTION_TAG)
+    }
+
     override fun enqueueFollowRequestResponse(notificationId: String, userId: String, accept: Boolean) {
         workManager.enqueue(
             OneTimeWorkRequestBuilder<FollowRequestWorker>()
+                .addTag(ACTION_TAG)
                 .setConstraints(needsNetwork)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
                 .setInputData(
@@ -64,6 +70,7 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
     override fun enqueueMarkAllRead() {
         workManager.enqueue(
             OneTimeWorkRequestBuilder<MarkAllReadWorker>()
+                .addTag(ACTION_TAG)
                 .setConstraints(needsNetwork)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
                 .build()
@@ -73,6 +80,7 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
     override fun enqueueQuickReply(noteId: String, text: String) {
         workManager.enqueue(
             OneTimeWorkRequestBuilder<QuickReplyWorker>()
+                .addTag(ACTION_TAG)
                 .setConstraints(needsNetwork)
                 .setInputData(
                     Data.Builder()
@@ -87,6 +95,7 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
     override fun enqueueQuickLike(noteId: String) {
         workManager.enqueue(
             OneTimeWorkRequestBuilder<QuickLikeWorker>()
+                .addTag(ACTION_TAG)
                 .setConstraints(needsNetwork)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
                 .setInputData(Data.Builder().putString(QuickLikeWorker.KEY_NOTE_ID, noteId).build())
@@ -96,6 +105,7 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
 
     private companion object {
         const val POLL_WORK_NAME = "notification-poll"
+        const val ACTION_TAG = "notification-action"
         const val POLL_INTERVAL_MINUTES = 15L
         const val BACKOFF_SECONDS = 30L
     }

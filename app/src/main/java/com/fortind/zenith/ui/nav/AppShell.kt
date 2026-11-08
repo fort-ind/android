@@ -44,7 +44,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
 import androidx.compose.material3.adaptive.layout.PaneExpansionState
+import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
 import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
 import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
@@ -114,6 +116,13 @@ private val ListPaneWidth = 440.dp
 private val RailActionMargin = 20.dp
 private val CollapsedRailWidth = 96.dp
 private val SecondaryRailMinHeight = 720.dp
+private val DefaultSplitOffset = 414.dp
+private val DetailCollapsedAnchor = PaneExpansionAnchor.Proportion(1f)
+private val PaneExpansionAnchors = listOf(
+    PaneExpansionAnchor.Proportion(0f),
+    PaneExpansionAnchor.Offset.fromStart(DefaultSplitOffset),
+    DetailCollapsedAnchor,
+)
 
 @Composable
 fun AppShell(
@@ -136,7 +145,9 @@ fun AppShell(
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
     val sizeClass = adaptiveInfo.windowSizeClass
     val directive = remember(adaptiveInfo) { calculatePaneScaffoldDirective(adaptiveInfo) }
-    val twoPane = directive.maxHorizontalPartitions > 1
+    val paneExpansion = rememberPaneExpansionState(anchors = PaneExpansionAnchors)
+    val detailCollapsed = paneExpansion.currentAnchor == DetailCollapsedAnchor
+    val twoPane = directive.maxHorizontalPartitions > 1 && !detailCollapsed
     val hasRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
     val hasWideRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
     val composeInRail = hasRail && sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
@@ -321,6 +332,8 @@ fun AppShell(
                         contentPadding = innerPadding,
                         ui = ui,
                         twoPane = twoPane,
+                        paneExpansion = paneExpansion,
+                        detailCollapsed = detailCollapsed,
                         showHomeComposeButton = !composeInRail,
                         gamesViewModel = gamesViewModel,
                         notificationsViewModel = notificationsViewModel,
@@ -404,6 +417,8 @@ private fun AppNavDisplay(
     contentPadding: PaddingValues,
     ui: SocialUi,
     twoPane: Boolean,
+    paneExpansion: PaneExpansionState,
+    detailCollapsed: Boolean,
     showHomeComposeButton: Boolean,
     gamesViewModel: GamesViewModel,
     notificationsViewModel: NotificationsViewModel,
@@ -441,10 +456,14 @@ private fun AppNavDisplay(
         ListDetailSceneStrategy.preferredPaneSize(width = ListPaneWidth)
     val personMetadata = ListDetailSceneStrategy.listPane(detailPlaceholder = detailPlaceholder) +
         ListDetailSceneStrategy.preferredPaneSize(width = PersonListWidth)
-    val strategy = rememberListDetailSceneStrategy<AppRoute>(
+    val listDetailStrategy = rememberListDetailSceneStrategy<AppRoute>(
         backNavigationBehavior = BackNavigationBehavior.PopUntilContentChange,
         paneExpansionDragHandle = { state -> PaneDragHandle(state) },
+        paneExpansionState = paneExpansion,
     )
+    val strategy = remember(listDetailStrategy, detailCollapsed) {
+        DetailCollapsedSceneStrategy(listDetailStrategy, detailCollapsed)
+    }
     val tab = stacks.tab
     holder.SaveableStateProvider(tab.name) {
         key(tab) {
@@ -564,7 +583,7 @@ private fun AppNavDisplay(
                         }
                         is AppRoute.Thread -> NavEntry(
                             key = route,
-                            metadata = ListDetailSceneStrategy.detailPane(),
+                            metadata = ListDetailSceneStrategy.detailPane() + mapOf(DetailPaneMarker to true),
                         ) {
                             val feed by ui.feed.uiState.collectAsStateWithLifecycle()
                             Padded(contentPadding) {

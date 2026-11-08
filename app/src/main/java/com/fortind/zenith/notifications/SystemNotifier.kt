@@ -129,26 +129,34 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         val canLike = noteId != null && QuickAction.Like in actions && !notification.hasMyReaction
         if (notification.type == NotificationType.FollowRequest && actorId != null) {
             builder.addAction(
-                0,
-                context.getString(R.string.notifications_accept),
-                actionIntent(NotificationActionReceiver.ACTION_ACCEPT, notification.id, actorId),
+                lockedAction(
+                    context.getString(R.string.notifications_accept),
+                    actionIntent(NotificationActionReceiver.ACTION_ACCEPT, notification.id, actorId),
+                )
             )
             builder.addAction(
-                0,
-                context.getString(R.string.notifications_reject),
-                actionIntent(NotificationActionReceiver.ACTION_REJECT, notification.id, actorId),
+                lockedAction(
+                    context.getString(R.string.notifications_reject),
+                    actionIntent(NotificationActionReceiver.ACTION_REJECT, notification.id, actorId),
+                )
             )
         } else if (noteId != null && (canReply || canLike)) {
             if (canReply) builder.addAction(replyAction(notification.id, noteId))
             if (canLike) builder.addAction(likeAction(notification.id, noteId))
         } else {
             builder.addAction(
-                0,
-                context.getString(R.string.notification_action_mark_read),
-                actionIntent(NotificationActionReceiver.ACTION_MARK_READ, notification.id, null),
+                lockedAction(
+                    context.getString(R.string.notification_action_mark_read),
+                    actionIntent(NotificationActionReceiver.ACTION_MARK_READ, notification.id, null),
+                )
             )
         }
     }
+
+    private fun lockedAction(title: String, intent: PendingIntent): NotificationCompat.Action =
+        NotificationCompat.Action.Builder(0, title, intent)
+            .setAuthenticationRequired(true)
+            .build()
 
     private fun replyAction(notificationId: String, noteId: String): NotificationCompat.Action {
         val intent = Intent(context, NotificationActionReceiver::class.java)
@@ -170,6 +178,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             .setAllowGeneratedReplies(false)
             .setShowsUserInterface(false)
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setAuthenticationRequired(true)
             .build()
     }
 
@@ -187,6 +196,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         return NotificationCompat.Action.Builder(0, context.getString(R.string.notification_action_like), pending)
             .setShowsUserInterface(false)
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_THUMBS_UP)
+            .setAuthenticationRequired(true)
             .build()
     }
 

@@ -1,7 +1,7 @@
 package com.fortind.zenith.composer
 
 private const val MAX_SHARED_TEXT = 20_000
-private const val CONTENT_PREFIX = "content://"
+private const val CONTENT_SCHEME = "content"
 private val WebLink = Regex("^https?://\\S+$", RegexOption.IGNORE_CASE)
 
 data class SharedContent(
@@ -11,10 +11,12 @@ data class SharedContent(
     val refusedFiles: Boolean = false,
 )
 
-fun sharedContent(text: String?, subject: String?, uris: List<String>, ownPackage: String): SharedContent {
+data class SharedUri(val value: String, val scheme: String?, val authority: String?)
+
+fun sharedContent(text: String?, subject: String?, uris: List<SharedUri>, ownPackage: String): SharedContent {
     val body = text.normalized()
     val title = subject.normalized()
-    val accepted = uris.filter { isAcceptableShareUri(it, ownPackage) }.distinct().take(MAX_ATTACHMENTS + 1)
+    val accepted = uris.filter { isAcceptableShareUri(it, ownPackage) }.map(SharedUri::value).distinct().take(MAX_ATTACHMENTS + 1)
     val refused = uris.any { !isAcceptableShareUri(it, ownPackage) }
     return when {
         WebLink.matches(body) -> {
@@ -26,9 +28,9 @@ fun sharedContent(text: String?, subject: String?, uris: List<String>, ownPackag
     }
 }
 
-fun isAcceptableShareUri(uri: String, ownPackage: String): Boolean {
-    if (!uri.startsWith(CONTENT_PREFIX)) return false
-    val authority = uri.removePrefix(CONTENT_PREFIX).substringBefore('/')
+fun isAcceptableShareUri(uri: SharedUri, ownPackage: String): Boolean {
+    if (uri.scheme != CONTENT_SCHEME) return false
+    val authority = uri.authority?.substringAfterLast('@').orEmpty()
     return authority.isNotEmpty() && authority != ownPackage && !authority.startsWith("$ownPackage.")
 }
 

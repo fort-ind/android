@@ -21,6 +21,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.composer.SharedContent
+import com.fortind.zenith.composer.SharedUri
 import com.fortind.zenith.composer.sharedContent
 import com.fortind.zenith.notifications.SCOPE_WRITE_NOTES
 import com.fortind.zenith.ui.composer.ComposerHost
@@ -116,7 +117,7 @@ class ShareActivity : ComponentActivity() {
             sharedContent(
                 text = getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString(),
                 subject = getStringExtra(Intent.EXTRA_SUBJECT) ?: getStringExtra(Intent.EXTRA_TITLE),
-                uris = sharedUris().map(Uri::toString),
+                uris = sharedUris().map { SharedUri(it.toString(), it.scheme, it.authority) },
                 ownPackage = packageName,
             )
         } catch (_: RuntimeException) {

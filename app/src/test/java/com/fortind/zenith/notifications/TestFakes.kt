@@ -150,6 +150,7 @@ class FakeNotificationSyncStore : NotificationSyncStore {
 
 class FakeNotificationWork : NotificationWork {
     @Volatile var polling = false
+    @Volatile var cancelledActions = 0
     val followResponses = CopyOnWriteArrayList<Triple<String, String, Boolean>>()
     @Volatile var markAllReadCount = 0
     val quickReplies = CopyOnWriteArrayList<Pair<String, String>>()
@@ -169,6 +170,10 @@ class FakeNotificationWork : NotificationWork {
 
     override fun cancelPolling() {
         polling = false
+    }
+
+    override fun cancelActions() {
+        cancelledActions++
     }
 
     override fun enqueueFollowRequestResponse(notificationId: String, userId: String, accept: Boolean) {

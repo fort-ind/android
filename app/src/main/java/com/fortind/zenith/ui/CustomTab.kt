@@ -7,7 +7,11 @@ import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.net.toUri
 
+internal fun isWebLink(url: String): Boolean =
+    (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)) && url.substringAfter("://").isNotEmpty()
+
 fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarColor: Int): Boolean {
+    if (!isWebLink(url)) return false
     val tab = CustomTabsIntent.Builder()
         .setShowTitle(true)
         .setColorScheme(
@@ -15,6 +19,7 @@ fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarCo
         )
         .setDefaultColorSchemeParams(CustomTabColorSchemeParams.Builder().setToolbarColor(toolbarColor).build())
         .build()
+    tab.intent.addCategory(Intent.CATEGORY_BROWSABLE)
     return try {
         tab.launchUrl(context, url.toUri())
         true

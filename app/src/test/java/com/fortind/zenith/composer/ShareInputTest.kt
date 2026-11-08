@@ -8,8 +8,11 @@ import org.junit.Test
 class ShareInputTest {
     private val own = "com.fortind.zenith.debug"
 
+    private fun uri(value: String, authority: String? = value.substringAfter("://", "").substringBefore('/')) =
+        SharedUri(value, value.substringBefore(':'), authority)
+
     private fun share(text: String? = null, subject: String? = null, uris: List<String> = emptyList()) =
-        sharedContent(text, subject, uris, own)
+        sharedContent(text, subject, uris.map { uri(it) }, own)
 
     @Test
     fun aLinkLandsUnderAnEmptyLineWithTheCaretAtTheStart() {
@@ -46,12 +49,32 @@ class ShareInputTest {
 
     @Test
     fun onlyOtherAppsContentUrisAreAccepted() {
-        assertTrue(isAcceptableShareUri("content://media/external/images/1", own))
-        assertFalse(isAcceptableShareUri("file:///data/data/$own/files/secret", own))
-        assertFalse(isAcceptableShareUri("https://example.com/a.png", own))
-        assertFalse(isAcceptableShareUri("content://$own/files/secret", own))
-        assertFalse(isAcceptableShareUri("content://$own.androidx-startup/x", own))
-        assertFalse(isAcceptableShareUri("content:///no-authority", own))
+        assertTrue(isAcceptableShareUri(uri("content://media/external/images/1"), own))
+        assertFalse(isAcceptableShareUri(uri("file:///data/data/$own/files/secret"), own))
+        assertFalse(isAcceptableShareUri(uri("https://example.com/a.png"), own))
+        assertFalse(isAcceptableShareUri(uri("content://$own/files/secret"), own))
+        assertFalse(isAcceptableShareUri(uri("content://$own.androidx-startup/x"), own))
+        assertFalse(isAcceptableShareUri(uri("content:///no-authority"), own))
+        assertFalse(isAcceptableShareUri(SharedUri("content://x", "content", null), own))
+    }
+
+    @Test
+    fun aUserPrefixedAuthorityStillCountsAsOurs() {
+        assertFalse(isAcceptableShareUri(uri("content://0@$own.provider/files/secret"), own))
+        assertFalse(isAcceptableShareUri(uri("content://10@$own/files/secret"), own))
+        assertTrue(isAcceptableShareUri(uri("content://0@media/external/images/1"), own))
+    }
+
+    @Test
+    fun theDecodedAuthorityIsCheckedNotTheRawText() {
+        val encoded = SharedUri("content://com%2Efortind%2Ezenith%2Edebug.provider/x", "content", "$own.provider")
+
+        assertFalse(isAcceptableShareUri(encoded, own))
+    }
+
+    @Test
+    fun onlyTheExactContentSchemeIsAccepted() {
+        assertFalse(isAcceptableShareUri(SharedUri("CONTENT://media/1", "CONTENT", "media"), own))
     }
 
     @Test

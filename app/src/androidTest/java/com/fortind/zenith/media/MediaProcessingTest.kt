@@ -9,6 +9,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
@@ -90,10 +91,83 @@ class MediaProcessingTest {
     }
 
     @Test
-    fun nonImagesAreNeverTouchedBySanitizing() = runBlocking {
+    fun audioIsNeverTouchedBySanitizing() = runBlocking {
+        val audio = LocalMedia("file:///does/not/exist.mp3", "clip.mp3", "audio/mpeg", 1024L)
+
+        assertEquals(audio, AndroidMediaSanitizer(context, reader).stripLocation(audio))
+    }
+
+    @Test
+    fun aVideoThatCannotBeReadIsNotUploadedUnchecked() = runBlocking {
         val video = LocalMedia("file:///does/not/exist.mp4", "clip.mp4", "video/mp4", 1024L)
 
-        assertEquals(video, AndroidMediaSanitizer(context, reader).stripLocation(video))
+        val failure = runCatching { AndroidMediaSanitizer(context, reader).stripLocation(video) }.exceptionOrNull()
+
+        assertTrue("expected an IOException, got $failure", failure is IOException)
+    }
+
+    private fun xmp(description: String) = "<?xpacket begin=\"﻿\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+        "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+        "<rdf:Description rdf:about=\"\" xmlns:exif=\"http://ns.adobe.com/exif/1.0/\" xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\"" +
+        " xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"" +
+        " exif:GPSLatitude=\"37,46.494N\" exif:GPSLongitude=\"122,25.164W\" photoshop:City=\"San Francisco\" xmp:CreatorTool=\"ZenithTest\">" +
+        "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">$description</rdf:li></rdf:Alt></dc:description>" +
+        "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+
+    private fun addXmp(file: File, xmp: String) {
+        ExifInterface(file.absolutePath).apply {
+            setAttribute(ExifInterface.TAG_XMP, xmp)
+            saveAttributes()
+        }
+    }
+
+    @Test
+    fun locationInXmpIsRemovedAndTheRestOfTheXmpSurvives() = runBlocking {
+        val source = jpeg(640, 480, withLocation = true)
+        addXmp(source, xmp("Golden Gate"))
+        val stored = ExifInterface(source.absolutePath).getAttributeBytes(ExifInterface.TAG_XMP)?.toString(Charsets.UTF_8)
+        assertTrue("fixture must carry XMP location", stored?.contains("GPSLatitude") == true)
+
+        val cleaned = AndroidMediaSanitizer(context, reader).stripLocation(describe(source))
+
+        assertEquals("image/jpeg", cleaned.mimeType)
+        val output = fileOf(cleaned)
+        val exif = ExifInterface(output.absolutePath)
+        assertNull(exif.latLong)
+        val xmp = exif.getAttributeBytes(ExifInterface.TAG_XMP)?.toString(Charsets.UTF_8)
+        assertNotNull("XMP should be kept, not dropped", xmp)
+        assertFalse(xmp!!.contains("GPSLatitude"))
+        assertFalse(xmp.contains("San Francisco"))
+        assertTrue(xmp.contains("ZenithTest"))
+        assertTrue(xmp.contains("Golden Gate"))
+        assertFalse(output.readBytes().toString(Charsets.ISO_8859_1).contains("37,46.494N"))
+        assertEquals(640, BitmapFactory.decodeFile(output.absolutePath).width)
+    }
+
+    @Test
+    fun xmpLocationAloneIsEnoughToTriggerStripping() = runBlocking {
+        val source = jpeg(320, 240, withLocation = false)
+        addXmp(source, xmp("Plain words"))
+        val media = describe(source)
+
+        val cleaned = AndroidMediaSanitizer(context, reader).stripLocation(media)
+
+        assertNotEquals(media.uri, cleaned.uri)
+        val xmp = ExifInterface(fileOf(cleaned).absolutePath).getAttributeBytes(ExifInterface.TAG_XMP)!!.toString(Charsets.UTF_8)
+        assertFalse(xmp.contains("GPSLatitude"))
+        assertTrue(xmp.contains("Plain words"))
+    }
+
+    @Test
+    fun aFormatThatCannotBeCheckedIsReencoded() = runBlocking {
+        val source = newFile("tiff")
+        source.outputStream().use { out -> jpeg(64, 48, withLocation = true).inputStream().use { it.copyTo(out) } }
+        val media = LocalMedia(Uri.fromFile(source).toString(), "scan.tiff", "image/tiff", source.length())
+
+        val cleaned = AndroidMediaSanitizer(context, reader).stripLocation(media)
+
+        assertEquals("image/jpeg", cleaned.mimeType)
+        assertNull(ExifInterface(fileOf(cleaned).absolutePath).latLong)
     }
 
     @Test

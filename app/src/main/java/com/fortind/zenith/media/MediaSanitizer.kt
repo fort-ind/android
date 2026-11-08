@@ -3,6 +3,7 @@ package com.fortind.zenith.media
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import androidx.core.net.toUri
 import androidx.exifinterface.media.ExifInterface
 import com.fortind.zenith.timeline.MediaKind
@@ -22,42 +23,93 @@ object NoSanitizing : MediaSanitizer {
     override suspend fun stripLocation(media: LocalMedia): LocalMedia = media
 }
 
+private enum class ImageLocation { Clean, Found, Unreadable }
+
 class AndroidMediaSanitizer(private val context: Context, private val reader: MediaReader) : MediaSanitizer {
 
     private val reencoder = ImageReencoder(context)
 
     override suspend fun stripLocation(media: LocalMedia): LocalMedia {
         return withContext(Dispatchers.IO) {
-            when {
-                media.kind == MediaKind.Video -> if (hasVideoLocation(media)) copyWithoutVideoLocation(media) else media
-                media.kind != MediaKind.Image -> media
-                media.mimeType in EDITABLE_FORMATS -> if (hasLocation(media)) copyWithoutLocation(media) else media
-                media.mimeType in REENCODED_FORMATS ->
-                    if (hasLocation(media)) reencoder.toJpeg(media, null, LOSSLESS_LIKE_QUALITY) ?: throw LocationNotRemovedException() else media
+            when (media.kind) {
+                MediaKind.Video -> stripVideoLocation(media)
+                MediaKind.Image -> stripImageLocation(media)
                 else -> media
             }
         }
     }
 
-    private fun hasVideoLocation(media: LocalMedia): Boolean {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(context, media.uri.toUri())
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION) != null
-        } catch (_: RuntimeException) {
-            false
-        } finally {
-            retriever.release()
+    private suspend fun stripImageLocation(media: LocalMedia): LocalMedia {
+        if (media.mimeType in METADATA_FREE_FORMATS) return media
+        val location = imageLocation(media)
+        return when {
+            location == ImageLocation.Clean -> media
+            location == ImageLocation.Found && media.mimeType in EDITABLE_FORMATS ->
+                editedCopy(media)?.takeIf { imageLocation(it) == ImageLocation.Clean } ?: reencoded(media)
+            else -> reencoded(media)
         }
     }
 
-    private fun copyWithoutVideoLocation(media: LocalMedia): LocalMedia {
-        val extension = media.name.substringAfterLast('.', "mp4")
-        val output = File(File(context.cacheDir, "sanitized").also { it.mkdirs() }, "${UUID.randomUUID()}.$extension")
+    private suspend fun reencoded(media: LocalMedia): LocalMedia =
+        reencoder.toJpeg(media, null, LOSSLESS_LIKE_QUALITY)?.takeIf { imageLocation(it) == ImageLocation.Clean }
+            ?: throw LocationNotRemovedException()
+
+    private fun imageLocation(media: LocalMedia): ImageLocation {
+        val inXmpPackets = try {
+            reader.open(media.uri).use(::streamHasXmpLocation)
+        } catch (_: IOException) {
+            return ImageLocation.Unreadable
+        }
+        if (inXmpPackets) return ImageLocation.Found
+        if (media.mimeType in XMP_ONLY_FORMATS) return ImageLocation.Clean
+        if (!exifReadable(media.mimeType)) return ImageLocation.Unreadable
+        return try {
+            reader.open(media.uri).use { input ->
+                val exif = ExifInterface(input)
+                val xmp = exif.getAttributeBytes(ExifInterface.TAG_XMP)?.toString(Charsets.UTF_8)
+                if (GPS_TAGS.any(exif::hasAttribute) || xmp?.let(::xmpHasLocation) == true) ImageLocation.Found else ImageLocation.Clean
+            }
+        } catch (_: IOException) {
+            ImageLocation.Unreadable
+        } catch (_: RuntimeException) {
+            ImageLocation.Unreadable
+        }
+    }
+
+    private fun exifReadable(mimeType: String): Boolean = when (mimeType) {
+        in HEIF_FORMATS -> Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+        AVIF -> Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        else -> ExifInterface.isSupportedMimeType(mimeType)
+    }
+
+    private fun editedCopy(media: LocalMedia): LocalMedia? {
+        val output = sanitizedFile(media.name.substringAfterLast('.', "jpg"))
+        return try {
+            reader.open(media.uri).use { input -> output.outputStream().use { input.copyTo(it) } }
+            val exif = ExifInterface(output.absolutePath)
+            GPS_TAGS.forEach { exif.setAttribute(it, null) }
+            exif.getAttributeBytes(ExifInterface.TAG_XMP)?.toString(Charsets.UTF_8)?.takeIf(::xmpHasLocation)?.let { xmp ->
+                exif.setAttribute(ExifInterface.TAG_XMP, withoutXmpLocation(xmp))
+            }
+            exif.saveAttributes()
+            LocalMedia(Uri.fromFile(output).toString(), media.name, media.mimeType, output.length())
+        } catch (_: IOException) {
+            output.delete()
+            null
+        } catch (_: RuntimeException) {
+            output.delete()
+            null
+        }
+    }
+
+    private fun stripVideoLocation(media: LocalMedia): LocalMedia {
+        if (videoLocationReported(media) == false && videoBoxesHaveLocation(media) == false) return media
+        val output = sanitizedFile(media.name.substringAfterLast('.', "mp4"))
         try {
             reader.open(media.uri).use { input -> output.outputStream().use { input.copyTo(it) } }
+            neutralizeMp4Location(output)
             val cleaned = LocalMedia(Uri.fromFile(output).toString(), media.name, media.mimeType, output.length())
-            if (!neutralizeMp4Location(output) || hasVideoLocation(cleaned)) throw LocationNotRemovedException()
+            if (videoLocationReported(cleaned) == true || videoBoxesHaveLocation(cleaned) != false) throw LocationNotRemovedException()
             return cleaned
         } catch (e: IOException) {
             output.delete()
@@ -65,30 +117,33 @@ class AndroidMediaSanitizer(private val context: Context, private val reader: Me
         }
     }
 
-    private fun hasLocation(media: LocalMedia): Boolean = try {
-        reader.open(media.uri).use { input ->
-            val exif = ExifInterface(input)
-            GPS_TAGS.any(exif::hasAttribute)
+    private fun videoLocationReported(media: LocalMedia): Boolean? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, media.uri.toUri())
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION) != null
+        } catch (_: RuntimeException) {
+            null
+        } finally {
+            retriever.release()
         }
-    } catch (_: IOException) {
-        false
-    } catch (_: RuntimeException) {
-        false
     }
 
-    private fun copyWithoutLocation(media: LocalMedia): LocalMedia {
-        val extension = media.name.substringAfterLast('.', "jpg")
-        val output = File(File(context.cacheDir, "sanitized").also { it.mkdirs() }, "${UUID.randomUUID()}.$extension")
-        reader.open(media.uri).use { input -> output.outputStream().use { input.copyTo(it) } }
-        val exif = ExifInterface(output.absolutePath)
-        GPS_TAGS.forEach { exif.setAttribute(it, null) }
-        exif.saveAttributes()
-        return LocalMedia(Uri.fromFile(output).toString(), media.name, media.mimeType, output.length())
+    private fun videoBoxesHaveLocation(media: LocalMedia): Boolean? = try {
+        reader.open(media.uri).use(::streamHasMp4Location)
+    } catch (_: IOException) {
+        null
     }
+
+    private fun sanitizedFile(extension: String): File =
+        File(File(context.cacheDir, "sanitized").also { it.mkdirs() }, "${UUID.randomUUID()}.$extension")
 
     private companion object {
         val EDITABLE_FORMATS = setOf("image/jpeg", "image/png", "image/webp")
-        val REENCODED_FORMATS = setOf("image/heic", "image/heif", "image/avif")
+        val METADATA_FREE_FORMATS = setOf("image/bmp", "image/x-ms-bmp", "image/x-icon", "image/vnd.microsoft.icon")
+        val XMP_ONLY_FORMATS = setOf("image/gif", "image/svg+xml")
+        val HEIF_FORMATS = setOf("image/heic", "image/heif")
+        const val AVIF = "image/avif"
         const val LOSSLESS_LIKE_QUALITY = 95
 
         val GPS_TAGS = listOf(

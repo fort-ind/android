@@ -6,6 +6,7 @@ import com.fortind.zenith.settings.FakeSettingsStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
@@ -77,5 +78,43 @@ class NotificationSyncCoordinatorTest {
         f.session.signOut()
 
         awaitTrue { !f.work.polling }
+    }
+
+    @Test
+    fun signingOutCancelsQueuedNotificationActions() = runTest(UnconfinedTestDispatcher()) {
+        val f = Fixture(enabled = true)
+        f.session.restore()
+        f.coordinator.start(backgroundScope)
+        awaitTrue { f.work.polling }
+        assertEquals(0, f.work.cancelledActions)
+
+        f.session.signOut()
+
+        awaitTrue { f.work.cancelledActions > 0 }
+    }
+
+    @Test
+    fun aNewSignInCancelsActionsQueuedForTheOldToken() = runTest(UnconfinedTestDispatcher()) {
+        val f = Fixture(enabled = true)
+        f.session.restore()
+        f.coordinator.start(backgroundScope)
+        awaitTrue { f.work.polling }
+
+        f.session.signIn("other-token")
+
+        awaitTrue { f.work.cancelledActions > 0 }
+    }
+
+    @Test
+    fun turningNotificationsOffKeepsQueuedActions() = runTest(UnconfinedTestDispatcher()) {
+        val f = Fixture(enabled = true)
+        f.session.restore()
+        f.coordinator.start(backgroundScope)
+        awaitTrue { f.work.polling }
+
+        f.settings.setSystemNotifications(false)
+
+        awaitTrue { !f.work.polling && f.notifier.clearCount > 0 }
+        assertEquals(0, f.work.cancelledActions)
     }
 }

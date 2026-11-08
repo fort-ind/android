@@ -104,6 +104,20 @@ class SystemNotifierTest {
     }
 
     @Test
+    fun everyActionNeedsTheDeviceUnlocked() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val shots = listOf(
+            post(notification("1", NotificationType.Mention)),
+            post(notification("2", NotificationType.Renote)),
+            post(notification("3", NotificationType.FollowRequest, noteId = null)),
+        )
+
+        val actions = shots.flatMap { it.actions.toList() }
+        assertEquals(5, actions.size)
+        actions.forEach { assertTrue(it.title.toString(), it.isAuthenticationRequired) }
+    }
+
+    @Test
     fun yourOwnReactionHidesLike() {
         assertEquals(listOf(reply), post(notification("1", NotificationType.Mention, hasMyReaction = true)).titles())
     }

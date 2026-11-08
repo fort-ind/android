@@ -7,8 +7,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 class NotificationSyncCoordinator(
@@ -24,7 +26,15 @@ class NotificationSyncCoordinator(
                 if (active) work.schedulePolling() else tearDown()
             }
         }
+        scope.launch {
+            accountChanges().collect { work.cancelActions() }
+        }
     }
+
+    private fun accountChanges() = merge(
+        session.state.filter { it == SessionState.SignedOut },
+        session.credentialsVersion.drop(1),
+    )
 
     private fun active() = combine(
         settings.settings.map { it.systemNotifications }.distinctUntilChanged(),
