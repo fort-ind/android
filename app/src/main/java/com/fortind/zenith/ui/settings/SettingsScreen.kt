@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fitInside
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -76,15 +76,20 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.layout.AnimatedPane
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.layout.PaneScaffoldDirective
 import androidx.compose.material3.adaptive.layout.PaneAdaptedValue
-import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneScaffold
+import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
+import androidx.compose.material3.adaptive.navigation.ThreePaneScaffoldPredictiveBackHandler
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,7 +116,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.WindowInsetsRulers
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -144,6 +148,8 @@ import com.fortind.zenith.account.SettingsEditor
 import com.fortind.zenith.ui.account.AccountSettingsViewModel
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.pointerHover
+import com.fortind.zenith.ui.rememberLastNonNull
+import com.fortind.zenith.ui.rememberReduceMotion
 import kotlinx.coroutines.launch
 
 private enum class SettingsPage(
@@ -314,8 +320,28 @@ fun SettingsScreen(
         if (editProfileRequested) navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, SettingsPage.ACCOUNT)
     }
 
-    NavigableListDetailPaneScaffold(
-        navigator = navigator,
+    val reduceMotion = rememberReduceMotion()
+    val currentPage = navigator.currentDestination?.contentKey
+    val lastPage = rememberLastNonNull(currentPage)
+
+    if (reduceMotion) {
+        NavigationBackHandler(
+            state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+            isBackEnabled = navigator.canNavigateBack(),
+            onBackCompleted = { scope.launch { navigator.navigateBack() } },
+        )
+    } else {
+        ThreePaneScaffoldPredictiveBackHandler(
+            navigator = navigator,
+            backBehavior = BackNavigationBehavior.PopUntilScaffoldValueChange,
+        )
+    }
+
+    val directive = remember(navigator.scaffoldDirective) { navigator.scaffoldDirective.withoutAutoFocus() }
+
+    ListDetailPaneScaffold(
+        directive = directive,
+        scaffoldState = navigator.scaffoldState,
         modifier = modifier
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
@@ -329,40 +355,58 @@ fun SettingsScreen(
                 }
             },
         listPane = {
-            SettingsList(
-                selected = navigator.currentDestination?.contentKey,
-                searchBarState = searchBarState,
-                searchRequested = searchRequested,
-                onSearchHandled = { searchRequested = false },
-                onSelect = { page ->
-                    scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, page) }
-                },
-            )
+            AnimatedPane {
+                SettingsList(
+                    selected = currentPage,
+                    searchBarState = searchBarState,
+                    searchRequested = searchRequested,
+                    onSearchHandled = { searchRequested = false },
+                    onSelect = { page ->
+                        scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, page) }
+                    },
+                )
+            }
         },
         detailPane = {
-            val page = navigator.currentDestination?.contentKey
-            if (page == null) {
-                EmptyDetail()
-            } else {
-                SettingsDetail(
-                    page = page,
-                    settings = settings,
-                    appIcon = appIcon,
-                    onThemeMode = viewModel::setThemeMode,
-                    onDynamicColor = viewModel::setDynamicColor,
-                    onAppIcon = viewModel::setAppIcon,
-                    onShowHomeFavorites = viewModel::setShowHomeFavorites,
-                    onCompressUploads = viewModel::setCompressUploads,
-                    onSystemNotifications = viewModel::setSystemNotifications,
-                    onNotificationCategory = viewModel::setNotificationCategory,
-                    editProfileRequested = editProfileRequested,
-                    onEditProfileHandled = onEditProfileHandled,
-                    onBack = { scope.launch { navigator.navigateBack() } },
-                )
+            AnimatedPane {
+                val detailHidden = navigator.scaffoldValue[ListDetailPaneScaffoldRole.Detail] == PaneAdaptedValue.Hidden
+                val page = currentPage ?: lastPage.takeIf { detailHidden }
+                if (page == null) {
+                    EmptyDetail()
+                } else {
+                    key(page) {
+                        SettingsDetail(
+                            page = page,
+                            settings = settings,
+                            appIcon = appIcon,
+                            onThemeMode = viewModel::setThemeMode,
+                            onDynamicColor = viewModel::setDynamicColor,
+                            onAppIcon = viewModel::setAppIcon,
+                            onShowHomeFavorites = viewModel::setShowHomeFavorites,
+                            onCompressUploads = viewModel::setCompressUploads,
+                            onSystemNotifications = viewModel::setSystemNotifications,
+                            onNotificationCategory = viewModel::setNotificationCategory,
+                            editProfileRequested = editProfileRequested,
+                            onEditProfileHandled = onEditProfileHandled,
+                            onBack = { scope.launch { navigator.navigateBack() } },
+                        )
+                    }
+                }
             }
         },
     )
 }
+
+private fun PaneScaffoldDirective.withoutAutoFocus() = PaneScaffoldDirective(
+    maxHorizontalPartitions = maxHorizontalPartitions,
+    horizontalPartitionSpacerSize = horizontalPartitionSpacerSize,
+    maxVerticalPartitions = maxVerticalPartitions,
+    verticalPartitionSpacerSize = verticalPartitionSpacerSize,
+    defaultPanePreferredWidth = defaultPanePreferredWidth,
+    defaultPanePreferredHeight = defaultPanePreferredHeight,
+    excludedBounds = excludedBounds,
+    shouldAutoFocusCurrentDestination = false,
+)
 
 @Composable
 private fun SettingsList(
@@ -689,7 +733,7 @@ private fun SettingsDetail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .fitInside(WindowInsetsRulers.Ime.current)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),

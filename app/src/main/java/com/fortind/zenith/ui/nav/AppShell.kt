@@ -17,14 +17,20 @@ import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.ui.discovery.HashtagsPage
 import com.fortind.zenith.ui.discovery.SearchResultsPage
 import com.fortind.zenith.ui.discovery.TagPage
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -45,6 +51,7 @@ import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
+import androidx.compose.material3.adaptive.layout.PaneMotionDefaults
 import androidx.compose.material3.adaptive.layout.PaneExpansionState
 import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
@@ -60,12 +67,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -80,6 +87,7 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultPredictivePopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.window.core.layout.WindowSizeClass
@@ -104,6 +112,8 @@ import com.fortind.zenith.ui.people.PersonPage
 import com.fortind.zenith.ui.people.PersonPostsPane
 import com.fortind.zenith.ui.people.rememberPersonLayout
 import com.fortind.zenith.ui.profile.ProfileScreen
+import com.fortind.zenith.ui.predictiveBackScale
+import com.fortind.zenith.ui.predictiveBackSeekFraction
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.settings.SettingsScreen
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
@@ -201,11 +211,15 @@ fun AppShell(
             if (openThreadId != null) ui.feed.openThread(openThreadId) else ui.feed.closeThread()
         }
 
+        val tabBackEnabled = !stacks.atHomeRoot && stacks.current.size == 1
+        val tabBackState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
         NavigationBackHandler(
-            state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
-            isBackEnabled = !stacks.atHomeRoot && stacks.current.size == 1,
+            state = tabBackState,
+            isBackEnabled = tabBackEnabled,
             onBackCompleted = { stacks.back() },
         )
+        val tabBackProgress = (tabBackState.transitionState as? NavigationEventTransitionState.InProgress)?.latestEvent?.progress
+        val tabBackPreview = tabBackProgress?.takeIf { tabBackEnabled }?.let(::predictiveBackSeekFraction)
 
         DisposableEffect(shortcuts, ui, stacks, notificationsViewModel) {
             shortcuts.handler = { shortcut ->
@@ -337,6 +351,7 @@ fun AppShell(
                         showHomeComposeButton = !composeInRail,
                         gamesViewModel = gamesViewModel,
                         notificationsViewModel = notificationsViewModel,
+                        backPreview = tabBackPreview,
                     )
                     SnackbarHost(ui.snackbar, modifier = Modifier.align(Alignment.BottomCenter).padding(innerPadding))
                 }
@@ -422,8 +437,70 @@ private fun AppNavDisplay(
     showHomeComposeButton: Boolean,
     gamesViewModel: GamesViewModel,
     notificationsViewModel: NotificationsViewModel,
+    backPreview: Float?,
 ) {
     val holder = rememberSaveableStateHolder()
+    val reduceMotion = rememberReduceMotion()
+    val previewFraction = backPreview.takeIf { !reduceMotion }
+    val tabState = remember { SeekableTransitionState(stacks.tab) }
+    LaunchedEffect(stacks.tab, previewFraction) {
+        if (previewFraction != null) {
+            tabState.seekTo(fraction = previewFraction, targetState = AppDestination.HOME)
+        } else {
+            tabState.animateTo(stacks.tab)
+        }
+    }
+    val previewScale by animateFloatAsState(
+        targetValue = previewFraction?.let(::predictiveBackScale) ?: 1f,
+        label = "tabBackScale",
+    )
+    val slidesBack = previewFraction != null
+    rememberTransition(tabState, label = "appTab").AnimatedContent(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = previewScale
+                scaleY = previewScale
+            },
+        transitionSpec = {
+            if (slidesBack && targetState == AppDestination.HOME) {
+                slideIntoContainer(SlideDirection.End, PaneMotionDefaults.OffsetAnimationSpec) togetherWith
+                    slideOutOfContainer(SlideDirection.End, PaneMotionDefaults.OffsetAnimationSpec)
+            } else {
+                EnterTransition.None togetherWith ExitTransition.None
+            }
+        },
+    ) { shownTab ->
+        holder.SaveableStateProvider(shownTab.name) {
+            TabNavDisplay(
+                tab = shownTab,
+                stacks = stacks,
+                contentPadding = contentPadding,
+                ui = ui,
+                twoPane = twoPane,
+                paneExpansion = paneExpansion,
+                detailCollapsed = detailCollapsed,
+                showHomeComposeButton = showHomeComposeButton,
+                gamesViewModel = gamesViewModel,
+                notificationsViewModel = notificationsViewModel,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TabNavDisplay(
+    tab: AppDestination,
+    stacks: AppBackStacks,
+    contentPadding: PaddingValues,
+    ui: SocialUi,
+    twoPane: Boolean,
+    paneExpansion: PaneExpansionState,
+    detailCollapsed: Boolean,
+    showHomeComposeButton: Boolean,
+    gamesViewModel: GamesViewModel,
+    notificationsViewModel: NotificationsViewModel,
+) {
     val reduceMotion = rememberReduceMotion()
     val people by ui.people.uiState.collectAsStateWithLifecycle()
     val personLayout = rememberPersonLayout()
@@ -434,7 +511,7 @@ private fun AppNavDisplay(
     }
     val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
         Padded(contentPadding) {
-            val listRoute = stacks.current.lastOrNull { it.isListPane }
+            val listRoute = stacks.stack(tab).lastOrNull { it.isListPane }
             val personUserId = when (listRoute) {
                 is AppRoute.Person -> listRoute.userId
                 is AppRoute.PersonHandle -> people.handles[PeopleViewModel.handleKey(listRoute.username, listRoute.host)]
@@ -464,152 +541,147 @@ private fun AppNavDisplay(
     val strategy = remember(listDetailStrategy, detailCollapsed) {
         DetailCollapsedSceneStrategy(listDetailStrategy, detailCollapsed)
     }
-    val tab = stacks.tab
-    holder.SaveableStateProvider(tab.name) {
-        key(tab) {
-            NavDisplay(
-                backStack = stacks.stack(tab),
-                onBack = { stacks.pop() },
-                sceneStrategies = listOf(strategy),
-                transitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultTransitionSpec(),
-                popTransitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultPopTransitionSpec(),
-                predictivePopTransitionSpec = if (reduceMotion) ({ _ -> EnterTransition.None togetherWith ExitTransition.None }) else defaultPredictivePopTransitionSpec(),
-                entryProvider = { route ->
-                    when (route) {
-                        AppRoute.Home -> NavEntry(
-                            key = route,
-                            metadata = listMetadata,
-                        ) {
-                            Padded(contentPadding) {
-                                HomeScreen(
-                                    ui = ui,
-                                    twoPane = twoPane,
-                                    showComposeButton = showHomeComposeButton,
-                                    onBrowseGames = browseGames,
-                                    onSeeAllFavorites = seeAllFavorites,
-                                    onOpenSearch = { query -> stacks.push(AppRoute.Search(query)) },
-                                    onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
-                                    onOpenHandle = { username, host -> stacks.push(AppRoute.PersonHandle(username, host)) },
-                                )
-                            }
-                        }
-                        AppRoute.Games -> NavEntry(route) {
-                            Padded(contentPadding) { GamesScreen(viewModel = gamesViewModel) }
-                        }
-                        AppRoute.Notifications -> NavEntry(
-                            key = route,
-                            metadata = listMetadata,
-                        ) {
-                            Padded(contentPadding) {
-                                NotificationsScreen(
-                                    viewModel = notificationsViewModel,
-                                    onOpenNote = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
-                                    onOpenPerson = { userId ->
-                                        if (userId == people.myUserId) {
-                                            stacks.select(AppDestination.PROFILE)
-                                        } else {
-                                            stacks.push(AppRoute.Person(userId))
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                        AppRoute.Profile -> NavEntry(
-                            key = route,
-                            metadata = if (people.myUserId != null) personMetadata else emptyMap(),
-                        ) {
-                            Padded(contentPadding) {
-                                ProfileScreen(
-                                    ui = ui,
-                                    onEditProfile = stacks::openEditProfile,
-                                    onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
-                                )
-                            }
-                        }
-                        is AppRoute.Settings -> NavEntry(key = route, contentKey = "settings") {
-                            Padded(contentPadding) {
-                                SettingsScreen(
-                                    editProfileRequested = route.openEditProfile,
-                                    onEditProfileHandled = stacks::editProfileHandled,
-                                )
-                            }
-                        }
-                        is AppRoute.Person -> NavEntry(key = route, metadata = personMetadata) {
-                            Padded(contentPadding) {
-                                PersonPage(
-                                    userId = route.userId,
-                                    ui = ui,
-                                    onBack = { stacks.pop() },
-                                    onOpenList = { kind -> stacks.push(AppRoute.FollowList(route.userId, kind)) },
-                                )
-                            }
-                        }
-                        is AppRoute.PersonHandle -> NavEntry(key = route, metadata = personMetadata) {
-                            Padded(contentPadding) {
-                                PersonByHandlePage(
-                                    username = route.username,
-                                    host = route.host,
-                                    ui = ui,
-                                    onBack = { stacks.pop() },
-                                    onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
-                                )
-                            }
-                        }
-                        is AppRoute.FollowList -> NavEntry(route) {
-                            Padded(contentPadding) {
-                                FollowListScreen(
-                                    userId = route.userId,
-                                    initialKind = route.kind,
-                                    ui = ui,
-                                    onBack = { stacks.pop() },
-                                    onOpenPerson = { detail -> ui.callbacks.openProfile(detail.user) },
-                                )
-                            }
-                        }
-                        is AppRoute.Tag -> NavEntry(key = route, metadata = listMetadata) {
-                            Padded(contentPadding) { TagPage(route.tag, ui, onBack = { stacks.pop() }) }
-                        }
-                        is AppRoute.Search -> NavEntry(key = route, metadata = listMetadata) {
-                            Padded(contentPadding) { SearchResultsPage(route.query, ui, onBack = { stacks.pop() }) }
-                        }
-                        AppRoute.Hashtags -> NavEntry(route) {
-                            Padded(contentPadding) {
-                                HashtagsPage(
-                                    discovery = ui.discovery,
-                                    onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
-                                    onBack = { stacks.pop() },
-                                )
-                            }
-                        }
-                        is AppRoute.Thread -> NavEntry(
-                            key = route,
-                            metadata = ListDetailSceneStrategy.detailPane() + mapOf(DetailPaneMarker to true),
-                        ) {
-                            val feed by ui.feed.uiState.collectAsStateWithLifecycle()
-                            Padded(contentPadding) {
-                                ThreadPane(
-                                    thread = feed.thread?.takeIf { it.noteId == route.noteId },
-                                    environment = LocalNoteEnvironment.current,
-                                    callbacks = ui.callbacks,
-                                    twoPane = twoPane,
-                                    onBack = { stacks.pop() },
-                                    onRetry = { ui.feed.openThread(route.noteId) },
-                                    onLoadMoreReplies = ui.feed::loadMoreReplies,
-                                    onToggleBranch = ui.feed::toggleBranch,
-                                    onLoadMoreBranch = ui.feed::loadMoreBranch,
-                                    onLoadRenotes = ui.feed::loadThreadRenotes,
-                                    onLoadReactions = ui.feed::loadThreadReactions,
-                                )
-                            }
-                        }
+    NavDisplay(
+        backStack = stacks.stack(tab),
+        onBack = { stacks.pop() },
+        sceneStrategies = listOf(strategy),
+        transitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultTransitionSpec(),
+        popTransitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultPopTransitionSpec(),
+        predictivePopTransitionSpec = if (reduceMotion) ({ _ -> EnterTransition.None togetherWith ExitTransition.None }) else defaultPredictivePopTransitionSpec(),
+        entryProvider = { route ->
+            when (route) {
+                AppRoute.Home -> NavEntry(
+                    key = route,
+                    metadata = listMetadata,
+                ) {
+                    Padded(contentPadding) {
+                        HomeScreen(
+                            ui = ui,
+                            twoPane = twoPane,
+                            showComposeButton = showHomeComposeButton,
+                            onBrowseGames = browseGames,
+                            onSeeAllFavorites = seeAllFavorites,
+                            onOpenSearch = { query -> stacks.push(AppRoute.Search(query)) },
+                            onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+                            onOpenHandle = { username, host -> stacks.push(AppRoute.PersonHandle(username, host)) },
+                        )
                     }
-                },
-            )
-        }
-    }
+                }
+                AppRoute.Games -> NavEntry(route) {
+                    Padded(contentPadding) { GamesScreen(viewModel = gamesViewModel) }
+                }
+                AppRoute.Notifications -> NavEntry(
+                    key = route,
+                    metadata = listMetadata,
+                ) {
+                    Padded(contentPadding) {
+                        NotificationsScreen(
+                            viewModel = notificationsViewModel,
+                            onOpenNote = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
+                            onOpenPerson = { userId ->
+                                if (userId == people.myUserId) {
+                                    stacks.select(AppDestination.PROFILE)
+                                } else {
+                                    stacks.push(AppRoute.Person(userId))
+                                }
+                            },
+                        )
+                    }
+                }
+                AppRoute.Profile -> NavEntry(
+                    key = route,
+                    metadata = if (people.myUserId != null) personMetadata else emptyMap(),
+                ) {
+                    Padded(contentPadding) {
+                        ProfileScreen(
+                            ui = ui,
+                            onEditProfile = stacks::openEditProfile,
+                            onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
+                        )
+                    }
+                }
+                is AppRoute.Settings -> NavEntry(key = route, contentKey = "settings") {
+                    Padded(contentPadding) {
+                        SettingsScreen(
+                            editProfileRequested = route.openEditProfile,
+                            onEditProfileHandled = stacks::editProfileHandled,
+                        )
+                    }
+                }
+                is AppRoute.Person -> NavEntry(key = route, metadata = personMetadata) {
+                    Padded(contentPadding) {
+                        PersonPage(
+                            userId = route.userId,
+                            ui = ui,
+                            onBack = { stacks.pop() },
+                            onOpenList = { kind -> stacks.push(AppRoute.FollowList(route.userId, kind)) },
+                        )
+                    }
+                }
+                is AppRoute.PersonHandle -> NavEntry(key = route, metadata = personMetadata) {
+                    Padded(contentPadding) {
+                        PersonByHandlePage(
+                            username = route.username,
+                            host = route.host,
+                            ui = ui,
+                            onBack = { stacks.pop() },
+                            onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
+                        )
+                    }
+                }
+                is AppRoute.FollowList -> NavEntry(route) {
+                    Padded(contentPadding) {
+                        FollowListScreen(
+                            userId = route.userId,
+                            initialKind = route.kind,
+                            ui = ui,
+                            onBack = { stacks.pop() },
+                            onOpenPerson = { detail -> ui.callbacks.openProfile(detail.user) },
+                        )
+                    }
+                }
+                is AppRoute.Tag -> NavEntry(key = route, metadata = listMetadata) {
+                    Padded(contentPadding) { TagPage(route.tag, ui, onBack = { stacks.pop() }) }
+                }
+                is AppRoute.Search -> NavEntry(key = route, metadata = listMetadata) {
+                    Padded(contentPadding) { SearchResultsPage(route.query, ui, onBack = { stacks.pop() }) }
+                }
+                AppRoute.Hashtags -> NavEntry(route) {
+                    Padded(contentPadding) {
+                        HashtagsPage(
+                            discovery = ui.discovery,
+                            onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+                            onBack = { stacks.pop() },
+                        )
+                    }
+                }
+                is AppRoute.Thread -> NavEntry(
+                    key = route,
+                    metadata = ListDetailSceneStrategy.detailPane() + mapOf(DetailPaneMarker to true),
+                ) {
+                    val feed by ui.feed.uiState.collectAsStateWithLifecycle()
+                    Padded(contentPadding) {
+                        ThreadPane(
+                            thread = feed.thread?.takeIf { it.noteId == route.noteId },
+                            environment = LocalNoteEnvironment.current,
+                            callbacks = ui.callbacks,
+                            twoPane = twoPane,
+                            onBack = { stacks.pop() },
+                            onRetry = { ui.feed.openThread(route.noteId) },
+                            onLoadMoreReplies = ui.feed::loadMoreReplies,
+                            onToggleBranch = ui.feed::toggleBranch,
+                            onLoadMoreBranch = ui.feed::loadMoreBranch,
+                            onLoadRenotes = ui.feed::loadThreadRenotes,
+                            onLoadReactions = ui.feed::loadThreadReactions,
+                        )
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable
 private fun Padded(contentPadding: PaddingValues, content: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().padding(contentPadding)) { content() }
+    Box(modifier = Modifier.fillMaxSize().padding(contentPadding).consumeWindowInsets(contentPadding)) { content() }
 }
