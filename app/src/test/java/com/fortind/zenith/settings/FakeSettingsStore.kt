@@ -39,6 +39,14 @@ class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
         state.update { it.copy(railCollapsed = collapsed) }
     }
 
+    override suspend fun setComposerWindowSize(size: WindowSizeDp) {
+        state.update { it.copy(composerWindowSize = size) }
+    }
+
+    override suspend fun setPopOutBounds(tab: String, bounds: WindowBounds) {
+        state.update { it.copy(popOutBounds = it.popOutBounds + (tab to bounds)) }
+    }
+
     override suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean) {
         state.update {
             it.copy(

@@ -134,6 +134,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
+import androidx.navigationevent.compose.rememberNavigationEventState
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.NavigationEventInfo
 import com.fortind.zenith.R
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.composer.MAX_ATTACHMENTS
@@ -157,10 +160,29 @@ fun ComposerHost(
     viewModel: ComposerViewModel,
     environment: NoteEnvironment?,
     onGrantPermission: () -> Unit,
+    windowed: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val current = state ?: return
-    ComposerDialog(current, viewModel, environment, onGrantPermission)
+    ComposerDialog(current, viewModel, environment, onGrantPermission, windowed)
+}
+
+@Composable
+private fun ComposerFrame(windowed: Boolean, onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
+    if (windowed) {
+        NavigationBackHandler(
+            state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+            onBackCompleted = onDismissRequest,
+        )
+        content()
+    } else {
+        Dialog(
+            onDismissRequest = onDismissRequest,
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        ) {
+            content()
+        }
+    }
 }
 
 @Composable
@@ -169,9 +191,10 @@ private fun ComposerDialog(
     viewModel: ComposerViewModel,
     environment: NoteEnvironment?,
     onGrantPermission: () -> Unit,
+    windowed: Boolean,
 ) {
     val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
-    val floating = windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) &&
+    val floating = !windowed && windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) &&
         windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
     var confirmClose by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf("") }
@@ -226,10 +249,7 @@ private fun ComposerDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = requestClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
+    ComposerFrame(windowed = windowed, onDismissRequest = requestClose) {
         val overlayFocus = remember { OverlayFocus() }
         val focusManager = LocalFocusManager.current
         LaunchedEffect(overlayOpen) { if (overlayOpen) focusManager.clearFocus() }

@@ -7,6 +7,16 @@
 package com.fortind.zenith.ui.nav
 
 import androidx.compose.ui.platform.LocalWindowInfo
+import com.fortind.zenith.window.AppWindows
+import com.fortind.zenith.ui.contextMenuTrigger
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.foundation.layout.isCaptionBarVisible
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -140,17 +150,24 @@ private val PaneExpansionAnchors = listOf(
     DetailCollapsedAnchor,
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppShell(
+    window: ShellWindow,
     requestedDestination: AppDestination?,
     onRequestedDestinationHandled: () -> Unit,
+    requestedRoute: AppRoute?,
+    onRequestedRouteHandled: () -> Unit,
     requestedThreadId: String?,
     onRequestedThreadHandled: () -> Unit,
     requestedReplyId: String?,
     onRequestedReplyHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
-    val stacks = rememberAppBackStacks()
+    val poppedOut = window.poppedOutTab != null
+    val stacks = rememberAppBackStacks(window.poppedOutTab)
+    stacks.onLeaveFixedTab = window.onLeaveTab
+    val canPopOut = !poppedOut && WindowInsets.isCaptionBarVisible
     val app = LocalContext.current.applicationContext as ZenithApplication
     val scope = rememberCoroutineScope()
     val settings by app.container.settingsStore.settings.collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
@@ -166,17 +183,23 @@ fun AppShell(
     val twoPane = directive.maxHorizontalPartitions > 1 && !detailCollapsed
     val hasRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
     val hasWideRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
-    val composeInRail = hasRail && sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
+    val composeInRail = !poppedOut && hasRail && sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
     val railExpanded = hasWideRail && settings?.railCollapsed != true
     val suiteType = when {
+        poppedOut -> NavigationSuiteType.None
         railExpanded -> NavigationSuiteType.WideNavigationRailExpanded
         hasRail -> NavigationSuiteType.WideNavigationRailCollapsed
         else -> NavigationSuiteType.ShortNavigationBarCompact
     }
 
-    LaunchedEffect(requestedDestination) {
+    LaunchedEffect(requestedDestination, requestedRoute) {
         if (requestedDestination != null) {
-            stacks.select(requestedDestination)
+            when {
+                requestedRoute == AppRoute.Settings(openEditProfile = true) -> stacks.openEditProfile()
+                requestedRoute != null && requestedRoute != requestedDestination.root -> stacks.openIn(requestedDestination, requestedRoute)
+                else -> stacks.select(requestedDestination)
+            }
+            onRequestedRouteHandled()
             onRequestedDestinationHandled()
         }
     }
@@ -217,7 +240,7 @@ fun AppShell(
             if (openThreadId != null) ui.feed.openThread(openThreadId) else ui.feed.closeThread()
         }
 
-        val tabBackEnabled = !stacks.atHomeRoot && stacks.current.size == 1
+        val tabBackEnabled = !poppedOut && !stacks.atHomeRoot && stacks.current.size == 1
         val tabBackState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
         NavigationBackHandler(
             state = tabBackState,
@@ -295,20 +318,36 @@ fun AppShell(
             },
             navigationItems = {
                 AppDestination.entries.forEach { destination ->
+                    val poppable = canPopOut && destination in AppWindows.PoppableTabs
+                    var menuOpen by remember { mutableStateOf(false) }
                     NavigationSuiteItem(
                         selected = stacks.tab == destination,
                         onClick = { stacks.select(destination) },
                         navigationSuiteType = suiteType,
-                        modifier = Modifier.testTag("nav:${destination.name}"),
+                        modifier = Modifier
+                            .testTag("nav:${destination.name}")
+                            .contextMenuTrigger(enabled = poppable) { menuOpen = true },
                         icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = if (destination == AppDestination.NOTIFICATIONS && unreadCount > 0) {
-                                    pluralStringResource(R.plurals.nav_notifications_unread, unreadCount, unreadCount)
-                                } else {
-                                    stringResource(destination.labelRes)
-                                },
-                            )
+                            Box {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = if (destination == AppDestination.NOTIFICATIONS && unreadCount > 0) {
+                                        pluralStringResource(R.plurals.nav_notifications_unread, unreadCount, unreadCount)
+                                    } else {
+                                        stringResource(destination.labelRes)
+                                    },
+                                )
+                                DropdownMenu(expanded = menuOpen && poppable, onDismissRequest = { menuOpen = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.nav_open_in_new_window)) },
+                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
+                                        onClick = {
+                                            menuOpen = false
+                                            window.onOpenTabWindow(destination, settings?.popOutBounds?.get(destination.name))
+                                        },
+                                    )
+                                }
+                            }
                         },
                         label = {
                             Text(

@@ -22,6 +22,17 @@ class AppBackStacks(
     var tab: AppDestination by mutableStateOf(initialTab)
         private set
 
+    var fixedTab: AppDestination? = null
+
+    var onLeaveFixedTab: (AppDestination, AppRoute?) -> Unit = { _, _ -> }
+
+    private fun leavesFixedTab(destination: AppDestination, route: AppRoute? = null): Boolean {
+        val fixed = fixedTab ?: return false
+        if (destination == fixed) return false
+        onLeaveFixedTab(destination, route)
+        return true
+    }
+
     val current: SnapshotStateList<AppRoute> get() = stack(tab)
 
     val top: AppRoute get() = current.last()
@@ -33,6 +44,7 @@ class AppBackStacks(
     fun stack(destination: AppDestination): SnapshotStateList<AppRoute> = stacks.getValue(destination)
 
     fun select(destination: AppDestination) {
+        if (leavesFixedTab(destination)) return
         if (destination == tab) {
             popToRoot()
         } else {
@@ -45,6 +57,7 @@ class AppBackStacks(
     }
 
     fun openIn(destination: AppDestination, route: AppRoute) {
+        if (leavesFixedTab(destination, route)) return
         tab = destination
         push(route)
     }
@@ -57,7 +70,7 @@ class AppBackStacks(
 
     fun back(): Boolean = when {
         pop() -> true
-        tab != AppDestination.HOME -> {
+        fixedTab == null && tab != AppDestination.HOME -> {
             tab = AppDestination.HOME
             true
         }
@@ -65,12 +78,14 @@ class AppBackStacks(
     }
 
     fun showRoot(destination: AppDestination) {
+        if (leavesFixedTab(destination)) return
         val stack = stack(destination)
         while (stack.size > 1) stack.removeAt(stack.lastIndex)
         tab = destination
     }
 
     fun openEditProfile() {
+        if (leavesFixedTab(AppDestination.SETTINGS, AppRoute.Settings(openEditProfile = true))) return
         val settings = stack(AppDestination.SETTINGS)
         settings.clear()
         settings.add(AppRoute.Settings(openEditProfile = true))
@@ -107,4 +122,6 @@ class AppBackStacks(
 }
 
 @Composable
-fun rememberAppBackStacks(): AppBackStacks = rememberSaveable(saver = AppBackStacks.Saver) { AppBackStacks() }
+fun rememberAppBackStacks(fixedTab: AppDestination? = null): AppBackStacks =
+    rememberSaveable(saver = AppBackStacks.Saver) { AppBackStacks(initialTab = fixedTab ?: AppDestination.HOME) }
+        .also { it.fixedTab = fixedTab }

@@ -1,15 +1,12 @@
 package com.fortind.zenith
 
 import android.content.Intent
-import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
 import android.view.KeyboardShortcutInfo
 import android.view.Menu
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -39,31 +36,50 @@ import com.fortind.zenith.ui.nav.AppDestination
 import com.fortind.zenith.ui.nav.AppRoute
 import com.fortind.zenith.ui.nav.AppShell
 import com.fortind.zenith.ui.nav.AppShortcutDispatcher
+import com.fortind.zenith.ui.nav.ShellWindow
 import com.fortind.zenith.ui.nav.destinationKeyCode
 import com.fortind.zenith.ui.theme.SettingsTheme
+import com.fortind.zenith.ui.theme.applySystemBarStyle
 import com.fortind.zenith.ui.theme.isThemeDark
+import com.fortind.zenith.window.AppWindows
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-
-private val DEFAULT_LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
-private val DEFAULT_DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
 class MainActivity : ComponentActivity() {
     private val requestedDestination = mutableStateOf<AppDestination?>(null)
+    private val requestedRoute = mutableStateOf<AppRoute?>(null)
     private val requestedThreadId = mutableStateOf<String?>(null)
     private val requestedReplyId = mutableStateOf<String?>(null)
     private val shortcuts = AppShortcutDispatcher()
 
     private val container get() = (application as ZenithApplication).container
 
+    private val poppedOutTab: AppDestination? by lazy { AppWindows.poppedOutTab(intent.data) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) handleIntent(intent)
+        poppedOutTab?.let { tab ->
+            AppWindows.setWindowLabel(this, getString(tab.labelRes))
+            lifecycleScope.launch {
+                container.sessionService.state.first { it == SessionState.SignedOut }
+                finish()
+            }
+        }
         setContent {
-            SettingsTheme(onDarkTheme = ::applySystemBarStyle) {
+            SettingsTheme(onDarkTheme = { applySystemBarStyle(it) }) {
                 ZenithRoot(
+                    window = ShellWindow(
+                        poppedOutTab = poppedOutTab,
+                        onLeaveTab = ::leaveTab,
+                        onOpenTabWindow = { destination, remembered -> AppWindows.openTab(this, destination, remembered = remembered) },
+                    ),
                     requestedDestination = requestedDestination.value,
                     onRequestedDestinationHandled = { requestedDestination.value = null },
+                    requestedRoute = requestedRoute.value,
+                    onRequestedRouteHandled = { requestedRoute.value = null },
                     requestedThreadId = requestedThreadId.value,
                     onRequestedThreadHandled = { requestedThreadId.value = null },
                     requestedReplyId = requestedReplyId.value,
@@ -74,17 +90,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun applySystemBarStyle(darkTheme: Boolean) {
-        val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme }
-        val navigationStyle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O || darkTheme) {
-            style
-        } else {
-            SystemBarStyle.auto(DEFAULT_LIGHT_SCRIM, DEFAULT_DARK_SCRIM) { darkTheme }
-        }
-        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = navigationStyle)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            window.isNavigationBarContrastEnforced = false
-        }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) rememberPopOutBounds()
+    }
+
+    private fun rememberPopOutBounds() {
+        val tab = poppedOutTab ?: return
+        val bounds = AppWindows.currentBounds(this) ?: return
+        container.scope.launch { container.settingsStore.setPopOutBounds(tab.name, bounds) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -107,17 +121,38 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        container.foregroundTracker.inForeground = true
+        container.foregroundTracker.windowStarted()
         container.systemNotifier.clearAll()
     }
 
     override fun onStop() {
         super.onStop()
-        container.foregroundTracker.inForeground = false
-        container.scope.launch { container.notificationSyncer.acknowledgeSeen() }
+        if (container.foregroundTracker.windowStopped()) {
+            container.scope.launch { container.notificationSyncer.acknowledgeSeen() }
+        }
+    }
+
+    private fun leaveTab(destination: AppDestination, route: AppRoute?) {
+        if (destination in AppWindows.PoppableTabs && AppWindows.tabWindowExists(this, destination)) {
+            AppWindows.openTab(this, destination, route)
+            return
+        }
+        val intent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_TAB, destination.name)
+        route?.let { intent.putExtra(EXTRA_ROUTE, it.encode()) }
+        startActivity(intent)
     }
 
     private fun handleIntent(intent: Intent?) {
+        val route = intent?.getStringExtra(EXTRA_ROUTE)?.let(AppRoute::decode)
+        val tab = poppedOutTab ?: intent?.getStringExtra(EXTRA_TAB)?.let { name -> AppDestination.entries.firstOrNull { it.name == name } }
+        if (tab != null && (route != null || poppedOutTab == null)) {
+            requestedRoute.value = route
+            requestedDestination.value = tab
+            return
+        }
+        if (poppedOutTab != null) return
         val noteId = intent?.getStringExtra(EXTRA_THREAD_NOTE_ID)?.takeIf(AppRoute::isValidNoteId)
         if (noteId != null) {
             requestedThreadId.value = noteId
@@ -137,14 +172,19 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_DESTINATION = "com.fortind.zenith.extra.DESTINATION"
         const val EXTRA_THREAD_NOTE_ID = "com.fortind.zenith.extra.THREAD_NOTE_ID"
         const val EXTRA_OPEN_REPLY = "com.fortind.zenith.extra.OPEN_REPLY"
+        const val EXTRA_TAB = "com.fortind.zenith.extra.TAB"
+        const val EXTRA_ROUTE = "com.fortind.zenith.extra.ROUTE"
         const val DESTINATION_NOTIFICATIONS = "notifications"
     }
 }
 
 @Composable
 fun ZenithRoot(
+    window: ShellWindow,
     requestedDestination: AppDestination?,
     onRequestedDestinationHandled: () -> Unit,
+    requestedRoute: AppRoute?,
+    onRequestedRouteHandled: () -> Unit,
     requestedThreadId: String?,
     onRequestedThreadHandled: () -> Unit,
     requestedReplyId: String?,
@@ -173,12 +213,15 @@ fun ZenithRoot(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 )
-                SessionState.SignedOut -> LoginScreen(
+                SessionState.SignedOut -> if (window.poppedOutTab == null) LoginScreen(
                     onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
                 )
                 is SessionState.SignedIn, SessionState.Guest -> AppShell(
+                    window = window,
                     requestedDestination = requestedDestination,
                     onRequestedDestinationHandled = onRequestedDestinationHandled,
+                    requestedRoute = requestedRoute,
+                    onRequestedRouteHandled = onRequestedRouteHandled,
                     requestedThreadId = requestedThreadId,
                     onRequestedThreadHandled = onRequestedThreadHandled,
                     requestedReplyId = requestedReplyId,

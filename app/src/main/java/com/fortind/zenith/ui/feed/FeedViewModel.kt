@@ -1,5 +1,8 @@
 package com.fortind.zenith.ui.feed
 
+import com.fortind.zenith.window.WindowEvent
+import com.fortind.zenith.window.WindowLink
+import com.fortind.zenith.window.windowLink
 import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.timeline.renoteVisibilities
 import androidx.lifecycle.ViewModel
@@ -107,6 +110,7 @@ class FeedViewModel(
     private val reactionDebounceMs: Long = REACTION_DEBOUNCE_MS,
     private val clock: () -> Long = System::currentTimeMillis,
     private val muteDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val windows: WindowLink = WindowLink.Alone,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -160,6 +164,7 @@ class FeedViewModel(
                 if (next != FeedAuth.Pending) serve()
             }
         }
+        viewModelScope.launch { windows.fromOtherWindows.collect(::applyFromOtherWindow) }
     }
 
     fun setActive(isActive: Boolean) {
@@ -510,6 +515,7 @@ class FeedViewModel(
         viewModelScope.launch {
             try {
                 api.renote(token, noteId, chosen, note.localOnly)
+                windows.publish(WindowEvent.Renoted(noteId, renoted = true))
             } catch (e: IOException) {
                 _uiState.update { it.copy(renoted = it.renoted - noteId) }
                 mutateEverywhere(noteId) { it.copy(renoteCount = (it.renoteCount - 1).coerceAtLeast(0)) }
@@ -525,6 +531,7 @@ class FeedViewModel(
         viewModelScope.launch {
             try {
                 if (muted) api.unmuteThread(token, noteId) else api.muteThread(token, noteId)
+                windows.publish(WindowEvent.ThreadMuted(noteId, muted = !muted))
                 _events.trySend(if (muted) FeedEvent.ThreadUnmuted else FeedEvent.ThreadMuted)
             } catch (e: IOException) {
                 _uiState.update { it.copy(threadMuted = if (muted) it.threadMuted + noteId else it.threadMuted - noteId) }
@@ -646,6 +653,20 @@ class FeedViewModel(
         val token = token ?: return requireSignIn()
         val userId = myUserId
         if (noteId !in _uiState.value.renoted) return
+        dropMyRenotes(noteId, userId)
+        viewModelScope.launch {
+            try {
+                api.unrenote(token, noteId)
+                windows.publish(WindowEvent.Renoted(noteId, renoted = false))
+            } catch (e: IOException) {
+                _uiState.update { it.copy(renoted = it.renoted + noteId) }
+                mutateEverywhere(noteId) { it.copy(renoteCount = it.renoteCount + 1) }
+                handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.RenoteFailed) }
+            }
+        }
+    }
+
+    private fun dropMyRenotes(noteId: String, userId: String?) {
         _uiState.update { state ->
             state.copy(
                 renoted = state.renoted - noteId,
@@ -663,15 +684,6 @@ class FeedViewModel(
         }
         mutateEverywhere(noteId) { it.copy(renoteCount = (it.renoteCount - 1).coerceAtLeast(0)) }
         forgetThreadRenotes(noteId)
-        viewModelScope.launch {
-            try {
-                api.unrenote(token, noteId)
-            } catch (e: IOException) {
-                _uiState.update { it.copy(renoted = it.renoted + noteId) }
-                mutateEverywhere(noteId) { it.copy(renoteCount = it.renoteCount + 1) }
-                handleNoteFailure(noteId, e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.RenoteFailed) }
-            }
-        }
     }
 
     fun votePoll(noteId: String, choices: List<Int>) {
@@ -687,7 +699,9 @@ class FeedViewModel(
                     api.vote(token, noteId, choice)
                     confirmed += choice
                 }
+                windows.publish(WindowEvent.Voted(noteId, picked))
             } catch (e: IOException) {
+                if (confirmed.isNotEmpty()) windows.publish(WindowEvent.Voted(noteId, confirmed.toList()))
                 val unconfirmed = picked.filterNot { it in confirmed }
                 mutateEverywhere(noteId) { note -> note.copy(poll = note.poll?.withoutVotes(unconfirmed)) }
                 handleVoteFailure(e, token, noteId)
@@ -746,6 +760,7 @@ class FeedViewModel(
             try {
                 if (remove) unbookmarkTolerant(token, noteId) else bookmarkTolerant(token, noteId)
                 updateList(NoteListKey.Bookmarks) { it.withBookmark(note, present = !remove) }
+                windows.publish(WindowEvent.Bookmarked(note, present = !remove))
                 _events.trySend(if (remove) FeedEvent.BookmarkRemoved else FeedEvent.Bookmarked)
             } catch (e: IOException) {
                 _uiState.update { it.copy(bookmarked = if (remove) it.bookmarked + noteId else it.bookmarked - noteId) }
@@ -847,6 +862,7 @@ class FeedViewModel(
                     if (e.apiErrorCode != ApiErrorCodes.NO_SUCH_NOTE) throw e
                 }
                 removeEverywhere(noteId)
+                windows.publish(WindowEvent.NoteDeleted(noteId))
                 _events.trySend(if (redraft) FeedEvent.Redraft(note) else FeedEvent.NoteDeleted)
             } catch (e: IOException) {
                 handleFailure(e) { _events.trySend(if (e.isRateLimited) FeedEvent.RateLimited else FeedEvent.DeleteFailed) }
@@ -859,7 +875,8 @@ class FeedViewModel(
     fun muteAuthor(noteId: String, durationMillis: Long?) {
         moderate(noteId) { token, user ->
             moderation.mute(token, user.id, durationMillis?.let { clock() + it })
-            removeAuthorEverywhere(user.id)
+            dropAuthor(user.id)
+            windows.publish(WindowEvent.RelationChanged(user.id))
             FeedEvent.UserMuted(user.id, user.displayName)
         }
     }
@@ -867,7 +884,8 @@ class FeedViewModel(
     fun hideAuthorRenotes(noteId: String) {
         moderate(noteId) { token, user ->
             moderation.hideRenotes(token, user.id)
-            removeRenotesEverywhere(user.id)
+            dropRenotesBy(user.id)
+            windows.publish(WindowEvent.RelationChanged(user.id))
             FeedEvent.RenotesHidden(user.id, user.displayName)
         }
     }
@@ -875,7 +893,8 @@ class FeedViewModel(
     fun blockAuthor(noteId: String) {
         moderate(noteId) { token, user ->
             moderation.block(token, user.id)
-            removeAuthorEverywhere(user.id)
+            dropAuthor(user.id)
+            windows.publish(WindowEvent.RelationChanged(user.id))
             FeedEvent.UserBlocked(user.id, user.displayName)
         }
     }
@@ -895,9 +914,15 @@ class FeedViewModel(
         }
     }
 
-    fun dropAuthor(userId: String) = removeAuthorEverywhere(userId)
+    fun dropAuthor(userId: String) {
+        removeAuthorEverywhere(userId)
+        windows.publish(WindowEvent.AuthorHidden(userId, renotesOnly = false))
+    }
 
-    fun dropRenotesBy(userId: String) = removeRenotesEverywhere(userId)
+    fun dropRenotesBy(userId: String) {
+        removeRenotesEverywhere(userId)
+        windows.publish(WindowEvent.AuthorHidden(userId, renotesOnly = true))
+    }
 
     private fun removeAuthorEverywhere(userId: String) {
         _uiState.update { state ->
@@ -971,6 +996,11 @@ class FeedViewModel(
     }
 
     fun noteCreated(note: Note) {
+        applyCreated(note)
+        windows.publish(WindowEvent.NotePosted(note, edited = false))
+    }
+
+    private fun applyCreated(note: Note) {
         addToOwnLists(note)
         val parent = note.reply
         if (parent != null) {
@@ -989,8 +1019,46 @@ class FeedViewModel(
     }
 
     fun noteEdited(note: Note) {
+        applyEdit(note)
+        windows.publish(WindowEvent.NotePosted(note, edited = true))
+    }
+
+    private fun applyEdit(note: Note) {
         mutateEverywhere(note.id) { it.withEditFrom(note, note.editedAtMillis ?: clock()) }
         viewModelScope.launch { recheckMutes(note.id) }
+    }
+
+    private fun applyFromOtherWindow(event: WindowEvent) {
+        if (token == null) return
+        when (event) {
+            is WindowEvent.NotePosted -> if (event.edited) applyEdit(event.note) else applyCreated(event.note)
+            is WindowEvent.NoteDeleted -> removeEverywhere(event.noteId)
+            is WindowEvent.MyReaction -> if (reactionJobs[event.noteId]?.isActive != true) {
+                mutateEverywhere(event.noteId) { it.withMyReaction(event.reaction) }
+                forgetThreadReactions(event.noteId)
+            }
+            is WindowEvent.Renoted -> if (event.renoted) {
+                _uiState.update { it.copy(renoted = it.renoted + event.noteId) }
+                mutateEverywhere(event.noteId) { it.copy(renoteCount = it.renoteCount + 1) }
+                forgetThreadRenotes(event.noteId)
+            } else {
+                dropMyRenotes(event.noteId, myUserId)
+            }
+            is WindowEvent.Voted -> mutateEverywhere(event.noteId) { note ->
+                val poll = note.poll
+                if (poll == null || poll.hasVoted) note else note.copy(poll = poll.withVotes(event.choices))
+            }
+            is WindowEvent.Bookmarked -> {
+                val noteId = event.note.id
+                _uiState.update { it.copy(bookmarked = if (event.present) it.bookmarked + noteId else it.bookmarked - noteId) }
+                updateList(NoteListKey.Bookmarks) { it.withBookmark(event.note, event.present) }
+            }
+            is WindowEvent.ThreadMuted -> _uiState.update {
+                it.copy(threadMuted = if (event.muted) it.threadMuted + event.noteId else it.threadMuted - event.noteId)
+            }
+            is WindowEvent.AuthorHidden -> if (event.renotesOnly) removeRenotesEverywhere(event.userId) else removeAuthorEverywhere(event.userId)
+            is WindowEvent.RelationChanged -> Unit
+        }
     }
 
     fun requestPermission() {
@@ -1345,6 +1413,7 @@ class FeedViewModel(
                 if (apiReaction != null) reactTolerant(token, noteId, apiReaction) else unreactTolerant(token, noteId)
             }
             confirmedReactions[noteId] = desired
+            windows.publish(WindowEvent.MyReaction(noteId, desired))
             if (Reactions.sameReaction(findAnywhere(noteId)?.myReaction, desired)) confirmedReactions.remove(noteId)
         } catch (e: IOException) {
             val restore = confirmedReactions.remove(noteId)
@@ -1456,6 +1525,7 @@ class FeedViewModel(
                     recents = app.container.recentReactions,
                     unicode = app.container.unicodeEmoji,
                     moderation = app.container.moderationApi,
+                    windows = windowLink(app.container.windowEvents),
                 )
             }
         }

@@ -5,11 +5,19 @@ import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.settings.SettingsStore
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.first
 
 class AppForegroundTracker {
-    @Volatile
-    var inForeground: Boolean = false
+    private val startedWindows = AtomicInteger(0)
+
+    val inForeground: Boolean get() = startedWindows.get() > 0
+
+    fun windowStarted() {
+        startedWindows.incrementAndGet()
+    }
+
+    fun windowStopped(): Boolean = startedWindows.updateAndGet { (it - 1).coerceAtLeast(0) } == 0
 }
 
 enum class SyncOutcome { Done, Retry }

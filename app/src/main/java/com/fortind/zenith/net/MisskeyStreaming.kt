@@ -169,8 +169,41 @@ class StreamConnection internal constructor(
 
     fun noteUpdates(captured: Flow<Set<String>>): Flow<StreamFrame.NoteUpdated> = flow {
         var wanted = emptySet<String>()
-        var subscribed = emptySet<String>()
-        var subscribedGeneration = 0
+        try {
+            merge<Any>(captured.map(::CaptureChange), framesFromNow()).collect { event ->
+                when (event) {
+                    is CaptureChange -> {
+                        captures.replace(wanted, event.ids)
+                        wanted = event.ids
+                    }
+                    is StreamFrame.Opened -> captures.sync()
+                    is StreamFrame.NoteUpdated -> if (event.noteId in wanted) emit(event)
+                    else -> Unit
+                }
+            }
+        } finally {
+            captures.replace(wanted, emptySet())
+        }
+    }
+
+    private val captures = CaptureCounts()
+
+    private inner class CaptureCounts {
+        private val counts = HashMap<String, Int>()
+        private var subscribed = emptySet<String>()
+        private var subscribedGeneration = 0
+
+        @Synchronized
+        fun replace(old: Set<String>, new: Set<String>) {
+            (new - old).forEach { counts[it] = (counts[it] ?: 0) + 1 }
+            (old - new).forEach { id ->
+                val remaining = (counts[id] ?: 0) - 1
+                if (remaining > 0) counts[id] = remaining else counts.remove(id)
+            }
+            sync()
+        }
+
+        @Synchronized
         fun sync() {
             val generation = openGeneration
             if (generation == 0) return
@@ -178,24 +211,10 @@ class StreamConnection internal constructor(
                 subscribed = emptySet()
                 subscribedGeneration = generation
             }
+            val wanted = counts.keys.toSet()
             (wanted - subscribed).forEach { send(message("s", it)) }
             (subscribed - wanted).forEach { send(message("un", it)) }
             subscribed = wanted
-        }
-        try {
-            merge<Any>(captured.map(::CaptureChange), framesFromNow()).collect { event ->
-                when (event) {
-                    is CaptureChange -> {
-                        wanted = event.ids
-                        sync()
-                    }
-                    is StreamFrame.Opened -> sync()
-                    is StreamFrame.NoteUpdated -> if (event.noteId in wanted) emit(event)
-                    else -> Unit
-                }
-            }
-        } finally {
-            if (subscribedGeneration == openGeneration) subscribed.forEach { send(message("un", it)) }
         }
     }
 

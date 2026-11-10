@@ -63,6 +63,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.yield
 import com.fortind.zenith.notifications.awaitTrue
+import com.fortind.zenith.window.WindowEvents
+import com.fortind.zenith.window.WindowLink
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -116,7 +118,7 @@ class FeedViewModelTest {
         override suspend fun groups() = listOf(UnicodeEmojiGroup("Smileys", listOf(UnicodeEmoji("😀", "grinning face"))))
     }
 
-    private class Fixture(initialToken: String?, debounceMs: Long, settings: AccountSettings) {
+    private class Fixture(initialToken: String?, debounceMs: Long, settings: AccountSettings, windows: WindowLink) {
         val userApi = FakeUserApi(settings)
         val session = UserSessionService(FakeTokenStore(initialToken), userApi)
         var now = NOW_MILLIS
@@ -136,6 +138,7 @@ class FeedViewModelTest {
                 debounceMs,
                 clock = { now },
                 muteDispatcher = Dispatchers.Unconfined,
+                windows = windows,
             )
         }
         val viewModel by viewModelCreated
@@ -151,8 +154,9 @@ class FeedViewModelTest {
         debounceMs: Long = 0,
         settings: AccountSettings = AccountSettings(),
         offline: Boolean = false,
+        windows: WindowLink = WindowLink.Alone,
     ): Fixture {
-        val f = Fixture(token, debounceMs, settings).also(fixtures::add)
+        val f = Fixture(token, debounceMs, settings, windows).also(fixtures::add)
         if (offline) f.userApi.failure = IOException("offline")
         if (token == null) f.session.browseAsGuest() else f.session.restore()
         return f
@@ -770,6 +774,25 @@ class FeedViewModelTest {
         assertEquals(mapOf("❤" to 1, ":neko@.:" to 1), note.reactions)
         assertEquals(listOf("n1" to ":neko:"), f.api.reactCalls)
         assertEquals(listOf(":neko:"), f.recents.recorded)
+    }
+
+    @Test
+    fun anotherWindowSeesMyReactionAndPostWithoutCallingTheServerAgain() = runTest {
+        val bus = WindowEvents()
+        val first = fixture(windows = bus.link(Any()))
+        val second = fixture(windows = bus.link(Any()))
+        listOf(first, second).forEach { f ->
+            f.api.timelines[TimelineKind.Home] = listOf(testNote("n1", reactions = mapOf("❤" to 1)))
+            f.viewModel.awaitTimeline(TimelineKind.Home)
+        }
+
+        first.viewModel.react("n1", "👍")
+        first.viewModel.noteCreated(testNote("n2"))
+
+        val home = second.viewModel.awaitTimeline(TimelineKind.Home) { timeline -> timeline.items.any { it.id == "n2" } }
+        assertEquals("👍", home.items.single { it.id == "n1" }.myReaction)
+        assertEquals(mapOf("❤" to 1, "👍" to 1), home.items.single { it.id == "n1" }.reactions)
+        assertTrue(second.api.reactCalls.isEmpty())
     }
 
     @Test

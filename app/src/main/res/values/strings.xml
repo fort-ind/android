@@ -174,6 +174,7 @@
     <string name="feed_permission_grant">Grant access</string>
     <string name="nav_rail_collapse">Collapse navigation</string>
     <string name="nav_rail_expand">Expand navigation</string>
+    <string name="nav_open_in_new_window">Open in new window</string>
     <string name="feed_permission_dismiss">Not now</string>
     <string name="feed_new_permissions_title">almost..</string>
     <string name="feed_new_permissions_body">we added new stuff! so we need your account approval on %1$s. you\'ll hop over there and right back. :P</string>
@@ -495,6 +496,7 @@
     <string name="composer_title_quote">Quote</string>
     <string name="composer_title_edit">Edit post</string>
     <string name="composer_close">Close</string>
+    <string name="composer_window_load_failed">Couldn\'t load this post to edit.</string>
     <string name="composer_post">Post</string>
     <string name="composer_posting">Posting</string>
     <string name="composer_save_edit">Save</string>

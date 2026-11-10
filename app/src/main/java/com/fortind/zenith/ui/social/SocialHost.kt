@@ -3,6 +3,22 @@
 package com.fortind.zenith.ui.social
 
 import com.fortind.zenith.ZenithApplication
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.Flow
+import java.util.UUID
+import com.fortind.zenith.window.WindowLink
+import com.fortind.zenith.window.WindowEvent
+import com.fortind.zenith.window.ComposerWindowTarget
+import com.fortind.zenith.window.AppWindows
+import com.fortind.zenith.settings.WindowSizeDp
+import com.fortind.zenith.settings.AppSettings
+import com.fortind.zenith.AppContainer
+import androidx.compose.foundation.layout.isCaptionBarVisible
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.activity.compose.LocalActivity
+import android.app.Activity
 import com.fortind.zenith.ui.discovery.AddToListSheet
 import com.fortind.zenith.ui.discovery.CollectionsEventsEffect
 import com.fortind.zenith.ui.discovery.CollectionsViewModel
@@ -188,7 +204,9 @@ fun SocialHost(
         }
     }
 
-    val linkPreviews = (LocalContext.current.applicationContext as ZenithApplication).container.linkPreviews
+    val container = (LocalContext.current.applicationContext as ZenithApplication).container
+    val linkPreviews = container.linkPreviews
+    val composerWindows = rememberComposerWindows(container)
     val now by rememberNow()
     val emojiUrl = remember(emojis) {
         { name: String -> emojis?.get(name)?.url ?: "https://${FortInstance.HOST}/emoji/$name.webp" }
@@ -244,7 +262,9 @@ fun SocialHost(
         },
         onReply = { note -> composerViewModel.open(ComposerTarget.Reply(note.id), note) },
         onQuote = { note -> composerViewModel.open(ComposerTarget.Quote(note.id), note) },
-        onEdit = { note -> composerViewModel.open(ComposerTarget.Edit(note.id), note) },
+        onEdit = { note ->
+            if (!composerWindows.open(ComposerWindowTarget.Edit(note.id))) composerViewModel.open(ComposerTarget.Edit(note.id), note)
+        },
         onDelete = { note -> deleteTarget = note.id },
         onRedraft = { note -> redraftTarget = note.id },
         onMuteAuthor = { note -> muteTarget = note.id },
@@ -288,7 +308,10 @@ fun SocialHost(
             listStates = listStates,
             callbacks = noteCallbacks,
             startNewPost = {
-                if (signedIn) composerViewModel.open(ComposerTarget.NewPost, null) else feedViewModel.promptSignIn()
+                when {
+                    !signedIn -> feedViewModel.promptSignIn()
+                    !composerWindows.open(ComposerWindowTarget.NewPost) -> composerViewModel.open(ComposerTarget.NewPost, null)
+                }
             },
             people = peopleViewModel,
             peopleActions = peopleActions,
@@ -302,6 +325,7 @@ fun SocialHost(
     FeedEventsEffect(feedViewModel, peopleViewModel, snackbarHostState, listStates, reduceMotion, onRedraft = composerViewModel::redraft)
     PeopleEventsEffect(peopleViewModel, feedViewModel, snackbarHostState)
     ComposerEventsEffect(composerViewModel, feedViewModel, snackbarHostState)
+    ComposerWindowEventsEffect(composerWindows, snackbarHostState)
     LaunchedEffect(requestedReplyId) {
         val noteId = requestedReplyId ?: return@LaunchedEffect
         val note = withTimeoutOrNull(REPLY_NOTE_WAIT_MS) {
@@ -743,6 +767,49 @@ private fun rememberPeopleActions(
 }
 
 private const val REPLY_NOTE_WAIT_MS = 20_000L
+
+@Stable
+private class ComposerWindows(
+    private val activity: Activity?,
+    private val events: WindowLink,
+    val windowId: String,
+) {
+    var available by mutableStateOf(false)
+    var size by mutableStateOf<WindowSizeDp?>(null)
+
+    val postedHere: Flow<WindowEvent.NotePosted> =
+        events.fromOtherWindows.filterIsInstance<WindowEvent.NotePosted>().filter { it.openerWindowId == windowId }
+
+    fun open(target: ComposerWindowTarget): Boolean {
+        val opener = activity ?: return false
+        if (!available) return false
+        AppWindows.openComposer(opener, target, windowId, size)
+        return true
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun rememberComposerWindows(container: AppContainer): ComposerWindows {
+    val activity = LocalActivity.current
+    val windowId = rememberSaveable { UUID.randomUUID().toString() }
+    val windows = remember(activity, windowId) { ComposerWindows(activity, container.windowEvents.link(Any()), windowId) }
+    val settings by container.settingsStore.settings.collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
+    windows.available = WindowInsets.isCaptionBarVisible
+    windows.size = settings?.composerWindowSize
+    return windows
+}
+
+@Composable
+private fun ComposerWindowEventsEffect(windows: ComposerWindows, snackbarHostState: SnackbarHostState) {
+    val resources = LocalResources.current
+    LaunchedEffect(windows) {
+        windows.postedHere.collect { event ->
+            val message = if (event.edited) R.string.composer_saved else R.string.composer_posted
+            launch { snackbarHostState.showSnackbar(resources.getString(message)) }
+        }
+    }
+}
 
 @Composable
 private fun ComposerEventsEffect(

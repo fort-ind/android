@@ -58,6 +58,7 @@ import com.fortind.zenith.notifications.HttpNotificationsApi
 import com.fortind.zenith.notifications.NotificationQuickActions
 import com.fortind.zenith.notifications.NotificationStream
 import com.fortind.zenith.notifications.NotificationSyncCoordinator
+import com.fortind.zenith.window.WindowEvents
 import com.fortind.zenith.notifications.NotificationSyncStore
 import com.fortind.zenith.notifications.NotificationSyncer
 import com.fortind.zenith.notifications.NotificationWork
@@ -124,6 +125,7 @@ class AppContainer(application: Application) {
     val settingsStore: SettingsStore = DataStoreSettingsStore(application)
     val appIconSwitcher: AppIconSwitcher = PackageManagerAppIconSwitcher(application)
     val foregroundTracker = AppForegroundTracker()
+    val windowEvents = WindowEvents()
     private val notificationSyncStore: NotificationSyncStore = DataStoreNotificationSyncStore(application)
     private val androidNotifier = AndroidSystemNotifier(application)
     val systemNotifier: SystemNotifier = androidNotifier

@@ -16,6 +16,9 @@ import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.net.isRateLimited
 import com.fortind.zenith.people.FollowApi
+import com.fortind.zenith.window.WindowEvent
+import com.fortind.zenith.window.WindowLink
+import com.fortind.zenith.window.windowLink
 import com.fortind.zenith.people.FollowListKind
 import com.fortind.zenith.people.FollowState
 import com.fortind.zenith.people.RequestAnswerResult
@@ -127,6 +130,7 @@ class PeopleViewModel(
     private val follows: FollowApi,
     private val moderation: ModerationApi,
     private val reports: ReportApi,
+    private val windows: WindowLink = WindowLink.Alone,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
@@ -145,6 +149,11 @@ class PeopleViewModel(
     private val myUserId: String? get() = (auth as? PeopleAuth.SignedIn)?.userId
 
     init {
+        viewModelScope.launch {
+            windows.fromOtherWindows.collect { event ->
+                if (event is WindowEvent.RelationChanged) relationChanged(event.userId)
+            }
+        }
         viewModelScope.launch {
             combine(session.state, session.credentialsVersion) { state, _ -> state }
                 .map { state ->
@@ -244,6 +253,7 @@ class PeopleViewModel(
                     else -> follows.follow(token, userId)
                 }
                 apply(detail.afterToggle(state))
+                windows.publish(WindowEvent.RelationChanged(userId))
                 reread(userId)
                 rereadMe()
             } catch (e: IOException) {
@@ -274,6 +284,7 @@ class PeopleViewModel(
                     ModerationAction.Unblock -> moderation.unblock(token, userId)
                 }
                 apply(detail.after(action))
+                windows.publish(WindowEvent.RelationChanged(userId))
                 _events.trySend(PeopleEvent.Moderated(userId, detail.user.displayName, action))
                 reread(userId)
                 if (action == ModerationAction.Block || action == ModerationAction.Unblock) rereadMe()
@@ -491,6 +502,7 @@ class PeopleViewModel(
                     follows = app.container.followApi,
                     moderation = app.container.moderationApi,
                     reports = app.container.reportApi,
+                    windows = windowLink(app.container.windowEvents),
                 )
             }
         }

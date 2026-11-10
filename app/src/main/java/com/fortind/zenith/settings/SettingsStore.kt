@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -16,6 +17,20 @@ import kotlinx.coroutines.flow.map
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+data class WindowSizeDp(val widthDp: Int, val heightDp: Int)
+
+data class WindowBounds(val left: Int, val top: Int, val right: Int, val bottom: Int) {
+    fun encode(): String = "$left,$top,$right,$bottom"
+
+    companion object {
+        fun decode(encoded: String): WindowBounds? {
+            val parts = encoded.split(',').map { it.toIntOrNull() ?: return null }
+            if (parts.size != 4 || parts[2] <= parts[0] || parts[3] <= parts[1]) return null
+            return WindowBounds(parts[0], parts[1], parts[2], parts[3])
+        }
+    }
+}
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
@@ -25,6 +40,8 @@ data class AppSettings(
     val notificationCategories: Set<NotificationCategory> = DefaultNotificationCategories,
     val compressUploads: Boolean = false,
     val railCollapsed: Boolean = false,
+    val composerWindowSize: WindowSizeDp? = null,
+    val popOutBounds: Map<String, WindowBounds> = emptyMap(),
 )
 
 interface SettingsStore {
@@ -37,6 +54,8 @@ interface SettingsStore {
     suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean)
     suspend fun setCompressUploads(enabled: Boolean)
     suspend fun setRailCollapsed(collapsed: Boolean)
+    suspend fun setComposerWindowSize(size: WindowSizeDp)
+    suspend fun setPopOutBounds(tab: String, bounds: WindowBounds)
 }
 
 private val Context.settingsDataStore by preferencesDataStore(
@@ -61,6 +80,13 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
                 ?: DefaultNotificationCategories,
             compressUploads = prefs[CompressUploadsKey] ?: false,
             railCollapsed = prefs[RailCollapsedKey] ?: false,
+            composerWindowSize = prefs[ComposerWindowWidthKey]?.let { width ->
+                prefs[ComposerWindowHeightKey]?.let { height -> WindowSizeDp(width, height) }
+            },
+            popOutBounds = prefs[PopOutBoundsKey].orEmpty().mapNotNull { entry ->
+                val tab = entry.substringBefore('=')
+                WindowBounds.decode(entry.substringAfter('='))?.let { tab to it }
+            }.toMap(),
         )
     }
 
@@ -70,6 +96,20 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
 
     override suspend fun setRailCollapsed(collapsed: Boolean) {
         dataStore.edit { it[RailCollapsedKey] = collapsed }
+    }
+
+    override suspend fun setComposerWindowSize(size: WindowSizeDp) {
+        dataStore.edit {
+            it[ComposerWindowWidthKey] = size.widthDp
+            it[ComposerWindowHeightKey] = size.heightDp
+        }
+    }
+
+    override suspend fun setPopOutBounds(tab: String, bounds: WindowBounds) {
+        dataStore.edit { prefs ->
+            val others = prefs[PopOutBoundsKey].orEmpty().filterNot { it.substringBefore('=') == tab }
+            prefs[PopOutBoundsKey] = others.toSet() + "$tab=${bounds.encode()}"
+        }
     }
 
     override suspend fun setThemeMode(mode: ThemeMode) {
@@ -108,5 +148,8 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         val NotificationCategoriesKey = stringSetPreferencesKey("notification_categories")
         val CompressUploadsKey = booleanPreferencesKey("compress_uploads")
         val RailCollapsedKey = booleanPreferencesKey("rail_collapsed")
+        val ComposerWindowWidthKey = intPreferencesKey("composer_window_width_dp")
+        val ComposerWindowHeightKey = intPreferencesKey("composer_window_height_dp")
+        val PopOutBoundsKey = stringSetPreferencesKey("pop_out_bounds")
     }
 }

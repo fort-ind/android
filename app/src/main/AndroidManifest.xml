@@ -67,6 +67,21 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ComposerWindowActivity"
+            android:autoRemoveFromRecents="true"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Zenith"
+            android:windowSoftInputMode="adjustResize">
+            <layout
+                android:defaultWidth="560dp"
+                android:defaultHeight="640dp"
+                android:gravity="center"
+                android:minWidth="360dp"
+                android:minHeight="420dp" />
+        </activity>
+
         <receiver
             android:name=".notifications.NotificationActionReceiver"
             android:exported="false" />

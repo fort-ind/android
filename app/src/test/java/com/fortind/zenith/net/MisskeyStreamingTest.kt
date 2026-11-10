@@ -298,6 +298,35 @@ class MisskeyStreamingTest {
     }
 
     @Test
+    fun aNoteCapturedByTwoWindowsStaysCapturedUntilBothLetGo() = runTest {
+        val transport = FakeTransport()
+        val connection = streaming(transport).connection("tok")
+        val first = MutableStateFlow(setOf("a", "b"))
+        val second = MutableStateFlow(setOf("b"))
+        val secondUpdates = mutableListOf<StreamFrame.NoteUpdated>()
+        val firstJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.noteUpdates(first).collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            connection.noteUpdates(second).collect { secondUpdates += it }
+        }
+        transport.latest.open()
+        fun ids(type: String) = transport.latest.sentOfType(type).map { it.getJSONObject("body").getString("id") }
+
+        assertEquals(listOf("a", "b"), ids("s").sorted())
+
+        first.value = setOf("a")
+        assertEquals(emptyList<String>(), ids("un"))
+
+        firstJob.cancel()
+        assertEquals(listOf("a"), ids("un"))
+
+        transport.latest.receive("""{"type":"noteUpdated","body":{"id":"b","type":"reacted","body":{"reaction":"👍"}}}""")
+        assertEquals(listOf("b"), secondUpdates.map { it.noteId })
+
+        second.value = emptySet()
+        assertEquals(listOf("a", "b"), ids("un"))
+    }
+
+    @Test
     fun streamFramesAreParsed() {
         val channel = parseStreamFrame("""{"type":"channel","body":{"id":"c1","type":"note","body":{"id":"n"}}}""")
         val updated = parseStreamFrame("""{"type":"noteUpdated","body":{"id":"n","type":"deleted","body":{"deletedAt":"x"}}}""")

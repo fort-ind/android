@@ -12,6 +12,7 @@ import java.io.IOException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -81,10 +82,24 @@ class NotificationSyncerTest {
     }
 
     @Test
+    fun theAppStaysInTheForegroundUntilItsLastWindowStops() {
+        val foreground = AppForegroundTracker()
+        foreground.windowStarted()
+        foreground.windowStarted()
+
+        assertFalse(foreground.windowStopped())
+        assertTrue(foreground.inForeground)
+        assertTrue(foreground.windowStopped())
+        assertFalse(foreground.inForeground)
+        assertTrue(foreground.windowStopped())
+        assertFalse(foreground.inForeground)
+    }
+
+    @Test
     fun staysQuietWhileTheAppIsOnScreenButStillAdvancesTheBaseline() = runTest {
         val f = Fixture()
         f.syncStore.lastSeen = 1_000L
-        f.foreground.inForeground = true
+        f.foreground.windowStarted()
         f.api.items = listOf(testNotification("2", createdAt = 2_000L))
         f.api.unread = 1
 
