@@ -56,6 +56,8 @@ import androidx.compose.material3.adaptive.layout.PaneExpansionState
 import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
 import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
+import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldRole
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
@@ -115,6 +117,10 @@ import com.fortind.zenith.ui.profile.ProfileScreen
 import com.fortind.zenith.ui.predictiveBackScale
 import com.fortind.zenith.ui.predictiveBackSeekFraction
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.motion.EntryVisibilityScope
+import com.fortind.zenith.ui.motion.LocalSharedTransitionScope
+import com.fortind.zenith.ui.motion.rememberThreadBounds
+import com.fortind.zenith.ui.motion.threadBounds
 import com.fortind.zenith.ui.settings.SettingsScreen
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialHost
@@ -222,7 +228,11 @@ fun AppShell(
         val tabBackPreview = tabBackProgress?.takeIf { tabBackEnabled }?.let(::predictiveBackSeekFraction)
 
         DisposableEffect(shortcuts, ui, stacks, notificationsViewModel) {
-            shortcuts.handler = { shortcut ->
+            shortcuts.handler = handler@{ shortcut ->
+                if (ui.viewer.isOpen) {
+                    if (shortcut == AppShortcut.Dismiss) ui.viewer.close()
+                    return@handler true
+                }
                 when (shortcut) {
                     is AppShortcut.Destination -> {
                         stacks.select(shortcut.destination)
@@ -502,6 +512,7 @@ private fun TabNavDisplay(
     notificationsViewModel: NotificationsViewModel,
 ) {
     val reduceMotion = rememberReduceMotion()
+    val sharedScope = LocalSharedTransitionScope.current.takeIf { !reduceMotion }
     val people by ui.people.uiState.collectAsStateWithLifecycle()
     val personLayout = rememberPersonLayout()
     val browseGames = { stacks.select(AppDestination.GAMES) }
@@ -545,6 +556,7 @@ private fun TabNavDisplay(
         backStack = stacks.stack(tab),
         onBack = { stacks.pop() },
         sceneStrategies = listOf(strategy),
+        sharedTransitionScope = sharedScope,
         transitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultTransitionSpec(),
         popTransitionSpec = if (reduceMotion) ({ EnterTransition.None togetherWith ExitTransition.None }) else defaultPopTransitionSpec(),
         predictivePopTransitionSpec = if (reduceMotion) ({ _ -> EnterTransition.None togetherWith ExitTransition.None }) else defaultPredictivePopTransitionSpec(),
@@ -554,7 +566,7 @@ private fun TabNavDisplay(
                     key = route,
                     metadata = listMetadata,
                 ) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) {
                         HomeScreen(
                             ui = ui,
                             twoPane = twoPane,
@@ -568,13 +580,13 @@ private fun TabNavDisplay(
                     }
                 }
                 AppRoute.Games -> NavEntry(route) {
-                    Padded(contentPadding) { GamesScreen(viewModel = gamesViewModel) }
+                    EntryPage(contentPadding, null) { GamesScreen(viewModel = gamesViewModel) }
                 }
                 AppRoute.Notifications -> NavEntry(
                     key = route,
                     metadata = listMetadata,
                 ) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) {
                         NotificationsScreen(
                             viewModel = notificationsViewModel,
                             onOpenNote = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
@@ -592,7 +604,7 @@ private fun TabNavDisplay(
                     key = route,
                     metadata = if (people.myUserId != null) personMetadata else emptyMap(),
                 ) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) {
                         ProfileScreen(
                             ui = ui,
                             onEditProfile = stacks::openEditProfile,
@@ -601,7 +613,7 @@ private fun TabNavDisplay(
                     }
                 }
                 is AppRoute.Settings -> NavEntry(key = route, contentKey = "settings") {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, null) {
                         SettingsScreen(
                             editProfileRequested = route.openEditProfile,
                             onEditProfileHandled = stacks::editProfileHandled,
@@ -609,7 +621,7 @@ private fun TabNavDisplay(
                     }
                 }
                 is AppRoute.Person -> NavEntry(key = route, metadata = personMetadata) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) {
                         PersonPage(
                             userId = route.userId,
                             ui = ui,
@@ -619,7 +631,7 @@ private fun TabNavDisplay(
                     }
                 }
                 is AppRoute.PersonHandle -> NavEntry(key = route, metadata = personMetadata) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) {
                         PersonByHandlePage(
                             username = route.username,
                             host = route.host,
@@ -630,7 +642,7 @@ private fun TabNavDisplay(
                     }
                 }
                 is AppRoute.FollowList -> NavEntry(route) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, null) {
                         FollowListScreen(
                             userId = route.userId,
                             initialKind = route.kind,
@@ -641,13 +653,13 @@ private fun TabNavDisplay(
                     }
                 }
                 is AppRoute.Tag -> NavEntry(key = route, metadata = listMetadata) {
-                    Padded(contentPadding) { TagPage(route.tag, ui, onBack = { stacks.pop() }) }
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) { TagPage(route.tag, ui, onBack = { stacks.pop() }) }
                 }
                 is AppRoute.Search -> NavEntry(key = route, metadata = listMetadata) {
-                    Padded(contentPadding) { SearchResultsPage(route.query, ui, onBack = { stacks.pop() }) }
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.List) { SearchResultsPage(route.query, ui, onBack = { stacks.pop() }) }
                 }
                 AppRoute.Hashtags -> NavEntry(route) {
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, null) {
                         HashtagsPage(
                             discovery = ui.discovery,
                             onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
@@ -660,7 +672,7 @@ private fun TabNavDisplay(
                     metadata = ListDetailSceneStrategy.detailPane() + mapOf(DetailPaneMarker to true),
                 ) {
                     val feed by ui.feed.uiState.collectAsStateWithLifecycle()
-                    Padded(contentPadding) {
+                    EntryPage(contentPadding, ListDetailPaneScaffoldRole.Detail) {
                         ThreadPane(
                             thread = feed.thread?.takeIf { it.noteId == route.noteId },
                             environment = LocalNoteEnvironment.current,
@@ -673,12 +685,18 @@ private fun TabNavDisplay(
                             onLoadMoreBranch = ui.feed::loadMoreBranch,
                             onLoadRenotes = ui.feed::loadThreadRenotes,
                             onLoadReactions = ui.feed::loadThreadReactions,
+                            modifier = Modifier.threadBounds(rememberThreadBounds(route.noteId, enabled = !reduceMotion), page = true),
                         )
                     }
                 }
             }
         },
     )
+}
+
+@Composable
+private fun EntryPage(contentPadding: PaddingValues, paneRole: ThreePaneScaffoldRole?, content: @Composable () -> Unit) {
+    EntryVisibilityScope(paneRole) { Padded(contentPadding, content) }
 }
 
 @Composable

@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -72,6 +73,8 @@ import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.contextMenuTrigger
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.mfm.MfmEnvironment
+import com.fortind.zenith.ui.motion.rememberThreadBounds
+import com.fortind.zenith.ui.motion.threadBounds
 import com.fortind.zenith.ui.pointerHover
 import com.fortind.zenith.ui.relativeTime
 
@@ -115,9 +118,13 @@ fun NoteCard(
         menuOpen = true
     }
 
-    Box(modifier = modifier) {
+    val sharedSource = environment.animate && !focal
+    ThreadSourceBox(rowId = note.id, noteId = target.id, environment = environment, enabled = sharedSource, modifier = modifier) {
         Surface(
-            onClick = { callbacks.openThread(target) },
+            onClick = {
+                if (sharedSource) environment.motion?.armThread(note.id, target.id)
+                callbacks.openThread(target)
+            },
             enabled = !focal && !target.deleted,
             shape = RectangleShape,
             color = container,
@@ -175,6 +182,25 @@ fun NoteCard(
             callbacks = callbacks,
         )
     }
+}
+
+@Composable
+private fun ThreadSourceBox(
+    rowId: String,
+    noteId: String,
+    environment: NoteEnvironment,
+    enabled: Boolean,
+    modifier: Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val armed = enabled && environment.motion?.isThreadSource(rowId, noteId) == true
+    val shared = rememberThreadBounds(noteId, armed)
+    Box(
+        modifier = modifier
+            .threadBounds(shared, page = false)
+            .then(if (armed) Modifier.background(MaterialTheme.colorScheme.surface) else Modifier),
+        content = content,
+    )
 }
 
 @Composable

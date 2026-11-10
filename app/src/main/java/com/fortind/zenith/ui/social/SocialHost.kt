@@ -19,6 +19,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -59,6 +60,23 @@ import com.fortind.zenith.ui.feed.FeedEvent
 import com.fortind.zenith.ui.feed.FeedViewModel
 import com.fortind.zenith.ui.feed.FullscreenVideo
 import com.fortind.zenith.ui.feed.ImageViewer
+import com.fortind.zenith.ui.motion.LocalSharedTransitionScope
+import com.fortind.zenith.ui.motion.SharedMotion
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.material3.MaterialTheme
 import com.fortind.zenith.ui.feed.MuteDurationDialog
 import com.fortind.zenith.ui.feed.NoteCallbacks
 import com.fortind.zenith.ui.feed.NoteEnvironment
@@ -101,7 +119,15 @@ class SocialUi(
     val pageKeys: PageKeys,
     val collections: CollectionsViewModel,
     val discovery: DiscoveryViewModel,
+    val viewer: ViewerControl,
 )
+
+@Stable
+class ViewerControl(private val open: State<Boolean>, private val close: State<() -> Unit>) {
+    val isOpen: Boolean get() = open.value
+
+    fun close() = close.value()
+}
 
 @Composable
 fun SocialHost(
@@ -127,6 +153,7 @@ fun SocialHost(
     val snackbarHostState = remember { SnackbarHostState() }
     val reduceMotion = rememberReduceMotion()
     val listStates = rememberTimelineListStates()
+    val motion = remember { SharedMotion() }
 
     var pickerNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     var viewerNoteId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -181,6 +208,7 @@ fun SocialHost(
         mfm,
         selectedNoteId,
         playback,
+        motion,
     ) {
         NoteEnvironment(
             linkPreviews = linkPreviews,
@@ -198,6 +226,7 @@ fun SocialHost(
             mfm = mfm,
             selectedNoteId = selectedNoteId,
             playback = playback,
+            motion = motion,
         )
     }
     val noteCallbacks = rememberNoteCallbacks(
@@ -243,6 +272,13 @@ fun SocialHost(
         onAddToList = { addToListTarget = it },
     )
     val signedIn by rememberUpdatedState(feed.signedIn)
+    val closeViewer = {
+        motion.closeViewer()
+        viewerNoteId = null
+    }
+    val viewerOpenState = rememberUpdatedState(viewerNoteId != null)
+    val closeViewerState = rememberUpdatedState(closeViewer)
+    val viewer = remember { ViewerControl(viewerOpenState, closeViewerState) }
     val ui = remember(feedViewModel, composerViewModel, playback, listStates, noteCallbacks, peopleViewModel, peopleActions, pageKeys, collectionsViewModel, discoveryViewModel) {
         SocialUi(
             feed = feedViewModel,
@@ -259,6 +295,7 @@ fun SocialHost(
             pageKeys = pageKeys,
             collections = collectionsViewModel,
             discovery = discoveryViewModel,
+            viewer = viewer,
         )
     }
     CollectionsEventsEffect(collectionsViewModel, snackbarHostState)
@@ -274,8 +311,50 @@ fun SocialHost(
         onRequestedReplyHandled()
     }
 
-    CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit()) {
-        content(ui)
+    val viewerShown = viewerNoteId != null
+    SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusProperties { onEnter = { if (viewerNoteId != null) cancelFocusChange() } }
+                    .focusGroup()
+                    .then(if (viewerShown) Modifier.clearAndSetSemantics {} else Modifier),
+            ) {
+                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit()) {
+                    content(ui)
+                }
+            }
+            val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+            AnimatedContent(
+                targetState = viewerNoteId?.let { ViewerRequest(it, viewerIndex) },
+                transitionSpec = {
+                    if (reduceMotion) EnterTransition.None togetherWith ExitTransition.None else fadeIn(effects) togetherWith fadeOut(effects)
+                },
+                modifier = Modifier.fillMaxSize(),
+                contentKey = { it?.noteId },
+                label = "imageViewer",
+            ) { request ->
+                if (request != null) {
+                    val note = feed.findNote(request.noteId)
+                    val images = remember(note) { note?.files?.filter { it.kind == MediaKind.Image }.orEmpty() }
+                    val uriHandler = LocalUriHandler.current
+                    val heroSource = remember(request) { motion.imageSource }
+                    val returnFocus = remember(request) { motion.returnFocus }
+                    LaunchedEffect(images.isEmpty()) { if (images.isEmpty() && transition.targetState == EnterExitState.Visible) closeViewer() }
+                    ImageViewer(
+                        files = images,
+                        initialIndex = request.index,
+                        animate = !reduceMotion,
+                        heroSource = heroSource,
+                        returnFocus = returnFocus,
+                        visibility = this,
+                        onDismiss = closeViewer,
+                        onOpenOriginal = uriHandler::openUri,
+                    )
+                }
+            }
+        }
     }
 
     addToListTarget?.let { user ->
@@ -454,20 +533,9 @@ fun SocialHost(
     if (playback.fullscreen && playback.current != null) {
         FullscreenVideo(playback = playback, onDismiss = playback::exitFullscreen)
     }
-    viewerNoteId?.let { id ->
-        val note = feed.findNote(id)
-        val images = remember(note) { note?.files?.filter { it.kind == MediaKind.Image }.orEmpty() }
-        val uriHandler = LocalUriHandler.current
-        ImageViewer(
-            files = images,
-            initialIndex = viewerIndex,
-            animate = !reduceMotion,
-            onDismiss = { viewerNoteId = null },
-            onOpenOriginal = uriHandler::openUri,
-        )
-        if (images.isEmpty()) viewerNoteId = null
-    }
 }
+
+private data class ViewerRequest(val noteId: String, val index: Int)
 
 @Composable
 private fun rememberTimelineListStates(): Map<TimelineKind, LazyListState> {

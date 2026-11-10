@@ -22,6 +22,7 @@ import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteUser
 import com.fortind.zenith.ui.media.FeedPlayback
 import com.fortind.zenith.ui.mfm.MfmEnvironment
+import com.fortind.zenith.ui.motion.SharedMotion
 
 class NoteCallbacks(
     val openThread: (Note) -> Unit,
@@ -70,6 +71,7 @@ class NoteEnvironment(
     val pinned: Set<String> = emptySet(),
     val threadMuted: Set<String> = emptySet(),
     val linkPreviews: LinkPreviewSource? = null,
+    val motion: SharedMotion? = null,
 ) {
     val animate: Boolean get() = mfm.animate
 

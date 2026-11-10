@@ -1,6 +1,10 @@
 package com.fortind.zenith.ui.feed
 
+import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -22,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -32,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -47,14 +53,24 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.fortind.zenith.R
 import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.ui.media.NetworkImage
+import com.fortind.zenith.ui.motion.MediaKey
+import com.fortind.zenith.ui.motion.SharedSpec
+import com.fortind.zenith.ui.motion.mediaTarget
+import com.fortind.zenith.ui.motion.rememberSharedSpec
+import androidx.core.view.WindowCompat
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.launch
 
 private const val MAX_ZOOM = 5f
@@ -65,81 +81,121 @@ fun ImageViewer(
     files: List<NoteFile>,
     initialIndex: Int,
     animate: Boolean,
+    heroSource: Any?,
+    returnFocus: FocusRequester?,
+    visibility: AnimatedVisibilityScope,
     onDismiss: () -> Unit,
     onOpenOriginal: (String) -> Unit,
 ) {
     if (files.isEmpty()) return
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, files.lastIndex)) { files.size }
-        val scope = rememberCoroutineScope()
-        val focusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
-        val current = files[pagerState.currentPage.coerceIn(0, files.lastIndex)]
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .focusRequester(focusRequester)
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.Escape -> {
-                            onDismiss()
-                            true
-                        }
-                        Key.DirectionLeft -> {
-                            scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1).coerceAtLeast(0)) }
-                            true
-                        }
-                        Key.DirectionRight -> {
-                            scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1).coerceAtMost(files.lastIndex)) }
-                            true
-                        }
-                        else -> false
+    val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, files.lastIndex)) { files.size }
+    val scope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
+    val showing = visibility.transition.targetState == EnterExitState.Visible
+    val focusManager = LocalFocusManager.current
+    val inputMode = LocalInputModeManager.current
+    var leaving by remember { mutableStateOf(false) }
+    val dismiss = {
+        leaving = true
+        onDismiss()
+        val keyboard = inputMode.inputMode == InputMode.Keyboard
+        if (!keyboard || returnFocus?.requestFocus() != true) focusManager.clearFocus(force = true)
+    }
+    val keyboardMode = inputMode.inputMode == InputMode.Keyboard
+    LaunchedEffect(keyboardMode, showing) { if (keyboardMode && showing) focusRequester.requestFocus() }
+    DarkSystemBars()
+    NavigationBackHandler(
+        state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+        isBackEnabled = showing,
+        onBackCompleted = dismiss,
+    )
+    val current = files[pagerState.currentPage.coerceIn(0, files.lastIndex)]
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) {}
+            .focusProperties { onExit = { if (!leaving) cancelFocusChange() } }
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.Back) {
+                    if (event.type == KeyEventType.KeyUp && showing) dismiss()
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.Escape -> {
+                        dismiss()
+                        true
                     }
-                },
+                    Key.DirectionLeft -> {
+                        scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1).coerceAtLeast(0)) }
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1).coerceAtMost(files.lastIndex)) }
+                        true
+                    }
+                    else -> false
+                }
+            },
+    ) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { files[it].id }) { page ->
+            val file = files[page]
+            val heroKey = heroSource?.takeIf { page == pagerState.currentPage }?.let { MediaKey(it, file.id) }
+            ZoomableImage(file, animate, rememberSharedSpec(heroKey, visibility))
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .safeDrawingPadding()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { files[it].id }) { page ->
-                ZoomableImage(files[page], animate)
+            ViewerButton(stringResource(R.string.viewer_close), Icons.Default.Close, dismiss)
+            if (files.size > 1) {
+                Text(
+                    stringResource(R.string.viewer_counter, pagerState.currentPage + 1, files.size),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
             }
-            Row(
+            ViewerButton(stringResource(R.string.viewer_open_original), Icons.AutoMirrored.Filled.OpenInNew) {
+                onOpenOriginal(current.url)
+            }
+        }
+        current.altText?.let { alt ->
+            Surface(
+                color = Color.Black.copy(alpha = 0.7f),
+                contentColor = Color.White,
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
                     .safeDrawingPadding()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(16.dp)
+                    .widthIn(max = 640.dp),
             ) {
-                ViewerButton(stringResource(R.string.viewer_close), Icons.Default.Close, onDismiss)
-                if (files.size > 1) {
-                    Text(
-                        stringResource(R.string.viewer_counter, pagerState.currentPage + 1, files.size),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-                ViewerButton(stringResource(R.string.viewer_open_original), Icons.AutoMirrored.Filled.OpenInNew) {
-                    onOpenOriginal(current.url)
-                }
+                Text(alt, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
             }
-            current.altText?.let { alt ->
-                Surface(
-                    color = Color.Black.copy(alpha = 0.7f),
-                    contentColor = Color.White,
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .safeDrawingPadding()
-                        .padding(16.dp)
-                        .widthIn(max = 640.dp),
-                ) {
-                    Text(alt, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
-                }
-            }
+        }
+    }
+}
+
+@Composable
+private fun DarkSystemBars() {
+    val window = LocalActivity.current?.window ?: return
+    val view = LocalView.current
+    DisposableEffect(window, view) {
+        val controller = WindowCompat.getInsetsController(window, view)
+        val lightStatus = controller.isAppearanceLightStatusBars
+        val lightNavigation = controller.isAppearanceLightNavigationBars
+        controller.isAppearanceLightStatusBars = false
+        controller.isAppearanceLightNavigationBars = false
+        onDispose {
+            controller.isAppearanceLightStatusBars = lightStatus
+            controller.isAppearanceLightNavigationBars = lightNavigation
         }
     }
 }
@@ -152,7 +208,7 @@ private fun ViewerButton(label: String, icon: ImageVector, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ZoomableImage(file: NoteFile, animate: Boolean) {
+private fun ZoomableImage(file: NoteFile, animate: Boolean, hero: SharedSpec?) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
@@ -200,13 +256,16 @@ private fun ZoomableImage(file: NoteFile, animate: Boolean) {
             .transformable(state = transformState, canPan = { scale > 1f }),
         contentAlignment = Alignment.Center,
     ) {
+        val ratio = file.aspectRatio
         NetworkImage(
             url = file.url,
             contentDescription = file.altText,
             animate = animate,
-            contentScale = ContentScale.Fit,
+            contentScale = if (ratio != null) ContentScale.Crop else ContentScale.Fit,
+            placeholderUrl = file.thumbnailUrl ?: file.url,
             modifier = Modifier
-                .fillMaxSize()
+                .then(if (ratio != null) Modifier.aspectRatio(ratio) else Modifier.fillMaxSize())
+                .mediaTarget(hero)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale

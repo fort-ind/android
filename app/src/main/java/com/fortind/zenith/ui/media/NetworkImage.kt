@@ -15,6 +15,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import coil3.decode.BitmapFactoryDecoder
+import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.fortind.zenith.media.Blurhash
@@ -43,18 +44,23 @@ fun BlurhashImage(hash: String?, modifier: Modifier = Modifier) {
     Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier)
 }
 
+private const val STATIC_EXTRA = "static"
+
+private fun memoryExtras(animate: Boolean): Map<String, String> = if (animate) emptyMap() else mapOf(STATIC_EXTRA to "1")
+
 @Composable
-fun rememberImageRequest(url: String, animate: Boolean): ImageRequest {
+fun rememberImageRequest(url: String, animate: Boolean, placeholderUrl: String? = null): ImageRequest {
     val context = LocalContext.current
-    return remember(url, animate, context) {
+    return remember(url, animate, placeholderUrl, context) {
         ImageRequest.Builder(context)
             .data(url)
             .crossfade(animate)
             .apply {
                 if (!animate) {
                     decoderFactory(BitmapFactoryDecoder.Factory())
-                    memoryCacheKeyExtra("static", "1")
+                    memoryCacheKeyExtra(STATIC_EXTRA, "1")
                 }
+                if (placeholderUrl != null) placeholderMemoryCacheKey(MemoryCache.Key(placeholderUrl, memoryExtras(animate)))
             }
             .build()
     }
@@ -68,11 +74,12 @@ fun NetworkImage(
     modifier: Modifier = Modifier,
     blurhash: String? = null,
     contentScale: ContentScale = ContentScale.Crop,
+    placeholderUrl: String? = null,
 ) {
     Box(modifier = modifier) {
         if (blurhash != null) BlurhashImage(blurhash, Modifier.matchParentSize())
         AsyncImage(
-            model = rememberImageRequest(url, animate),
+            model = rememberImageRequest(url, animate, placeholderUrl),
             contentDescription = contentDescription,
             contentScale = contentScale,
             modifier = Modifier.matchParentSize(),

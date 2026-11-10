@@ -47,11 +47,20 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import com.fortind.zenith.timeline.MediaKind
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.ui.media.BlurhashImage
 import com.fortind.zenith.ui.media.NetworkImage
+import com.fortind.zenith.ui.motion.MediaKey
+import com.fortind.zenith.ui.motion.SharedMotion
+import com.fortind.zenith.ui.motion.mediaSource
+import com.fortind.zenith.ui.motion.rememberSharedSpec
 import com.fortind.zenith.ui.pointerHover
 
 private const val MIN_ASPECT = 0.6f
@@ -75,8 +84,11 @@ fun MediaGrid(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks
     val shown = gridFiles.take(GRID_LIMIT)
     val extra = gridFiles.size - shown.size
     val gap = 4.dp
+    val heroSource = remember { Any() }.takeIf { environment.animate && environment.motion != null }
+    val scope = rememberCoroutineScope()
     val tile = @Composable { index: Int, modifier: Modifier ->
         val file = shown[index]
+        val focus = remember { FocusRequester() }
         MediaTile(
             file = file,
             position = index + 1,
@@ -84,10 +96,29 @@ fun MediaGrid(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks
             hidden = file.isSensitive && !revealed,
             extra = if (index == shown.lastIndex) extra else 0,
             animate = environment.animate,
+            motion = environment.motion,
+            heroSource = heroSource,
+            focus = focus,
             onClick = {
                 when {
                     file.isSensitive && !revealed -> revealed = true
-                    file.kind == MediaKind.Image -> callbacks.openMedia(note, images.indexOf(file).coerceAtLeast(0))
+                    file.kind == MediaKind.Image -> {
+                        val motion = environment.motion
+                        val index = images.indexOf(file).coerceAtLeast(0)
+                        if (motion == null || heroSource == null) {
+                            motion?.armViewer(null, focus)
+                            motion?.showViewer()
+                            callbacks.openMedia(note, index)
+                        } else {
+                            scope.launch {
+                                motion.armViewer(heroSource, focus)
+                                withFrameNanos { }
+                                withFrameNanos { }
+                                motion.showViewer()
+                                callbacks.openMedia(note, index)
+                            }
+                        }
+                    }
                     file.kind == MediaKind.Video && gridFiles.size == 1 -> playback.play(file)
                     file.kind == MediaKind.Video -> playback.enterFullscreen(file)
                     else -> callbacks.openUrl(file.url)
@@ -159,6 +190,9 @@ private fun MediaTile(
     hidden: Boolean,
     extra: Int,
     animate: Boolean,
+    motion: SharedMotion?,
+    heroSource: Any?,
+    focus: FocusRequester,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -179,6 +213,7 @@ private fun MediaTile(
         modifier = modifier
             .background(colors.surfaceContainerHighest)
             .pointerHover { hovered = it }
+            .focusRequester(focus)
             .clickable(
                 interactionSource = interaction,
                 indication = ripple(),
@@ -190,13 +225,7 @@ private fun MediaTile(
     ) {
         when {
             hidden -> SensitiveCover(file)
-            posterUrl != null -> NetworkImage(
-                url = posterUrl,
-                contentDescription = null,
-                animate = animate,
-                blurhash = file.blurhash,
-                modifier = Modifier.fillMaxSize(),
-            )
+            posterUrl != null -> TileImage(file, posterUrl, animate, motion, heroSource)
             else -> BlurhashImage(file.blurhash, Modifier.fillMaxSize())
         }
         if (!hidden && file.kind != MediaKind.Image) {
@@ -241,6 +270,19 @@ private fun MediaTile(
             text = { Text(file.altText) },
         )
     }
+}
+
+@Composable
+private fun TileImage(file: NoteFile, url: String, animate: Boolean, motion: SharedMotion?, heroSource: Any?) {
+    val key = if (heroSource != null && file.kind == MediaKind.Image && motion?.imageSource === heroSource) MediaKey(heroSource, file.id) else null
+    val hero = rememberSharedSpec(key)
+    NetworkImage(
+        url = url,
+        contentDescription = null,
+        animate = animate,
+        blurhash = file.blurhash,
+        modifier = Modifier.fillMaxSize().mediaSource(hero, visible = key == null || motion?.viewerOpen != true),
+    )
 }
 
 @Composable
