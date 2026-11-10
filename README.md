@@ -4,7 +4,7 @@ a version of fort.android made in jetpack compose using material 3 expressive (i
 ## bulid it! 
 wanna test it out? grab one of the releases or bulid it 
 ## requirments 
-- Java JDK 11 
+- Java JDK 25
 - Android SDK with API level 37  (device/emulator must run Android API 27 or newer)
 - Android Studio (recommended) or Android SDK + adb
 - Internet access to download dependencies the first time
