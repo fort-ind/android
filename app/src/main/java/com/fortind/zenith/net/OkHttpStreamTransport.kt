@@ -7,10 +7,12 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-class OkHttpStreamTransport(client: OkHttpClient) : StreamTransport {
-    private val client = client.newBuilder()
-        .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
-        .build()
+class OkHttpStreamTransport(baseClient: () -> OkHttpClient) : StreamTransport {
+    private val client by lazy {
+        baseClient().newBuilder()
+            .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
+            .build()
+    }
 
     override fun open(url: String, token: String?, listener: StreamListener): StreamSocket {
         val request = Request.Builder().url(url).apply {

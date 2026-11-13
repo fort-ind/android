@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.os.Build
 import android.os.SystemClock
 import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fortind.zenith.R
@@ -146,6 +147,55 @@ class SystemNotifierTest {
     }
 
     @Test
+    fun aMentionIsAConversationFromItsAuthor() {
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(post(notification("1", NotificationType.Mention)))
+
+        val message = style?.messages?.single()
+        assertEquals("secret words", message?.text.toString())
+        assertEquals("someone", message?.person?.name.toString())
+    }
+
+    @Test
+    fun aDirectConversationHidesItsText() {
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(post(notification("1", NotificationType.Reply, isDirect = true)))
+
+        assertEquals(context.getString(R.string.notifications_direct_body), style?.messages?.single()?.text.toString())
+    }
+
+    @Test
+    fun aRenoteIsNotAConversation() {
+        assertNull(NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(post(notification("1", NotificationType.Renote))))
+    }
+
+    @Test
+    fun aSentReplyJoinsTheConversation() {
+        post(notification("1", NotificationType.Mention))
+        val id = "$runId-1"
+        SystemClock.sleep(RATE_LIMIT_SETTLE_MS)
+
+        notifier.showReplySent(id, "my reply")
+
+        val updated = awaitActive("the reply in the conversation") { active ->
+            active.firstOrNull { it.id == id.hashCode() }?.notification?.takeIf {
+                NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it)?.messages?.size == 2
+            }
+        }
+        val last = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(updated)?.messages?.last()
+        assertEquals("my reply", last?.text.toString())
+        assertTrue(updated.actions.isNullOrEmpty())
+    }
+
+    @Test
+    fun aSentDirectReplyClosesTheNotification() {
+        post(notification("1", NotificationType.Mention, isDirect = true))
+        val id = "$runId-1"
+
+        notifier.showReplySent(id, "my secret reply")
+
+        awaitActive("the notification to close") { active -> Unit.takeIf { active.none { it.id == id.hashCode() } } }
+    }
+
+    @Test
     fun aFailedReplySurvivesClearAll() {
         post(notification("1", NotificationType.Mention))
         notifier.showActionFailed(QuickAction.Reply, "note-1")
@@ -162,5 +212,6 @@ class SystemNotifierTest {
     private companion object {
         const val POST_WAIT_MS = 5_000L
         const val POLL_MS = 50L
+        const val RATE_LIMIT_SETTLE_MS = 2_000L
     }
 }

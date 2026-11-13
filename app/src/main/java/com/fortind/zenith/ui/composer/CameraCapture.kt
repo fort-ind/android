@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.compose.CameraXViewfinder
@@ -37,9 +38,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,7 +51,9 @@ import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraAndroid
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -80,17 +85,21 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fortind.zenith.R
 import com.fortind.zenith.media.LocalMedia
 import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.openAppDetailsSettings
+import com.fortind.zenith.ui.shouldExplain
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -116,8 +125,20 @@ fun CameraCaptureOverlay(
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordedMillis by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf<Int?>(null) }
+    val activity = LocalActivity.current
     var audioGranted by remember { mutableStateOf(hasPermission(context, Manifest.permission.RECORD_AUDIO)) }
-    val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { audioGranted = it }
+    var audioBlocked by rememberSaveable { mutableStateOf(false) }
+    val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        audioGranted = granted
+        audioBlocked = !granted && !activity.shouldExplain(Manifest.permission.RECORD_AUDIO)
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        audioGranted = hasPermission(context, Manifest.permission.RECORD_AUDIO)
+        if (audioGranted) audioBlocked = false
+    }
+    val requestMicrophone = {
+        if (audioBlocked) context.openAppDetailsSettings() else audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
     val closed = remember { AtomicBoolean(false) }
     val focus = remember { FocusRequester() }
     val transformer = remember { MutableCoordinateTransformer() }
@@ -302,13 +323,17 @@ fun CameraCaptureOverlay(
             }
         }
         val controls: @Composable () -> Unit = {
+            if (videoMode && !audioGranted && recording == null) {
+                MicrophoneNotice(blocked = audioBlocked, onClick = requestMicrophone)
+            }
             SingleChoiceSegmentedButtonRow {
                 listOf(false to R.string.camera_photo, true to R.string.camera_video).forEachIndexed { index, (video, label) ->
                     SegmentedButton(
                         selected = videoMode == video,
                         onClick = {
                             videoMode = video
-                            if (video && !audioGranted) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                            val firstAsk = !audioBlocked && !activity.shouldExplain(Manifest.permission.RECORD_AUDIO)
+                            if (video && !audioGranted && firstAsk) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
                         },
                         enabled = recording == null,
                         shape = SegmentedButtonDefaults.itemShape(index, 2),
@@ -330,6 +355,29 @@ fun CameraCaptureOverlay(
                 verticalArrangement = Arrangement.spacedBy(24.dp),
                 modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(24.dp),
             ) { controls() }
+        }
+    }
+}
+
+@Composable
+private fun MicrophoneNotice(blocked: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = Color.Black.copy(alpha = 0.75f),
+        contentColor = Color.White,
+        modifier = Modifier.widthIn(max = 360.dp).semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Icon(Icons.Default.MicOff, contentDescription = null)
+            Text(
+                text = stringResource(if (blocked) R.string.camera_microphone_blocked else R.string.camera_microphone_needed),
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }

@@ -235,13 +235,17 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     private fun reply(context: Context, intent: Intent, notificationId: String, noteId: String) {
         val container = context.container
-        container.systemNotifier.cancel(notificationId)
         val typed = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(KEY_REPLY_TEXT)?.toString()?.trim()
-        if (typed.isNullOrEmpty()) return
+        if (typed.isNullOrEmpty()) {
+            container.systemNotifier.cancel(notificationId)
+            return
+        }
         if (typed.length <= MAX_QUEUED_REPLY) {
+            container.systemNotifier.showReplySent(notificationId, typed)
             container.notificationWork.enqueueQuickReply(noteId, typed)
             return
         }
+        container.systemNotifier.cancel(notificationId)
         val pending = goAsync()
         container.scope.launch {
             try {

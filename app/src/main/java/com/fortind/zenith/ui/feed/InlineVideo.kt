@@ -40,6 +40,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.onClick
@@ -67,6 +68,7 @@ fun InlineVideo(playback: FeedPlayback, file: NoteFile, modifier: Modifier = Mod
     Box(
         modifier = modifier
             .background(Color.Black)
+            .onLayoutRectChanged { playback.reportVideoBounds(it.boundsInWindow) }
             .onFocusChanged { focused = it.isFocused }
             .playbackKeys(playback, file) { controls = !controls }
             .semantics {
@@ -79,7 +81,7 @@ fun InlineVideo(playback: FeedPlayback, file: NoteFile, modifier: Modifier = Mod
             .then(if (focused) Modifier.border(VideoFocusRing, focusRing) else Modifier),
     ) {
         Player(
-            player = playback.player,
+            player = playback.player.takeUnless { playback.pictureInPicture },
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) { detectTapGestures { controls = !controls } },
@@ -156,6 +158,7 @@ fun FullscreenVideo(playback: FeedPlayback, onDismiss: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .safeDrawingPadding()
+                        .onLayoutRectChanged { playback.reportVideoBounds(it.boundsInWindow) }
                         .pointerInput(Unit) { detectTapGestures { controls = !controls } },
                     showControls = controls,
                 )

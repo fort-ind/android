@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,6 +76,7 @@ import com.fortind.zenith.ui.feed.TimelineListCallbacks
 import com.fortind.zenith.ui.feed.TimelineStatus
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.home.ReauthorizeBanner
+import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.rememberTopBarReveal
 import com.fortind.zenith.ui.revealTopBarOnWheel
@@ -142,6 +144,20 @@ fun PersonPage(
         reduceMotion = reduceMotion,
         canScrollBack = { listState.canScrollBackward },
     )
+    val navigation: (@Composable () -> Unit)? = onBack?.let { back ->
+        {
+            TooltipIconButton(
+                label = stringResource(R.string.person_back),
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                onClick = back,
+            )
+        }
+    }
+    val title: @Composable () -> Unit = { user?.let { PersonTitle(it, environment) } }
+    val actions: @Composable RowScope.() -> Unit = {
+        TooltipIconButton(label = stringResource(R.string.person_refresh), icon = Icons.Default.Refresh, onClick = refresh)
+    }
+    val inCaptionBar = claimCaptionBar(navigation = navigation, title = title, actions = actions)
     Scaffold(
         modifier = Modifier
             .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -149,23 +165,15 @@ fun PersonPage(
             .testTag("person:page"),
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            TopAppBar(
-                title = { user?.let { PersonTitle(it, environment) } },
-                navigationIcon = {
-                    if (onBack != null) {
-                        TooltipIconButton(
-                            label = stringResource(R.string.person_back),
-                            icon = Icons.AutoMirrored.Filled.ArrowBack,
-                            onClick = onBack,
-                        )
-                    }
-                },
-                actions = {
-                    TooltipIconButton(label = stringResource(R.string.person_refresh), icon = Icons.Default.Refresh, onClick = refresh)
-                },
-                windowInsets = WindowInsets(0),
-                scrollBehavior = scrollBehavior,
-            )
+            if (!inCaptionBar) {
+                TopAppBar(
+                    title = title,
+                    navigationIcon = { navigation?.invoke() },
+                    actions = actions,
+                    windowInsets = WindowInsets(0),
+                    scrollBehavior = scrollBehavior,
+                )
+            }
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {

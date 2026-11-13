@@ -79,6 +79,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -234,7 +235,13 @@ fun AppShell(
             ui.feed.setActive(feedActive)
             onStopOrDispose { ui.feed.setActive(false) }
         }
-        LaunchedEffect(stacks.tab) { ui.playback.stop() }
+        var playbackTab by rememberSaveable { mutableStateOf(stacks.tab) }
+        LaunchedEffect(stacks.tab) {
+            if (stacks.tab != playbackTab) {
+                playbackTab = stacks.tab
+                ui.playback.stop()
+            }
+        }
         val openThreadId = stacks.openThreadId
         LaunchedEffect(openThreadId) {
             if (openThreadId != null) ui.feed.openThread(openThreadId) else ui.feed.closeThread()

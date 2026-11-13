@@ -27,7 +27,7 @@ import org.junit.runner.RunWith
 class MediaProcessingTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    private val reader = ContentResolverMediaReader(context.contentResolver, File(context.cacheDir, "staged"))
+    private val reader = ContentResolverMediaReader(context.contentResolver) { File(context.cacheDir, "staged") }
     private val created = mutableListOf<File>()
 
     @After

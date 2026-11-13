@@ -30,12 +30,14 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.ui.CustomTabUriHandler
+import com.fortind.zenith.ui.StartupLoading
 import com.fortind.zenith.ui.ZoomableContent
 import com.fortind.zenith.ui.login.LoginScreen
 import com.fortind.zenith.ui.nav.AppDestination
 import com.fortind.zenith.ui.nav.AppRoute
 import com.fortind.zenith.ui.nav.AppShell
 import com.fortind.zenith.ui.nav.AppShortcutDispatcher
+import com.fortind.zenith.ui.nav.CaptionBarHost
 import com.fortind.zenith.ui.nav.ShellWindow
 import com.fortind.zenith.ui.nav.destinationKeyCode
 import com.fortind.zenith.ui.theme.SettingsTheme
@@ -200,34 +202,35 @@ fun ZenithRoot(
     val uriHandler = remember(context, darkTheme, toolbarColor) { CustomTabUriHandler(context, darkTheme, toolbarColor) }
 
     CompositionLocalProvider(LocalUriHandler provides uriHandler) {
-        ZoomableContent(
+        CaptionBarHost(
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .windowInsetsPadding(WindowInsets.captionBar)
                 .semantics { testTagsAsResourceId = true }
         ) {
-            when (session) {
-                SessionState.Restoring -> Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                )
-                SessionState.SignedOut -> if (window.poppedOutTab == null) LoginScreen(
-                    onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
-                )
-                is SessionState.SignedIn, SessionState.Guest -> AppShell(
-                    window = window,
-                    requestedDestination = requestedDestination,
-                    onRequestedDestinationHandled = onRequestedDestinationHandled,
-                    requestedRoute = requestedRoute,
-                    onRequestedRouteHandled = onRequestedRouteHandled,
-                    requestedThreadId = requestedThreadId,
-                    onRequestedThreadHandled = onRequestedThreadHandled,
-                    requestedReplyId = requestedReplyId,
-                    onRequestedReplyHandled = onRequestedReplyHandled,
-                    shortcuts = shortcuts,
-                )
+            ZoomableContent(
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.captionBar)
+            ) {
+                when (session) {
+                    SessionState.Restoring -> StartupLoading()
+                    SessionState.SignedOut -> if (window.poppedOutTab == null) LoginScreen(
+                        onBrowseWithoutSigningIn = app.container.sessionService::browseAsGuest
+                    )
+                    is SessionState.SignedIn, SessionState.Guest -> AppShell(
+                        window = window,
+                        requestedDestination = requestedDestination,
+                        onRequestedDestinationHandled = onRequestedDestinationHandled,
+                        requestedRoute = requestedRoute,
+                        onRequestedRouteHandled = onRequestedRouteHandled,
+                        requestedThreadId = requestedThreadId,
+                        onRequestedThreadHandled = onRequestedThreadHandled,
+                        requestedReplyId = requestedReplyId,
+                        onRequestedReplyHandled = onRequestedReplyHandled,
+                        shortcuts = shortcuts,
+                    )
+                }
             }
         }
     }

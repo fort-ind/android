@@ -29,7 +29,8 @@ interface TokenStore {
 }
 
 class KeystoreTokenStore(context: Context) : TokenStore {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs by lazy { appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     override fun read(): String? {
         val stored = prefs.getString(KEY_TOKEN, null) ?: return null

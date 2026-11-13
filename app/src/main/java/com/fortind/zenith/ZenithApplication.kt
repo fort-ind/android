@@ -96,8 +96,8 @@ class AppContainer(application: Application) {
     val miAuthApi: MiAuthApi = HttpMiAuthApi(http)
     val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http), DataStoreScopeStampStore(application))
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val okHttpClient = OkHttpClient()
-    private val streaming = MisskeyStreaming(OkHttpStreamTransport(okHttpClient), scope)
+    val okHttpClient: OkHttpClient by lazy { OkHttpClient() }
+    private val streaming = MisskeyStreaming(OkHttpStreamTransport { okHttpClient }, scope)
     val notificationsApi: NotificationsApi = HttpNotificationsApi(http)
     val notificationStream: NotificationStream = StreamingNotificationStream(streaming)
     val notesApi: NotesApi = HttpNotesApi(http)
@@ -111,13 +111,13 @@ class AppContainer(application: Application) {
     val collectionsApi: CollectionsApi = HttpCollectionsApi(http)
     val discoveryApi: DiscoveryApi = HttpDiscoveryApi(http)
     val dismissedAnnouncements: DismissedAnnouncementsStore = DataStoreDismissedAnnouncementsStore(application)
-    val mediaReader: MediaReader = ContentResolverMediaReader(application.contentResolver, File(application.cacheDir, "staged"))
-    val driveApi: DriveApi = HttpDriveApi(http, okHttpClient, mediaReader)
+    val mediaReader: MediaReader = ContentResolverMediaReader(application.contentResolver) { File(application.cacheDir, "staged") }
+    val driveApi: DriveApi = HttpDriveApi(http, { okHttpClient }, mediaReader)
     val mediaCompressor: MediaCompressor = AndroidMediaCompressor(application)
     val mediaSanitizer: MediaSanitizer = AndroidMediaSanitizer(application, mediaReader)
     val timelineStream: TimelineStream = StreamingTimelineStream(streaming)
     val linkPreviews: LinkPreviewSource = CachingLinkPreviews(HttpLinkPreviewApi(http) { Locale.getDefault().toLanguageTag() }, scope)
-    val emojiRepository = EmojiRepository(HttpInstanceApi(http), File(application.cacheDir, "instance"), scope)
+    val emojiRepository = EmojiRepository(HttpInstanceApi(http), { File(application.cacheDir, "instance") }, scope)
     val unicodeEmoji: UnicodeEmojiSource = AssetUnicodeEmojiSource(application.assets)
     val recentReactions: RecentReactionsStore = DataStoreRecentReactionsStore(application)
     val gameCatalog: GameCatalog = AssetGameCatalog(application.assets)
@@ -156,6 +156,7 @@ class AppContainer(application: Application) {
     init {
         http.onPermissionDenied = { scope.launch { sessionService.markScopesStale() } }
         scope.launch { androidNotifier.ensureChannels() }
+        scope.launch { okHttpClient }
     }
 }
 
@@ -167,6 +168,7 @@ class ZenithApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        DebugStrictMode.install()
         container = AppContainer(this)
         appScope.launch { container.sessionService.restore() }
         container.notificationSyncCoordinator.start(container.scope)

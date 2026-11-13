@@ -17,6 +17,7 @@ import com.fortind.zenith.timeline.ReactionAcceptance
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -144,6 +145,8 @@ import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.ui.Avatar
+import com.fortind.zenith.ui.openAppDetailsSettings
+import com.fortind.zenith.ui.shouldExplain
 import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.NoteHeader
 import com.fortind.zenith.ui.feed.TooltipIconButton
@@ -219,18 +222,35 @@ private fun ComposerDialog(
     val pickMedia = rememberMediaPicker(remaining = MAX_ATTACHMENTS - state.attachments.size) { uris ->
         viewModel.addPicked(uris.map(Uri::toString))
     }
+    val activity = LocalActivity.current
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             overlay = OVERLAY_CAMERA
         } else {
-            scope.launch { snackbar.showSnackbar(resources.getString(R.string.composer_camera_permission)) }
+            val blocked = !activity.shouldExplain(Manifest.permission.CAMERA)
+            scope.launch {
+                val result = snackbar.showSnackbar(
+                    message = resources.getString(if (blocked) R.string.composer_camera_blocked else R.string.composer_camera_permission),
+                    actionLabel = if (blocked) resources.getString(R.string.permission_open_settings) else null,
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) context.openAppDetailsSettings()
+            }
         }
     }
-    val openCamera = {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            overlay = OVERLAY_CAMERA
-        } else {
-            cameraPermission.launch(Manifest.permission.CAMERA)
+    val openCamera: () -> Unit = {
+        when {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED ->
+                overlay = OVERLAY_CAMERA
+            activity.shouldExplain(Manifest.permission.CAMERA) -> scope.launch {
+                val result = snackbar.showSnackbar(
+                    message = resources.getString(R.string.composer_camera_rationale),
+                    actionLabel = resources.getString(R.string.permission_continue),
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) cameraPermission.launch(Manifest.permission.CAMERA)
+            }
+            else -> cameraPermission.launch(Manifest.permission.CAMERA)
         }
     }
 

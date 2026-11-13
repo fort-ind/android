@@ -57,7 +57,7 @@ class EmojiRepositoryTest {
     fun fetchesAndCachesWhenNothingIsStored() = runTest {
         val api = FakeInstanceApi()
         val dir = folder.newFolder()
-        val repository = EmojiRepository(api, dir, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 1_000L }, host = "h")
+        val repository = EmojiRepository(api, { dir }, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 1_000L }, host = "h")
 
         repository.ensureFresh()
         repository.meta.first { it != null }
@@ -72,7 +72,7 @@ class EmojiRepositoryTest {
     fun freshCacheIsUsedWithoutTheNetwork() = runTest {
         val dir = folder.newFolder()
         val first = FakeInstanceApi()
-        EmojiRepository(first, dir, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 1_000L }, host = "h").apply {
+        EmojiRepository(first, { dir }, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 1_000L }, host = "h").apply {
             ensureFresh()
             meta.first { it != null }
         }
@@ -80,7 +80,7 @@ class EmojiRepositoryTest {
         File(dir, "instance-meta.json").setLastModified(1_000L)
 
         val second = FakeInstanceApi(emojiNames = listOf("other"))
-        val repository = EmojiRepository(second, dir, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 2_000L }, host = "h")
+        val repository = EmojiRepository(second, { dir }, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 2_000L }, host = "h")
         repository.ensureFresh()
         repository.emojis.first { it != null }
 
@@ -91,7 +91,7 @@ class EmojiRepositoryTest {
     @Test
     fun staleCacheIsKeptWhenTheRefreshFails() = runTest {
         val dir = folder.newFolder()
-        EmojiRepository(FakeInstanceApi(), dir, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 1_000L }, host = "h").apply {
+        EmojiRepository(FakeInstanceApi(), { dir }, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { 1_000L }, host = "h").apply {
             ensureFresh()
             meta.first { it != null }
         }
@@ -99,7 +99,7 @@ class EmojiRepositoryTest {
 
         val failing = FakeInstanceApi().apply { failure = IOException("offline") }
         val later = 1_000L + 7 * 60 * 60 * 1000L
-        val repository = EmojiRepository(failing, dir, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { later }, host = "h")
+        val repository = EmojiRepository(failing, { dir }, backgroundScope + UnconfinedTestDispatcher(testScheduler), clock = { later }, host = "h")
         repository.ensureFresh()
         repository.meta.first { it != null }
 
@@ -109,7 +109,8 @@ class EmojiRepositoryTest {
 
     @Test
     fun unknownEmojiFallBackToTheServerRoute() = runTest {
-        val repository = EmojiRepository(FakeInstanceApi(), folder.newFolder(), backgroundScope, host = "social.example")
+        val dir = folder.newFolder()
+        val repository = EmojiRepository(FakeInstanceApi(), { dir }, backgroundScope, host = "social.example")
 
         assertEquals("https://social.example/emoji/blob.webp", repository.emojiUrl("blob"))
     }

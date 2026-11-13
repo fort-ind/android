@@ -30,7 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
@@ -88,7 +88,7 @@ private fun VideoPlayer(uri: String) {
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
-    LifecycleResumeEffect(player) { onPauseOrDispose { player.pause() } }
+    LifecycleStartEffect(player) { onStopOrDispose { player.pause() } }
     var controlsVisible by remember { mutableStateOf(true) }
     Player(
         player = player,

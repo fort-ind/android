@@ -37,7 +37,7 @@ interface MediaReader {
 
 class ContentResolverMediaReader(
     private val resolver: ContentResolver,
-    private val stagingDir: File,
+    private val stagingDir: () -> File,
 ) : MediaReader {
 
     override fun describe(uri: String): LocalMedia? {
@@ -68,8 +68,9 @@ class ContentResolverMediaReader(
         val media = describe(uri) ?: return uri
         if (media.sizeBytes > STAGE_LIMIT_BYTES) return uri
         return try {
-            stagingDir.mkdirs()
-            val target = File(stagingDir, "${UUID.randomUUID()}-${media.stageName()}")
+            val dir = stagingDir()
+            dir.mkdirs()
+            val target = File(dir, "${UUID.randomUUID()}-${media.stageName()}")
             open(uri).use { input -> target.outputStream().use { input.copyTo(it) } }
             Uri.fromFile(target).toString()
         } catch (_: IOException) {

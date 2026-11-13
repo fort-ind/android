@@ -112,6 +112,7 @@ class FakeNotificationStream : NotificationStream {
 class FakeSystemNotifier : SystemNotifier {
     val shown = CopyOnWriteArrayList<FortNotification>()
     val cancelled = CopyOnWriteArrayList<String>()
+    val repliedTo = CopyOnWriteArrayList<Pair<String, String>>()
     val failed = CopyOnWriteArrayList<Pair<QuickAction, String>>()
     @Volatile var clearCount = 0
     @Volatile var lastActions: Set<QuickAction> = emptySet()
@@ -127,6 +128,10 @@ class FakeSystemNotifier : SystemNotifier {
 
     override fun cancel(notificationId: String) {
         cancelled += notificationId
+    }
+
+    override fun showReplySent(notificationId: String, text: String) {
+        repliedTo += notificationId to text
     }
 
     override fun clearAll() {

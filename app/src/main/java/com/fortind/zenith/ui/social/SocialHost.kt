@@ -53,7 +53,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fortind.zenith.R
@@ -98,6 +98,7 @@ import com.fortind.zenith.ui.feed.NoteCallbacks
 import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.ReactionPickerSheet
 import com.fortind.zenith.ui.media.FeedPlayback
+import com.fortind.zenith.ui.media.PictureInPictureVideo
 import com.fortind.zenith.ui.mfm.rememberMfmEnvironment
 import com.fortind.zenith.ui.people.ConfirmFollowChangeDialog
 import com.fortind.zenith.ui.people.ConfirmUnblockDialog
@@ -163,7 +164,10 @@ fun SocialHost(
     peopleViewModel: PeopleViewModel = viewModel(factory = PeopleViewModel.Factory),
     content: @Composable (SocialUi) -> Unit,
 ) {
-    LifecycleResumeEffect(playback) { onPauseOrDispose { playback.pause() } }
+    LifecycleStartEffect(playback) {
+        playback.setForeground(true)
+        onStopOrDispose { playback.setForeground(false) }
+    }
     val feed by feedViewModel.uiState.collectAsStateWithLifecycle()
     val emojis by feedViewModel.emojis.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -378,6 +382,7 @@ fun SocialHost(
                     )
                 }
             }
+            PictureInPictureVideo(playback)
         }
     }
 
@@ -554,7 +559,7 @@ fun SocialHost(
             )
         }
     }
-    if (playback.fullscreen && playback.current != null) {
+    if (playback.fullscreen && playback.current != null && !playback.pictureInPicture) {
         FullscreenVideo(playback = playback, onDismiss = playback::exitFullscreen)
     }
 }

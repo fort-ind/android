@@ -52,14 +52,16 @@ private const val DRIVE_FOLDER_LIMIT = 100
 
 class HttpDriveApi(
     private val http: FortHttp,
-    client: OkHttpClient,
+    baseClient: () -> OkHttpClient,
     private val reader: MediaReader,
     private val host: String = FortInstance.HOST,
 ) : DriveApi {
-    private val uploadClient = client.newBuilder()
-        .writeTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    private val uploadClient by lazy {
+        baseClient().newBuilder()
+            .writeTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+    }
 
     override suspend fun files(token: String, folderId: String?, untilId: String?, limit: Int): List<NoteFile> {
         val body = JSONObject().put("i", token).put("limit", limit).put("folderId", folderId ?: JSONObject.NULL)

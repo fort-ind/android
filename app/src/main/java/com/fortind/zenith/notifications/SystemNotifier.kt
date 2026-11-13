@@ -12,13 +12,16 @@ import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Shader
+import android.os.Bundle
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.PendingIntentCompat
+import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.scale
 import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
@@ -36,6 +39,8 @@ interface SystemNotifier {
     fun showActionFailed(action: QuickAction, noteId: String)
 
     fun cancel(notificationId: String)
+
+    fun showReplySent(notificationId: String, text: String)
 
     fun clearAll()
 }
@@ -86,6 +91,25 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         updateSummary()
     }
 
+    override fun showReplySent(notificationId: String, text: String) {
+        val id = notificationId.hashCode()
+        val active = systemManager.activeNotifications.firstOrNull { it.id == id }?.notification
+        val style = active
+            ?.takeUnless { it.extras.getBoolean(EXTRA_DIRECT) }
+            ?.let(NotificationCompat.MessagingStyle::extractMessagingStyleFromNotification)
+        if (active == null || style == null) {
+            cancel(notificationId)
+            return
+        }
+        style.addMessage(text, System.currentTimeMillis(), null as Person?)
+        val updated = NotificationCompat.Builder(context, active)
+            .setStyle(style)
+            .clearActions()
+            .setOnlyAlertOnce(true)
+            .build()
+        notifyIfAllowed(id, updated)
+    }
+
     override fun clearAll() {
         systemManager.activeNotifications
             .filter { it.notification.group == GROUP_KEY }
@@ -97,6 +121,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             manager.createNotificationChannel(
                 NotificationChannelCompat.Builder(category.channelId, category.importance())
                     .setName(context.getString(category.labelRes))
+                    .setDescription(context.getString(category.descriptionRes))
                     .build()
             )
         }
@@ -117,9 +142,29 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             .setGroup(GROUP_KEY)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setContentIntent(openAppIntent(notification))
-        if (text != null) builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
+        val conversation = text?.let { conversationStyle(notification, it, avatar) }
+        when {
+            conversation != null -> builder.setStyle(conversation)
+            text != null -> builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
+        }
+        if (notification.isDirect) builder.addExtras(Bundle().apply { putBoolean(EXTRA_DIRECT, true) })
         addActions(builder, notification, actions)
         notifyIfAllowed(notification.id.hashCode(), builder.build())
+    }
+
+    private fun conversationStyle(notification: FortNotification, text: String, avatar: Bitmap?): NotificationCompat.MessagingStyle? {
+        val actor = notification.actor ?: return null
+        if (notification.type !in ConversationTypes) return null
+        val sender = Person.Builder()
+            .setKey(actor.id)
+            .setName(actor.displayName)
+            .setIcon(avatar?.let(IconCompat::createWithBitmap))
+            .build()
+        val you = Person.Builder().setName(context.getString(R.string.notification_you)).build()
+        return NotificationCompat.MessagingStyle(you)
+            .setConversationTitle(notification.titleText(context.resources))
+            .setGroupConversation(true)
+            .addMessage(text, notification.createdAtMillis, sender)
     }
 
     private fun addActions(builder: NotificationCompat.Builder, notification: FortNotification, actions: Set<QuickAction>) {
@@ -296,6 +341,8 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
     }
 
     private companion object {
+        val ConversationTypes = setOf(NotificationType.Mention, NotificationType.Reply, NotificationType.Quote)
+        const val EXTRA_DIRECT = "com.fortind.zenith.extra.DIRECT"
         const val GROUP_KEY = "com.fortind.zenith.NOTIFICATIONS"
         const val FAILED_GROUP_KEY = "com.fortind.zenith.ACTION_FAILED"
         const val FAILED_ACTION = "failed"

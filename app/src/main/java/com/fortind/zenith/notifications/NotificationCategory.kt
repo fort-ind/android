@@ -3,12 +3,12 @@ package com.fortind.zenith.notifications
 import androidx.annotation.StringRes
 import com.fortind.zenith.R
 
-enum class NotificationCategory(@param:StringRes val labelRes: Int) {
-    Mentions(R.string.settings_notifications_type_mentions),
-    Reactions(R.string.settings_notifications_type_reactions),
-    Renotes(R.string.settings_notifications_type_renotes),
-    Follows(R.string.settings_notifications_type_follows),
-    Other(R.string.settings_notifications_type_other);
+enum class NotificationCategory(@param:StringRes val labelRes: Int, @param:StringRes val descriptionRes: Int) {
+    Mentions(R.string.settings_notifications_type_mentions, R.string.notification_channel_mentions_description),
+    Reactions(R.string.settings_notifications_type_reactions, R.string.notification_channel_reactions_description),
+    Renotes(R.string.settings_notifications_type_renotes, R.string.notification_channel_renotes_description),
+    Follows(R.string.settings_notifications_type_follows, R.string.notification_channel_follows_description),
+    Other(R.string.settings_notifications_type_other, R.string.notification_channel_other_description);
 
     val channelId: String get() = "fort_${name.lowercase()}"
 }

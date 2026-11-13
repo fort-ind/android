@@ -123,7 +123,7 @@ interface InstanceInfo {
 
 class EmojiRepository(
     private val api: InstanceApi,
-    private val cacheDir: File,
+    private val cacheDir: () -> File,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
     private val host: String = FortInstance.HOST,
@@ -151,7 +151,7 @@ class EmojiRepository(
     override fun emojiUrl(name: String): String = _emojis.value?.get(name)?.url ?: "https://$host/emoji/$name.webp"
 
     private suspend fun refresh(fileName: String, fetch: suspend () -> JSONObject, apply: (JSONObject) -> Unit) {
-        val file = File(cacheDir, fileName)
+        val file = withContext(Dispatchers.IO) { File(cacheDir(), fileName) }
         val cached = withContext(Dispatchers.IO) { read(file) }
         if (cached != null) apply(cached)
         val stale = cached == null || clock() - file.lastModified() > TTL_MS

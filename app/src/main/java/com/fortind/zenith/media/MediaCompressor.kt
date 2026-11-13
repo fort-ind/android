@@ -1,8 +1,11 @@
 package com.fortind.zenith.media
 
 import android.content.Context
+import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
@@ -65,30 +68,54 @@ class AndroidMediaCompressor(private val context: Context) : MediaCompressor {
 
     private suspend fun compressVideo(media: LocalMedia, onProgress: (Float) -> Unit): LocalMedia {
         val source = readVideoGeometry(media.uri)
-        val output = File(outputDir, "${UUID.randomUUID()}.mp4")
         val scale = source?.takeIf { it.shortEdge > VIDEO_MAX_SHORT_EDGE }?.downscaledTo(VIDEO_MAX_SHORT_EDGE)
-        val bitrate = if ((source?.shortEdge ?: 0) > VIDEO_MAX_SHORT_EDGE) VIDEO_BITRATE_HIGH else VIDEO_BITRATE_STANDARD
-        val exported = try {
-            withContext(Dispatchers.Main) { export(media, output, listOfNotNull(scale), bitrate, onProgress) }
-            true
-        } catch (e: CancellationException) {
-            output.delete()
-            throw e
-        } catch (_: IOException) {
-            false
-        } catch (_: RuntimeException) {
-            false
-        }
-        if (!exported || (media.sizeBytes > 0 && output.length() >= media.sizeBytes)) {
+        val large = (source?.shortEdge ?: 0) > VIDEO_MAX_SHORT_EDGE
+        val output = videoCodecs().firstNotNullOfOrNull { codec ->
+            exportTo(media, codec, listOfNotNull(scale), codec.bitrate(large), onProgress)
+        } ?: return media
+        if (media.sizeBytes > 0 && output.length() >= media.sizeBytes) {
             output.delete()
             return media
         }
         return LocalMedia(Uri.fromFile(output).toString(), media.name.substringBeforeLast('.') + ".mp4", MimeTypes.VIDEO_MP4, output.length())
     }
 
+    private fun videoCodecs(): List<VideoCodec> =
+        if (hardwareHevcEncoder) listOf(VideoCodec.Hevc, VideoCodec.Avc) else listOf(VideoCodec.Avc)
+
+    private val hardwareHevcEncoder: Boolean by lazy {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+            info.isEncoder && info.isHardware() && info.supportedTypes.any { it.equals(MimeTypes.VIDEO_H265, ignoreCase = true) }
+        }
+    }
+
+    private suspend fun exportTo(
+        media: LocalMedia,
+        codec: VideoCodec,
+        videoEffects: List<androidx.media3.common.Effect>,
+        bitrate: Int,
+        onProgress: (Float) -> Unit,
+    ): File? {
+        val output = File(outputDir, "${UUID.randomUUID()}.mp4")
+        return try {
+            withContext(Dispatchers.Main) { export(media, output, codec.mimeType, videoEffects, bitrate, onProgress) }
+            output
+        } catch (e: CancellationException) {
+            output.delete()
+            throw e
+        } catch (_: IOException) {
+            output.delete()
+            null
+        } catch (_: RuntimeException) {
+            output.delete()
+            null
+        }
+    }
+
     private suspend fun export(
         media: LocalMedia,
         output: File,
+        videoMimeType: String,
         videoEffects: List<androidx.media3.common.Effect>,
         bitrate: Int,
         onProgress: (Float) -> Unit,
@@ -103,7 +130,7 @@ class AndroidMediaCompressor(private val context: Context) : MediaCompressor {
             }
         }
         transformer = Transformer.Builder(context)
-            .setVideoMimeType(MimeTypes.VIDEO_H264)
+            .setVideoMimeType(videoMimeType)
             .setAudioMimeType(MimeTypes.AUDIO_AAC)
             .setEncoderFactory(
                 DefaultEncoderFactory.Builder(context)
@@ -167,6 +194,13 @@ class AndroidMediaCompressor(private val context: Context) : MediaCompressor {
         private fun evenEdge(value: Float): Int = value.roundToInt() and 1.inv()
     }
 
+    private enum class VideoCodec(val mimeType: String, private val standardBitrate: Int, private val largeBitrate: Int) {
+        Hevc(MimeTypes.VIDEO_H265, standardBitrate = 3_000_000, largeBitrate = 5_000_000),
+        Avc(MimeTypes.VIDEO_H264, standardBitrate = 5_000_000, largeBitrate = 8_000_000);
+
+        fun bitrate(large: Boolean): Int = if (large) largeBitrate else standardBitrate
+    }
+
     private companion object {
         val COMPRESSIBLE_IMAGES = setOf("image/jpeg", "image/heic", "image/heif", "image/avif")
         const val IMAGE_THRESHOLD_BYTES = 1L * 1024 * 1024
@@ -174,9 +208,16 @@ class AndroidMediaCompressor(private val context: Context) : MediaCompressor {
         const val IMAGE_MAX_EDGE = 3840
         const val IMAGE_QUALITY = 88
         const val VIDEO_MAX_SHORT_EDGE = 1080
-        const val VIDEO_BITRATE_STANDARD = 5_000_000
-        const val VIDEO_BITRATE_HIGH = 8_000_000
         const val PROGRESS_POLL_MS = 300L
         const val PERCENT = 100f
     }
 }
+
+private fun MediaCodecInfo.isHardware(): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        isHardwareAccelerated
+    } else {
+        SoftwareCodecPrefixes.none { name.startsWith(it, ignoreCase = true) }
+    }
+
+private val SoftwareCodecPrefixes = listOf("OMX.google.", "c2.android.")

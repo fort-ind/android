@@ -98,6 +98,7 @@
     <string name="search_back">Close search</string>
     <string name="search_clear">Clear search</string>
     <string name="search_loading">Loading</string>
+    <string name="startup_restoring">Signing you in…</string>
     <string name="search_popular_hashtags">Popular hashtags</string>
     <string name="search_hashtags_retry">Couldn\'t load hashtags. Try again</string>
     <string name="search_notes_for">Search notes for \"%1$s\"</string>
@@ -124,7 +125,7 @@
     <string name="collections_rename">Rename</string>
     <string name="collections_delete">Delete list</string>
     <string name="collections_delete_title">Delete %1$s?</string>
-    <string name="collections_delete_body">you cant undo this...</string>
+    <string name="collections_delete_body">you can\'t undo this…</string>
     <string name="collections_delete_confirm">Delete</string>
     <string name="collections_name">Name</string>
     <string name="collections_new_title">New list</string>
@@ -143,8 +144,8 @@
     <string name="collections_add_title">Add %1$s to a list</string>
     <string name="collections_created">Created %1$s</string>
     <string name="collections_deleted">Deleted %1$s</string>
-    <string name="collections_failed_offline">hmm, we cant preform this action since your offline</string>
-    <string name="collections_failed_rate">woah woah woah slow down for a second..</string>
+    <string name="collections_failed_offline">hmm, we can\'t perform this action since you\'re offline</string>
+    <string name="collections_failed_rate">woah, woah, woah slow down for a second..</string>
     <string name="collections_failed_too_many_lists">You\'ve reached the limit for lists. go delete some :)</string>
     <string name="collections_failed_too_many_users">That list is full.</string>
     <string name="collections_failed_blocked">That person has blocked you, so they can\'t be added.</string>
@@ -249,7 +250,7 @@
     <string name="drive_title">Your drive</string>
     <string name="drive_up">Back</string>
     <string name="drive_retry">Couldn\'t load your drive. Try again</string>
-    <string name="drive_empty">quite empty here...</string>
+    <string name="drive_empty">quite empty here…</string>
     <string name="drive_menu_select">Select</string>
     <string name="drive_menu_deselect">Deselect</string>
     <string name="drive_menu_attached">Already attached!</string>
@@ -382,7 +383,7 @@
     <string name="notifications_refresh">Refresh</string>
     <string name="notifications_empty_title">all quiet for now :D</string>
     <string name="notifications_empty_body">when someone mentions, follows or reacts to you it\'ll show up here!</string>
-    <string name="notifications_empty_filtered_title">nothing here... yet</string>
+    <string name="notifications_empty_filtered_title">nothing here… yet</string>
     <string name="notifications_empty_filtered_body">try another filter, or pull down to refresh</string>
     <string name="notifications_failed_title">couldn\'t load your notifications :(</string>
     <string name="notifications_failed_body">Check your connection and try again.</string>
@@ -469,6 +470,12 @@
     <string name="settings_notifications_type_renotes">Renotes</string>
     <string name="settings_notifications_type_follows">Follows and requests</string>
     <string name="settings_notifications_type_other">Everything else</string>
+    <string name="notification_channel_mentions_description">When someone mentions you, replies to you or quotes your posts</string>
+    <string name="notification_channel_reactions_description">When someone reacts to your posts</string>
+    <string name="notification_channel_renotes_description">When someone renotes your posts</string>
+    <string name="notification_channel_follows_description">New followers, follow requests and accepted requests</string>
+    <string name="notification_channel_other_description">Polls ending, roles, sign-ins and everything else</string>
+    <string name="notification_you">You</string>
     <string name="settings_notifications_delivery_section">Delivery</string>
     <string name="settings_notifications_delivery_title">Checked about every 15 minutes</string>
     <string name="settings_notifications_delivery_body">While the app is closed, new notifications arrive in batches since push is not supported yet..</string>
@@ -560,6 +567,12 @@
     <string name="composer_attach_library">Photo and video library</string>
     <string name="composer_attach_camera">Take photo or video</string>
     <string name="composer_camera_permission">Allow camera access to take photos and videos</string>
+    <string name="composer_camera_rationale">The camera is only used to take photos and videos for your post</string>
+    <string name="composer_camera_blocked">Camera access is off. You can turn it on in Settings</string>
+    <string name="permission_continue">Continue</string>
+    <string name="permission_open_settings">Settings</string>
+    <string name="camera_microphone_needed">Videos will be silent without the microphone. Tap to allow it</string>
+    <string name="camera_microphone_blocked">Videos will be silent. Tap to allow the microphone in Settings</string>
     <string name="attachment_photo">Photo %1$d of %2$d</string>
     <string name="attachment_video">Video %1$d of %2$d</string>
     <string name="attachment_file">File %1$d of %2$d</string>
@@ -621,7 +634,7 @@
         <item quantity="other">That\'s too long. The limit is %1$d characters.</item>
     </plurals>
     <string name="settings_save_failed_offline">Couldn\'t save that. Check your connection and try again.</string>
-    <string name="settings_save_failed_rate">woah woah woah. slow down first before changing this</string>
+    <string name="settings_save_failed_rate">woah, woah, woah. slow down first before changing this</string>
     <string name="settings_save_failed_pattern">One of those patterns isn\'t a valid regular expression. Check the lines that start and end with a slash.</string>
     <string name="settings_save_failed_too_many">That list is longer than fort.social allows. Remove some words and try again.</string>
     <string name="settings_save_failed_cw">That content warning is longer than fort.social allows.</string>
@@ -697,7 +710,7 @@
     <string name="posting_cw_priority_parent_default">Use both, original first</string>
     <string name="posting_cw_priority_default_parent">Use both, my default first</string>
     <string name="posting_default_sensitive_title">Mark my media as sensitive by default</string>
-    <string name="posting_default_sensitive_body">new uploads are marked as senstive by default you can unmark a file in the post window however</string>
+    <string name="posting_default_sensitive_body">new uploads are marked as sensitive by default you can unmark a file in the post window however</string>
     <string name="posting_always_sensitive_title">Always mark my media as sensitive</string>
     <string name="posting_always_sensitive_body">Every upload is marked as sensitive and can\'t be unmarked.</string>
     <string name="posting_auto_sensitive_title">Let fort.social mark sensitive media</string>
@@ -864,7 +877,6 @@
     <string name="person_tab_media">Media</string>
     <string name="person_tab_bookmarks">Bookmarks</string>
     <string name="person_notes_empty">They haven\'t posted anything that would show here..</string>
-    <string name="person_about_title">About</string>
     <string name="person_about_location">Location</string>
     <string name="person_about_birthday">Birthday</string>
     <string name="person_about_joined">Joined</string>
