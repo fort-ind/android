@@ -12,11 +12,15 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -70,6 +74,8 @@ interface StreamTransport {
 
 class StreamRejectedException(val code: Int) : IOException("Stream handshake refused (HTTP $code)")
 
+private class NetworkChangedException : IOException("Default network changed")
+
 class MisskeyStreaming(
     private val transport: StreamTransport,
     private val scope: CoroutineScope,
@@ -78,12 +84,13 @@ class MisskeyStreaming(
     private val maxBackoffMs: Long = 300_000,
     private val stableConnectionMs: Long = 60_000,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val networks: Flow<NetworkId?> = unmonitoredNetwork,
 ) {
     private val connections = LinkedHashMap<String?, StreamConnection>()
 
     fun connection(token: String?): StreamConnection = synchronized(connections) {
         connections.getOrPut(token) {
-            StreamConnection(transport, "https://$host/streaming", token, scope, initialBackoffMs, maxBackoffMs, stableConnectionMs, clock)
+            StreamConnection(transport, "https://$host/streaming", token, scope, initialBackoffMs, maxBackoffMs, stableConnectionMs, clock, networks)
         }.also {
             while (connections.size > MAX_CACHED_CONNECTIONS) connections.remove(connections.keys.first())
         }
@@ -103,6 +110,7 @@ class StreamConnection internal constructor(
     private val maxBackoffMs: Long,
     private val stableConnectionMs: Long,
     private val clock: () -> Long,
+    private val networks: Flow<NetworkId?>,
 ) {
     private val generations = AtomicInteger(0)
     private val channelIds = AtomicInteger(0)
@@ -116,10 +124,11 @@ class StreamConnection internal constructor(
     val frames: SharedFlow<StreamFrame> = flow {
         var backoffMs = initialBackoffMs
         while (true) {
+            val network = withTimeoutOrNull(maxBackoffMs) { networks.first { it != null } }
             var openedAt: Long? = null
             var rejected = false
             try {
-                connectOnce().collect { frame ->
+                connectOnce().endWhenNetworkLeaves(network).collect { frame ->
                     if (frame is StreamFrame.Opened) openedAt = clock()
                     emit(frame)
                 }
@@ -132,10 +141,18 @@ class StreamConnection internal constructor(
                 continue
             }
             if (openedAt?.let { clock() - it >= stableConnectionMs } == true) backoffMs = initialBackoffMs
-            delay(backoffMs)
-            backoffMs = (backoffMs * 2).coerceAtMost(maxBackoffMs)
+            backoffMs = if (networkLeavesWithin(backoffMs, network)) initialBackoffMs else (backoffMs * 2).coerceAtMost(maxBackoffMs)
         }
     }.shareIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS))
+
+    private fun Flow<StreamFrame>.endWhenNetworkLeaves(network: NetworkId?): Flow<StreamFrame> =
+        merge(this, networks.filter { it != network }.take(1).map { throw NetworkChangedException() })
+
+    private suspend fun networkLeavesWithin(timeoutMs: Long, network: NetworkId?): Boolean =
+        withTimeoutOrNull(timeoutMs) {
+            networks.first { it != network }
+            true
+        } ?: false
 
     private fun send(text: String): Boolean = socket?.send(text) ?: false
 

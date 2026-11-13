@@ -14,6 +14,7 @@ import coil3.SingletonImageLoader
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import androidx.work.Configuration
 import com.fortind.zenith.account.AccountApi
 import com.fortind.zenith.account.HttpAccountApi
 import com.fortind.zenith.account.HttpModerationApi
@@ -51,6 +52,7 @@ import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
 import com.fortind.zenith.net.MisskeyStreaming
 import com.fortind.zenith.net.OkHttpStreamTransport
+import com.fortind.zenith.net.defaultNetworkOf
 import com.fortind.zenith.notifications.AndroidSystemNotifier
 import com.fortind.zenith.notifications.AppForegroundTracker
 import com.fortind.zenith.notifications.DataStoreNotificationSyncStore
@@ -97,7 +99,7 @@ class AppContainer(application: Application) {
     val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http), DataStoreScopeStampStore(application))
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val okHttpClient: OkHttpClient by lazy { OkHttpClient() }
-    private val streaming = MisskeyStreaming(OkHttpStreamTransport { okHttpClient }, scope)
+    private val streaming = MisskeyStreaming(OkHttpStreamTransport { okHttpClient }, scope, networks = defaultNetworkOf(application, scope))
     val notificationsApi: NotificationsApi = HttpNotificationsApi(http)
     val notificationStream: NotificationStream = StreamingNotificationStream(streaming)
     val notesApi: NotesApi = HttpNotesApi(http)
@@ -160,7 +162,7 @@ class AppContainer(application: Application) {
     }
 }
 
-class ZenithApplication : Application(), SingletonImageLoader.Factory {
+class ZenithApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
     lateinit var container: AppContainer
         private set
 
@@ -173,6 +175,9 @@ class ZenithApplication : Application(), SingletonImageLoader.Factory {
         appScope.launch { container.sessionService.restore() }
         container.notificationSyncCoordinator.start(container.scope)
     }
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().build()
 
     override fun newImageLoader(context: Context): ImageLoader = ImageLoader.Builder(context)
         .components {

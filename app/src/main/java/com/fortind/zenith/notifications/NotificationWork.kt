@@ -9,6 +9,7 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ListenableWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
@@ -114,13 +115,15 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
 private val Context.container get() = (applicationContext as ZenithApplication).container
 
 class NotificationSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
-        return when (applicationContext.container.notificationSyncer.sync()) {
-            SyncOutcome.Done -> Result.success()
-            SyncOutcome.Retry -> Result.retry()
-        }
-    }
+    override suspend fun doWork(): Result = pollResult(applicationContext.container.notificationSyncer.sync(), runAttemptCount)
 }
+
+internal fun pollResult(outcome: SyncOutcome, runAttemptCount: Int): ListenableWorker.Result = when (outcome) {
+    SyncOutcome.Done -> ListenableWorker.Result.success()
+    SyncOutcome.Retry -> if (runAttemptCount < POLL_RETRIES) ListenableWorker.Result.retry() else ListenableWorker.Result.success()
+}
+
+private const val POLL_RETRIES = 1
 
 class FollowRequestWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {

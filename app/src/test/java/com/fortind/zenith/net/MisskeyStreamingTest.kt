@@ -3,6 +3,7 @@ package com.fortind.zenith.net
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -12,6 +13,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,7 +58,11 @@ class MisskeyStreamingTest {
         }
     }
 
-    private fun TestScope.streaming(transport: FakeTransport, clock: () -> Long = { testScheduler.currentTime }) = MisskeyStreaming(
+    private fun TestScope.streaming(
+        transport: FakeTransport,
+        clock: () -> Long = { testScheduler.currentTime },
+        networks: Flow<NetworkId?> = unmonitoredNetwork,
+    ) = MisskeyStreaming(
         transport,
         CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
         host = "example.social",
@@ -64,7 +70,11 @@ class MisskeyStreamingTest {
         maxBackoffMs = 40,
         stableConnectionMs = 100,
         clock = clock,
+        networks = networks,
     )
+
+    private val wifi = NetworkId(101)
+    private val mobile = NetworkId(102)
 
     private fun channelFrame(id: String, type: String, body: String = "{}") =
         """{"type":"channel","body":{"id":"$id","type":"$type","body":$body}}"""
@@ -324,6 +334,85 @@ class MisskeyStreamingTest {
 
         second.value = emptySet()
         assertEquals(listOf("a", "b"), ids("un"))
+    }
+
+    @Test
+    fun noSocketIsOpenedWhileThereIsNoNetwork() = runTest {
+        val transport = FakeTransport()
+        val network = MutableStateFlow<NetworkId?>(null)
+        val connection = streaming(transport, networks = network).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+
+        advanceTimeBy(39)
+        runCurrent()
+        assertEquals(0, transport.sockets.size)
+
+        network.value = wifi
+        runCurrent()
+        assertEquals(1, transport.sockets.size)
+    }
+
+    @Test
+    fun withoutANetworkItStillTriesOnceTheLongestBackoffPasses() = runTest {
+        val transport = FakeTransport()
+        val connection = streaming(transport, networks = MutableStateFlow(null)).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+
+        advanceTimeBy(41)
+        runCurrent()
+
+        assertEquals(1, transport.sockets.size)
+    }
+
+    @Test
+    fun aReturningNetworkReconnectsWithoutWaitingOutTheBackoff() = runTest {
+        val transport = FakeTransport()
+        val network = MutableStateFlow<NetworkId?>(wifi)
+        val connection = streaming(transport, networks = network).connection("tok")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect {} }
+        transport.latest.drop()
+        advanceTimeBy(11)
+        runCurrent()
+        transport.latest.drop()
+        assertEquals(2, transport.sockets.size)
+
+        network.value = null
+        advanceTimeBy(5)
+        runCurrent()
+        assertEquals(2, transport.sockets.size)
+
+        network.value = wifi
+        runCurrent()
+        assertEquals(3, transport.sockets.size)
+
+        transport.latest.drop()
+        advanceTimeBy(9)
+        runCurrent()
+        assertEquals(3, transport.sockets.size)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(4, transport.sockets.size)
+    }
+
+    @Test
+    fun switchingNetworksReplacesAnOpenSocketAndReconnectsItsChannels() = runTest {
+        val transport = FakeTransport()
+        val network = MutableStateFlow<NetworkId?>(wifi)
+        val connection = streaming(transport, networks = network).connection("tok")
+        val events = mutableListOf<ChannelEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { connection.channel("main").collect { events += it } }
+        transport.latest.open()
+        val first = transport.latest
+
+        network.value = mobile
+        runCurrent()
+
+        assertTrue(first.cancelled)
+        assertEquals(2, transport.sockets.size)
+        assertFalse(transport.latest.cancelled)
+        transport.latest.open()
+        assertEquals(1, transport.latest.sentOfType("connect").size)
+        assertEquals(listOf<ChannelEvent>(ChannelEvent.Connected, ChannelEvent.Connected), events)
     }
 
     @Test
