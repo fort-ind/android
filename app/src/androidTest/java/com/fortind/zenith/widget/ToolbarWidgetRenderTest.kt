@@ -3,6 +3,8 @@ package com.fortind.zenith.widget
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.RippleDrawable
+import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
@@ -24,15 +26,24 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.fortind.zenith.ComposerWindowActivity
 import com.fortind.zenith.MainActivity
 import com.fortind.zenith.R
+import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.settings.AppIcon
 import com.fortind.zenith.ui.nav.AppDestination
 import com.fortind.zenith.ui.nav.ShellRequest
 import com.fortind.zenith.window.AppWindows
 import com.fortind.zenith.window.ComposerWindowTarget
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -135,17 +146,68 @@ class ToolbarWidgetRenderTest {
         assertEquals(setOf("search"), toolbar(DpSize.Zero, signedIn = true).descriptions())
     }
 
+    private val errorWidget = ContentWidget { context ->
+        WidgetLoadError(errorLabels, retry = retryTap(context, actionStartActivity(WidgetIntents.openApp(context))), openApp = openAppTap(context))
+    }
+
+    private fun error(size: DpSize): View = inflate(runBlocking { errorWidget.compose(context, size = size) })
+
+    private fun assertEveryTargetHovers(root: View) {
+        val buttons = root.descendants().filter { it.contentDescription != null }
+        assertTrue(buttons.isNotEmpty())
+        for (button in buttons) {
+            assertTrue("${button.contentDescription} is not the clickable view", button.hasOnClickListeners())
+            assertTrue("${button.contentDescription} has no ripple of its own", button.background is RippleDrawable)
+            instrumentation.runOnMainSync { button.isHovered = true }
+            assertTrue(android.R.attr.state_hovered in button.background.state)
+        }
+    }
+
+    @Test
+    fun everyButtonCarriesItsOwnRippleSoItCanShowHover() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val sizes = listOf(
+            DpSize(411.dp, 183.dp) to true,
+            DpSize(276.dp, 456.dp) to true,
+            DpSize(150.dp, 150.dp) to false,
+            DpSize(57.dp, 102.dp) to true,
+            DpSize(57.dp, 102.dp) to false,
+        )
+        for ((size, signedIn) in sizes) assertEveryTargetHovers(toolbar(size, signedIn))
+        assertEveryTargetHovers(error(DpSize(130.dp, 102.dp)))
+        assertEveryTargetHovers(error(DpSize(276.dp, 220.dp)))
+    }
+
+    @Test
+    fun tappingRetryAsksTheRunningWidgetToReload() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val updater = (context.applicationContext as ZenithApplication).container.widgetUpdater
+        val subscribed = CompletableDeferred<Unit>()
+        runBlocking {
+            val retried = async(Dispatchers.Default) {
+                withTimeoutOrNull(TAP_TIMEOUT_MILLIS) { updater.retries.onSubscription { subscribed.complete(Unit) }.first() }
+            }
+            subscribed.await()
+            ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
+                val views = errorWidget.compose(context, size = DpSize(276.dp, 220.dp))
+                scenario.onActivity { activity ->
+                    val frame = FrameLayout(activity)
+                    frame.addView(views.apply(activity, frame))
+                    activity.setContentView(frame)
+                    assertTrue(frame.descendants().first { it.contentDescription?.toString() == "Retry" }.performClick())
+                }
+                assertTrue("Retry did not reach the widget", retried.await() != null)
+            }
+        }
+    }
+
     @Test
     fun loadErrorIsOneRetryTargetWhenSmallAndExplainsItselfWhenRoomy() {
-        val error = ContentWidget { context ->
-            val openApp = actionStartActivity(WidgetIntents.openApp(context))
-            WidgetLoadError(errorLabels, onRetry = openApp, onOpenApp = openApp)
-        }
-        val small = inflate(runBlocking { error.compose(context, size = DpSize(130.dp, 102.dp)) })
+        val small = error(DpSize(130.dp, 102.dp))
         assertEquals(setOf("retry"), small.descriptions())
         assertFalse("Retry" in small.texts())
 
-        val roomy = inflate(runBlocking { error.compose(context, size = DpSize(276.dp, 220.dp)) })
+        val roomy = error(DpSize(276.dp, 220.dp))
         assertEquals(setOf("title", "Retry", "Open"), roomy.texts())
     }
 
@@ -169,6 +231,17 @@ class ToolbarWidgetRenderTest {
         assertEquals(ComposerWindowTarget.NewPost, AppWindows.composerTarget(composer.data))
         assertTrue(WidgetIntents.composerOptions(context, size = null) != null)
         assertTrue(WidgetIntents.fallbackOpenApp(context).data != null)
+        val retry = WidgetIntents.retry(context)
+        assertEquals(ToolbarWidgetReceiver::class.java.name, retry.component?.className)
+        assertEquals(WidgetIntents.ACTION_RETRY, retry.action)
+    }
+
+    private fun finishAndWait(activity: Activity) {
+        instrumentation.waitForIdleSync()
+        Thread.sleep(SETTLE_MILLIS)
+        instrumentation.runOnMainSync { activity.finish() }
+        val deadline = SystemClock.elapsedRealtime() + TAP_TIMEOUT_MILLIS
+        while (!activity.isDestroyed && SystemClock.elapsedRealtime() < deadline) Thread.sleep(POLL_MILLIS)
     }
 
     private fun tap(description: String, signedIn: Boolean, target: Class<out Activity>): Intent {
@@ -191,11 +264,7 @@ class ToolbarWidgetRenderTest {
                 val started = monitor.waitForActivityWithTimeout(TAP_TIMEOUT_MILLIS)
                 assertTrue("$description did not start ${target.simpleName}", started != null)
                 val intent = Intent(started.intent)
-                instrumentation.waitForIdleSync()
-                Thread.sleep(SETTLE_MILLIS)
-                instrumentation.runOnMainSync { started.finish() }
-                val deadline = SystemClock.elapsedRealtime() + TAP_TIMEOUT_MILLIS
-                while (!started.isDestroyed && SystemClock.elapsedRealtime() < deadline) Thread.sleep(POLL_MILLIS)
+                finishAndWait(started)
                 return intent
             }
         } finally {
@@ -217,8 +286,20 @@ class ToolbarWidgetRenderTest {
 
     @Test
     fun tappingNewPostStartsTheComposerWindow() {
-        val intent = tap("post", signedIn = true, target = ComposerWindowActivity::class.java)
-        assertEquals(ComposerWindowTarget.NewPost, AppWindows.composerTarget(intent.data))
+        val session = (context.applicationContext as ZenithApplication).container.sessionService
+        val state = runBlocking { withTimeoutOrNull(TAP_TIMEOUT_MILLIS) { session.state.first { it != SessionState.Restoring } } }
+        val fallback = if (state is SessionState.SignedIn) null else instrumentation.addMonitor(MainActivity::class.java.name, null, false)
+        try {
+            val intent = tap("post", signedIn = true, target = ComposerWindowActivity::class.java)
+            assertEquals(ComposerWindowTarget.NewPost, AppWindows.composerTarget(intent.data))
+            if (fallback != null) {
+                val main = fallback.waitForActivityWithTimeout(TAP_TIMEOUT_MILLIS)
+                assertTrue("a stale New post tap while signed out did not open the main window", main != null)
+                finishAndWait(main)
+            }
+        } finally {
+            fallback?.let(instrumentation::removeMonitor)
+        }
     }
 
     @Test

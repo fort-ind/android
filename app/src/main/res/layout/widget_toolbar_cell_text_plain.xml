@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_cell"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_cell_plain_full"
+    android:paddingHorizontal="16dp">
+
+    <TextView
+        android:id="@+id/widget_cell_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:drawablePadding="8dp"
+        android:drawableTint="@color/widget_on_surface"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical"
+        android:importantForAccessibility="no"
+        android:maxLines="1"
+        android:textColor="@color/widget_on_surface"
+        android:textSize="14sp" />
+</FrameLayout>

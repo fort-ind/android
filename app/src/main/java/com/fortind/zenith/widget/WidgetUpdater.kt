@@ -14,6 +14,9 @@ import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.settings.AppIconSwitcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -28,12 +31,20 @@ class WidgetUpdater(
     private val appIcons: AppIconSwitcher,
 ) {
     private val context = context.applicationContext
+    private val retryRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    val retries: SharedFlow<Unit> = retryRequests.asSharedFlow()
 
     fun start(scope: CoroutineScope) {
         scope.launch { renderInputs().collect { refresh() } }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             scope.launch { publishPreview() }
         }
+    }
+
+    suspend fun retry() {
+        retryRequests.tryEmit(Unit)
+        refresh()
     }
 
     private fun renderInputs() = combine(

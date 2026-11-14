@@ -1,5 +1,6 @@
 package com.fortind.zenith.widget
 
+import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -10,7 +11,6 @@ import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
-import androidx.glance.action.Action
 import androidx.glance.action.clickable
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -23,8 +23,6 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
-import androidx.glance.semantics.contentDescription
-import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
@@ -45,15 +43,13 @@ private val MessageMinHeight = 128.dp
 fun errorShowsMessage(size: DpSize): Boolean = size.width >= MessageMinWidth && size.height >= MessageMinHeight
 
 @Composable
-fun WidgetLoadError(labels: ErrorLabels, onRetry: Action, onOpenApp: Action) {
+fun WidgetLoadError(labels: ErrorLabels, retry: WidgetTap, openApp: WidgetTap) {
     val size = LocalSize.current
     val colors = GlanceTheme.colors
     if (!errorShowsMessage(size)) {
         val roomy = size.width >= ToolbarDimens.FilledMinSize && size.height >= ToolbarDimens.FilledMinSize
         WidgetSurface(
-            modifier = GlanceModifier
-                .semantics { contentDescription = labels.retryDescription }
-                .clickable(onRetry),
+            target = SurfaceTarget(labels.retryDescription, retry),
             horizontalPadding = if (roomy) ToolbarDimens.Padding else 0.dp,
             verticalPadding = if (roomy) ToolbarDimens.Padding else 0.dp,
         ) {
@@ -68,7 +64,7 @@ fun WidgetLoadError(labels: ErrorLabels, onRetry: Action, onOpenApp: Action) {
         }
         return
     }
-    WidgetSurface(GlanceModifier, ToolbarDimens.Padding, ToolbarDimens.Padding) {
+    WidgetSurface(null, ToolbarDimens.Padding, ToolbarDimens.Padding) {
         Column(
             modifier = GlanceModifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
@@ -82,9 +78,9 @@ fun WidgetLoadError(labels: ErrorLabels, onRetry: Action, onOpenApp: Action) {
             )
             Spacer(modifier = GlanceModifier.height(ToolbarDimens.Spacing))
             Row(modifier = GlanceModifier.fillMaxWidth().height(ToolbarDimens.MinTarget)) {
-                ErrorButton(labels.retry, colors.tertiary, colors.onTertiary, onRetry, GlanceModifier.defaultWeight())
+                ErrorButton(labels.retry, CellTone.Accent, colors.tertiary, colors.onTertiary, retry, GlanceModifier.defaultWeight())
                 Spacer(modifier = GlanceModifier.width(ToolbarDimens.Spacing))
-                ErrorButton(labels.openApp, colors.secondaryContainer, colors.onSecondaryContainer, onOpenApp, GlanceModifier.defaultWeight())
+                ErrorButton(labels.openApp, CellTone.Container, colors.secondaryContainer, colors.onSecondaryContainer, openApp, GlanceModifier.defaultWeight())
             }
         }
     }
@@ -93,18 +89,32 @@ fun WidgetLoadError(labels: ErrorLabels, onRetry: Action, onOpenApp: Action) {
 @Composable
 private fun ErrorButton(
     label: String,
+    tone: CellTone,
     container: ColorProvider,
     content: ColorProvider,
-    onClick: Action,
+    tap: WidgetTap,
     modifier: GlanceModifier,
 ) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        HoverButton(
+            icon = NO_ICON,
+            text = label,
+            tone = tone,
+            shape = WidgetShape.Full,
+            leading = false,
+            description = label,
+            tap = tap,
+            modifier = modifier.height(ToolbarDimens.MinTarget),
+        )
+        return
+    }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .height(ToolbarDimens.MinTarget)
             .shapedBackground(container, WidgetShape.Full)
             .padding(horizontal = 12.dp)
-            .clickable(onClick),
+            .clickable(tap.action()),
     ) {
         Text(
             text = label,

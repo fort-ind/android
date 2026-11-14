@@ -3,8 +3,10 @@ package com.fortind.zenith.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import android.widget.RemoteViews
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,7 +21,6 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.PreviewSizeMode
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import com.fortind.zenith.AppContainer
 import com.fortind.zenith.R
@@ -49,13 +50,15 @@ class ToolbarWidget : GlanceAppWidget() {
             val scope = rememberCoroutineScope()
             val session by container.sessionService.state.collectAsState()
             val appIcon by container.appIconSwitcher.selected.collectAsState()
+            LaunchedEffect(Unit) { container.widgetUpdater.retries.collect { load = load(container) } }
             WidgetTheme(appIcon) {
                 val signedIn = signedInFrom(session, load)
                 if (signedIn == null) {
+                    val retry = action { scope.launch { load = load(container) } }
                     WidgetLoadError(
                         labels = errorLabels(context),
-                        onRetry = action { scope.launch { load = load(container) } },
-                        onOpenApp = actionStartActivity(WidgetIntents.openApp(context)),
+                        retry = retryTap(context, retry),
+                        openApp = openAppTap(context),
                     )
                 } else {
                     val composerOptions = remember(load) {
@@ -102,6 +105,22 @@ class ToolbarWidget : GlanceAppWidget() {
 
 class ToolbarWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = ToolbarWidget()
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != WidgetIntents.ACTION_RETRY) {
+            super.onReceive(context, intent)
+            return
+        }
+        val container = (context.applicationContext as ZenithApplication).container
+        val pending = goAsync()
+        container.scope.launch {
+            try {
+                container.widgetUpdater.retry()
+            } finally {
+                pending.finish()
+            }
+        }
+    }
 }
 
 internal fun toolbarLabels(context: Context) = ToolbarLabels(

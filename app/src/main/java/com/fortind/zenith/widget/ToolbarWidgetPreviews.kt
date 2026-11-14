@@ -4,7 +4,6 @@ package com.fortind.zenith.widget
 
 import androidx.compose.runtime.Composable
 import androidx.glance.LocalContext
-import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.preview.ExperimentalGlancePreviewApi
 import androidx.glance.preview.Preview
 import com.fortind.zenith.settings.AppIcon
@@ -46,8 +45,7 @@ private fun SignedOutToolbarPreview() {
 @Composable
 private fun LoadErrorPreview() {
     val context = LocalContext.current
-    val openApp = actionStartActivity(WidgetIntents.openApp(context))
     WidgetTheme(AppIcon.DEFAULT) {
-        WidgetLoadError(errorLabels(context), onRetry = openApp, onOpenApp = openApp)
+        WidgetLoadError(errorLabels(context), retry = openAppTap(context), openApp = openAppTap(context))
     }
 }

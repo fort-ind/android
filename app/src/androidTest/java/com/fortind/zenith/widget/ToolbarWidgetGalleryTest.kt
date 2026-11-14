@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.PixelCopy
@@ -14,13 +15,13 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RemoteViews
 import androidx.activity.ComponentActivity
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.compose
 import androidx.glance.appwidget.provideContent
 import androidx.test.core.app.ActivityScenario
@@ -69,8 +70,7 @@ class ToolbarWidgetGalleryTest {
     private fun error(width: Int, height: Int): Tile {
         val size = DpSize(width.dp, height.dp)
         val widget = ContentWidget { context ->
-            val openApp = actionStartActivity(WidgetIntents.openApp(context))
-            WidgetLoadError(errorLabels(context), onRetry = openApp, onOpenApp = openApp)
+            WidgetLoadError(errorLabels(context), retry = openAppTap(context), openApp = openAppTap(context))
         }
         return Tile(size, runBlocking { widget.compose(context, size = size) })
     }
@@ -114,9 +114,8 @@ class ToolbarWidgetGalleryTest {
         }
     }
 
-    private fun capture(activity: ComponentActivity, name: String) {
-        val root = activity.window.decorView
-        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun pixelCopy(activity: ComponentActivity, bitmap: Bitmap): Boolean {
         val copied = CountDownLatch(1)
         var result = PixelCopy.ERROR_UNKNOWN
         val thread = HandlerThread("widget-gallery-copy").apply { start() }
@@ -124,8 +123,15 @@ class ToolbarWidgetGalleryTest {
             result = code
             copied.countDown()
         }, Handler(thread.looper))
-        val hardware = copied.await(COPY_TIMEOUT_SECONDS, TimeUnit.SECONDS) && result == PixelCopy.SUCCESS
+        val copiedInTime = copied.await(COPY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         thread.quitSafely()
+        return copiedInTime && result == PixelCopy.SUCCESS
+    }
+
+    private fun capture(activity: ComponentActivity, name: String) {
+        val root = activity.window.decorView
+        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        val hardware = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && pixelCopy(activity, bitmap)
         if (!hardware) root.draw(Canvas(bitmap))
         val folder = File(activity.cacheDir, "widget-gallery").apply { mkdirs() }
         File(folder, if (hardware) "$name.png" else "$name-software.png").outputStream().use {
