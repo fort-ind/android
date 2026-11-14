@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="widget_background_radius">16dp</dimen>
+
+    <integer name="toolbar_widget_target_cell_width">2</integer>
+    <integer name="toolbar_widget_target_cell_height">2</integer>
+    <dimen name="toolbar_widget_min_width">120dp</dimen>
+    <dimen name="toolbar_widget_min_height">115dp</dimen>
+    <dimen name="toolbar_widget_min_resize_width">48dp</dimen>
+    <dimen name="toolbar_widget_min_resize_height">48dp</dimen>
+    <dimen name="toolbar_widget_max_resize_width">624dp</dimen>
+    <dimen name="toolbar_widget_max_resize_height">422dp</dimen>
+</resources>

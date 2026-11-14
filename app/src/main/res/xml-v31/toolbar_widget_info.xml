@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_toolbar_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:maxResizeWidth="@dimen/toolbar_widget_max_resize_width"
+    android:maxResizeHeight="@dimen/toolbar_widget_max_resize_height"
+    android:minWidth="@dimen/toolbar_widget_min_width"
+    android:minHeight="@dimen/toolbar_widget_min_height"
+    android:minResizeWidth="@dimen/toolbar_widget_min_resize_width"
+    android:minResizeHeight="@dimen/toolbar_widget_min_resize_height"
+    android:previewImage="@drawable/toolbar_widget_preview"
+    android:previewLayout="@layout/widget_toolbar_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="@integer/toolbar_widget_target_cell_width"
+    android:targetCellHeight="@integer/toolbar_widget_target_cell_height"
+    android:widgetCategory="home_screen|keyguard" />

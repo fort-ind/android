@@ -163,6 +163,8 @@ fun AppShell(
     onRequestedThreadHandled: () -> Unit,
     requestedReplyId: String?,
     onRequestedReplyHandled: () -> Unit,
+    searchRequested: Boolean,
+    onSearchRequestHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
     val poppedOut = window.poppedOutTab != null
@@ -240,6 +242,13 @@ fun AppShell(
             if (stacks.tab != playbackTab) {
                 playbackTab = stacks.tab
                 ui.playback.stop()
+            }
+        }
+        LaunchedEffect(searchRequested) {
+            if (searchRequested) {
+                stacks.showRoot(AppDestination.HOME)
+                ui.discovery.requestSearch()
+                onSearchRequestHandled()
             }
         }
         val openThreadId = stacks.openThreadId

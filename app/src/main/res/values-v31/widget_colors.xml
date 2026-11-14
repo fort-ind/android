@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_surface">@android:color/system_accent2_50</color>
+    <color name="widget_on_surface">@android:color/system_neutral1_900</color>
+    <color name="widget_container">@android:color/system_accent2_100</color>
+    <color name="widget_on_container">@android:color/system_accent2_900</color>
+    <color name="widget_accent">@android:color/system_accent3_600</color>
+    <color name="widget_on_accent">@android:color/system_accent3_0</color>
+</resources>

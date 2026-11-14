@@ -9,8 +9,11 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.isCaptionBarVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.CircularProgressIndicator
@@ -120,7 +123,9 @@ class ComposerWindowActivity : ComponentActivity() {
         when (session) {
             SessionState.Restoring -> Unit
             is SessionState.SignedIn -> SignedInComposer(target)
-            SessionState.Guest, SessionState.SignedOut -> LaunchedEffect(Unit) { finish() }
+            SessionState.Guest, SessionState.SignedOut -> LaunchedEffect(Unit) {
+                if (openerWindowId == null) openMainWindow() else finish()
+            }
         }
     }
 
@@ -178,12 +183,14 @@ class ComposerWindowActivity : ComponentActivity() {
         }
     }
 
-    @OptIn(FlowPreview::class)
+    @OptIn(FlowPreview::class, ExperimentalLayoutApi::class)
     @Composable
     private fun RememberWindowSize() {
         val windowInfo = LocalWindowInfo.current
         val density = LocalDensity.current
-        LaunchedEffect(windowInfo, density) {
+        val desktopWindow = WindowInsets.isCaptionBarVisible
+        LaunchedEffect(windowInfo, density, desktopWindow) {
+            if (!desktopWindow) return@LaunchedEffect
             snapshotFlow { with(density) { windowInfo.containerSize.width.toDp() to windowInfo.containerSize.height.toDp() } }
                 .filter { (width, height) -> width >= MinRememberedWidth && height >= MinRememberedHeight }
                 .distinctUntilChanged()

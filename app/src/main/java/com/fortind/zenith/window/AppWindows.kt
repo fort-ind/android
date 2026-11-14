@@ -62,16 +62,18 @@ object AppWindows {
             .setData(composerUri(target))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
             .putExtra(EXTRA_OPENER_WINDOW_ID, openerWindowId)
-        val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) centeredBounds(opener, size ?: DefaultComposerSize) else null
+        val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            composerLaunchOptions(opener.windowManager.maximumWindowMetrics.bounds, opener.resources.displayMetrics.density, size)
+        } else {
+            null
+        }
         opener.startActivity(intent, options)
     }
 
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun centeredBounds(opener: Activity, size: WindowSizeDp): Bundle {
-        val display = opener.windowManager.maximumWindowMetrics.bounds
-        val density = opener.resources.displayMetrics.density
-        val width = (size.widthDp * density).roundToInt().coerceAtMost(display.width())
-        val height = (size.heightDp * density).roundToInt().coerceAtMost(display.height())
+    fun composerLaunchOptions(display: Rect, density: Float, size: WindowSizeDp?): Bundle {
+        val wanted = size ?: DefaultComposerSize
+        val width = (wanted.widthDp * density).roundToInt().coerceAtMost(display.width())
+        val height = (wanted.heightDp * density).roundToInt().coerceAtMost(display.height())
         val left = display.left + (display.width() - width) / 2
         val top = display.top + (display.height() - height) / 2
         return ActivityOptions.makeBasic().setLaunchBounds(Rect(left, top, left + width, top + height)).toBundle()

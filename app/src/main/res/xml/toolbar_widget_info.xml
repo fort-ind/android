@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="@dimen/toolbar_widget_min_width"
+    android:minHeight="@dimen/toolbar_widget_min_height"
+    android:minResizeWidth="@dimen/toolbar_widget_min_resize_width"
+    android:minResizeHeight="@dimen/toolbar_widget_min_resize_height"
+    android:previewImage="@drawable/toolbar_widget_preview"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen|keyguard" />

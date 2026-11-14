@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GridLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_preview_surface"
+    android:columnCount="2"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:layout_columnSpan="2"
+        android:layout_columnWeight="1"
+        android:layout_gravity="fill_horizontal"
+        android:background="@drawable/widget_preview_search">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_search"
+            android:tint="@color/widget_on_accent" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_rowWeight="1"
+        android:layout_columnWeight="1"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/widget_preview_button">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_post"
+            android:tint="@color/widget_on_container" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_rowWeight="1"
+        android:layout_columnWeight="1"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/widget_preview_button">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_notifications"
+            android:tint="@color/widget_on_container" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_rowWeight="1"
+        android:layout_columnWeight="1"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/widget_preview_button">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_profile"
+            android:tint="@color/widget_on_container" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_rowWeight="1"
+        android:layout_columnWeight="1"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/widget_preview_button">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_games"
+            android:tint="@color/widget_on_container" />
+    </FrameLayout>
+</GridLayout>

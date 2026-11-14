@@ -38,6 +38,7 @@ import com.fortind.zenith.ui.nav.AppRoute
 import com.fortind.zenith.ui.nav.AppShell
 import com.fortind.zenith.ui.nav.AppShortcutDispatcher
 import com.fortind.zenith.ui.nav.CaptionBarHost
+import com.fortind.zenith.ui.nav.ShellRequest
 import com.fortind.zenith.ui.nav.ShellWindow
 import com.fortind.zenith.ui.nav.destinationKeyCode
 import com.fortind.zenith.ui.theme.SettingsTheme
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private val requestedRoute = mutableStateOf<AppRoute?>(null)
     private val requestedThreadId = mutableStateOf<String?>(null)
     private val requestedReplyId = mutableStateOf<String?>(null)
+    private val searchRequested = mutableStateOf(false)
     private val shortcuts = AppShortcutDispatcher()
 
     private val container get() = (application as ZenithApplication).container
@@ -62,7 +64,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) handleIntent(intent)
+        if (savedInstanceState == null) handleIntent(intent) else restoreRequests(savedInstanceState)
         poppedOutTab?.let { tab ->
             AppWindows.setWindowLabel(this, getString(tab.labelRes))
             lifecycleScope.launch {
@@ -86,6 +88,8 @@ class MainActivity : ComponentActivity() {
                     onRequestedThreadHandled = { requestedThreadId.value = null },
                     requestedReplyId = requestedReplyId.value,
                     onRequestedReplyHandled = { requestedReplyId.value = null },
+                    searchRequested = searchRequested.value,
+                    onSearchRequestHandled = { searchRequested.value = false },
                     shortcuts = shortcuts,
                 )
             }
@@ -101,6 +105,23 @@ class MainActivity : ComponentActivity() {
         val tab = poppedOutTab ?: return
         val bounds = AppWindows.currentBounds(this) ?: return
         container.scope.launch { container.settingsStore.setPopOutBounds(tab.name, bounds) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_DESTINATION, requestedDestination.value?.name)
+        outState.putString(STATE_ROUTE, requestedRoute.value?.encode())
+        outState.putString(STATE_THREAD_NOTE_ID, requestedThreadId.value)
+        outState.putString(STATE_REPLY_NOTE_ID, requestedReplyId.value)
+        outState.putBoolean(STATE_SEARCH, searchRequested.value)
+    }
+
+    private fun restoreRequests(state: Bundle) {
+        requestedDestination.value = state.getString(STATE_DESTINATION)?.let { name -> AppDestination.entries.firstOrNull { it.name == name } }
+        requestedRoute.value = state.getString(STATE_ROUTE)?.let(AppRoute::decode)
+        requestedThreadId.value = state.getString(STATE_THREAD_NOTE_ID)
+        requestedReplyId.value = state.getString(STATE_REPLY_NOTE_ID)
+        searchRequested.value = state.getBoolean(STATE_SEARCH)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -147,6 +168,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        if (poppedOutTab == null && handleShellRequest(ShellRequest.fromName(intent?.getStringExtra(EXTRA_SHELL_REQUEST)))) return
         val route = intent?.getStringExtra(EXTRA_ROUTE)?.let(AppRoute::decode)
         val tab = poppedOutTab ?: intent?.getStringExtra(EXTRA_TAB)?.let { name -> AppDestination.entries.firstOrNull { it.name == name } }
         if (tab != null && (route != null || poppedOutTab == null)) {
@@ -164,6 +186,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun handleShellRequest(request: ShellRequest?): Boolean {
+        when (request) {
+            ShellRequest.SEARCH -> searchRequested.value = true
+            ShellRequest.SIGN_IN -> container.sessionService.leaveGuest()
+            null -> return false
+        }
+        return true
+    }
+
     private fun destinationFrom(intent: Intent?): AppDestination? =
         when (intent?.getStringExtra(EXTRA_DESTINATION)) {
             DESTINATION_NOTIFICATIONS -> AppDestination.NOTIFICATIONS
@@ -176,7 +207,13 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_REPLY = "com.fortind.zenith.extra.OPEN_REPLY"
         const val EXTRA_TAB = "com.fortind.zenith.extra.TAB"
         const val EXTRA_ROUTE = "com.fortind.zenith.extra.ROUTE"
+        const val EXTRA_SHELL_REQUEST = "com.fortind.zenith.extra.SHELL_REQUEST"
         const val DESTINATION_NOTIFICATIONS = "notifications"
+        private const val STATE_DESTINATION = "requested_destination"
+        private const val STATE_ROUTE = "requested_route"
+        private const val STATE_THREAD_NOTE_ID = "requested_thread_note_id"
+        private const val STATE_REPLY_NOTE_ID = "requested_reply_note_id"
+        private const val STATE_SEARCH = "search_requested"
     }
 }
 
@@ -191,6 +228,8 @@ fun ZenithRoot(
     onRequestedThreadHandled: () -> Unit,
     requestedReplyId: String?,
     onRequestedReplyHandled: () -> Unit,
+    searchRequested: Boolean,
+    onSearchRequestHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
     val app = LocalContext.current.applicationContext as ZenithApplication
@@ -228,6 +267,8 @@ fun ZenithRoot(
                         onRequestedThreadHandled = onRequestedThreadHandled,
                         requestedReplyId = requestedReplyId,
                         onRequestedReplyHandled = onRequestedReplyHandled,
+                        searchRequested = searchRequested,
+                        onSearchRequestHandled = onSearchRequestHandled,
                         shortcuts = shortcuts,
                     )
                 }

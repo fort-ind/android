@@ -19,7 +19,7 @@
     <string name="login_error_network">Couldn\'t reach %1$s. Check your connection and try again.</string>
     <string name="login_error_rejected">%1$s didn\'t accept the sign-in.</string>
     <string name="login_error_no_browser">No browser is available to open the sign-in page.</string>
-    <string name="login_manual_body">No browser opened here, so the sign-in link was copied. Paste it into any browser, approve the sign-in, then come back to the app.</string>
+    <string name="login_manual_body">we cant open your browser :( (might not support webview?) so the sign-in link was copied. Paste it into any browser, approve, then come back :p </string>
     <string name="login_manual_copy">Copy link</string>
     <string name="login_manual_clip_label">Sign-in link</string>
 
@@ -931,4 +931,14 @@
     <string name="report_failed">Couldn\'t send that report. Try again.</string>
     <string name="report_failed_yourself">You can\'t report yourself! silly goose :)</string>
     <string name="report_failed_admin">Administrators can\'t be reported.</string>
+
+    <string name="widget_toolbar_label">Search and shortcuts</string>
+    <string name="widget_toolbar_description">Search fort.social and jump straight to posting, notifications, your profile or games!</string>
+    <string name="widget_new_post">New post</string>
+    <string name="widget_sign_in">Sign in</string>
+    <string name="widget_sign_in_description">Sign in to fort.social</string>
+    <string name="widget_error_title">Couldn\'t load your shortcuts :( </string>
+    <string name="widget_error_open_app">Open app</string>
+    <string name="widget_error_retry_description">we cant load shortcuts :( try launching fort.android to fix it</string>
+    <string name="widget_error_fallback">Shortcuts can\'t be shown right now. Tap to open fort.android.</string>
 </resources>

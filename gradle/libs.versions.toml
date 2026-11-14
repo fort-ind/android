@@ -28,6 +28,7 @@ exifinterface = "1.4.2"
 navigation3 = "1.2.1"
 navigationevent = "1.2.0"
 leakcanary = "2.14"
+glance = "1.2.0"
 
 [libraries]
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
@@ -84,6 +85,10 @@ androidx-media3-effect = { group = "androidx.media3", name = "media3-effect", ve
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }
 androidx-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
 leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+androidx-glance-preview = { group = "androidx.glance", name = "glance-preview", version.ref = "glance" }
+androidx-glance-appwidget-preview = { group = "androidx.glance", name = "glance-appwidget-preview", version.ref = "glance" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

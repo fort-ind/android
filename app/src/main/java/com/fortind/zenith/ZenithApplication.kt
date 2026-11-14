@@ -85,6 +85,7 @@ import com.fortind.zenith.timeline.LinkPreviewSource
 import com.fortind.zenith.timeline.NotesApi
 import com.fortind.zenith.timeline.StreamingTimelineStream
 import com.fortind.zenith.timeline.TimelineStream
+import com.fortind.zenith.widget.WidgetUpdater
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
@@ -155,6 +156,8 @@ class AppContainer(application: Application) {
         notifier = systemNotifier,
     )
 
+    val widgetUpdater = WidgetUpdater(application, sessionService, appIconSwitcher)
+
     init {
         http.onPermissionDenied = { scope.launch { sessionService.markScopesStale() } }
         scope.launch { androidNotifier.ensureChannels() }
@@ -174,6 +177,7 @@ class ZenithApplication : Application(), SingletonImageLoader.Factory, Configura
         container = AppContainer(this)
         appScope.launch { container.sessionService.restore() }
         container.notificationSyncCoordinator.start(container.scope)
+        container.widgetUpdater.start(container.scope)
     }
 
     override val workManagerConfiguration: Configuration
