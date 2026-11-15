@@ -47,6 +47,7 @@ import com.fortind.zenith.mfm.MfmStrike
 import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.mfm.MfmUrl
 import com.fortind.zenith.mfm.toPlainText
+import com.fortind.zenith.ui.media.rememberAnimatedDrawableStopper
 import com.fortind.zenith.ui.media.rememberImageRequest
 import java.text.DateFormat
 import java.util.Date
@@ -253,11 +254,13 @@ fun CustomEmojiImage(name: String, url: String, animate: Boolean, modifier: Modi
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(":$name:", maxLines = 1) }
         return
     }
+    val animation = rememberAnimatedDrawableStopper(animate)
     AsyncImage(
         model = rememberImageRequest(url, animate),
         contentDescription = ":$name:",
         contentScale = ContentScale.Fit,
         onSuccess = { state ->
+            animation?.track(state.result.image)
             val size = state.painter.intrinsicSize
             if (size.width > 0f && size.height > 0f) EmojiAspects.record(url, size.width / size.height)
         },

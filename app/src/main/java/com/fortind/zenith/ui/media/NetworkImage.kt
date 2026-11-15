@@ -1,10 +1,13 @@
 package com.fortind.zenith.ui.media
 
 import android.graphics.Bitmap
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.Drawable
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -13,6 +16,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import coil3.DrawableImage
+import coil3.Image
 import coil3.compose.AsyncImage
 import coil3.decode.BitmapFactoryDecoder
 import coil3.memory.MemoryCache
@@ -66,6 +71,30 @@ fun rememberImageRequest(url: String, animate: Boolean, placeholderUrl: String? 
     }
 }
 
+class AnimatedDrawableStopper {
+    private var drawable: Drawable? = null
+
+    fun track(image: Image) {
+        drawable = (image as? DrawableImage)?.drawable?.takeIf { it is Animatable }
+    }
+
+    fun stop() {
+        val running = drawable ?: return
+        drawable = null
+        (running as Animatable).stop()
+        running.setVisible(false, false)
+        running.callback = null
+    }
+}
+
+@Composable
+fun rememberAnimatedDrawableStopper(animate: Boolean): AnimatedDrawableStopper? {
+    if (!animate) return null
+    val stopper = remember { AnimatedDrawableStopper() }
+    DisposableEffect(stopper) { onDispose(stopper::stop) }
+    return stopper
+}
+
 @Composable
 fun NetworkImage(
     url: String,
@@ -76,6 +105,7 @@ fun NetworkImage(
     contentScale: ContentScale = ContentScale.Crop,
     placeholderUrl: String? = null,
 ) {
+    val animation = rememberAnimatedDrawableStopper(animate)
     Box(modifier = modifier) {
         if (blurhash != null) BlurhashImage(blurhash, Modifier.matchParentSize())
         AsyncImage(
@@ -83,6 +113,7 @@ fun NetworkImage(
             contentDescription = contentDescription,
             contentScale = contentScale,
             modifier = Modifier.matchParentSize(),
+            onSuccess = { animation?.track(it.result.image) },
         )
     }
 }
