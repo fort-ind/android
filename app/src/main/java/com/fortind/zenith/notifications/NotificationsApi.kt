@@ -1,7 +1,11 @@
 package com.fortind.zenith.notifications
 
+import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.FortHttp
+import com.fortind.zenith.net.HttpStatusException
+import com.fortind.zenith.net.translateAuthError
 import com.fortind.zenith.net.translatingAuthErrors
+import com.fortind.zenith.people.RequestAnswerResult
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,7 +16,7 @@ interface NotificationsApi {
 
     suspend fun markAllAsRead(token: String)
 
-    suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean)
+    suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean): RequestAnswerResult
 }
 
 fun parseUnreadCount(json: JSONObject): Int {
@@ -46,8 +50,13 @@ class HttpNotificationsApi(private val http: FortHttp) : NotificationsApi {
         translatingAuthErrors { http.postDiscardingResponse("/api/notifications/mark-all-as-read", JSONObject().put("i", token)) }
     }
 
-    override suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean) {
+    override suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean): RequestAnswerResult {
         val path = if (accept) "/api/following/requests/accept" else "/api/following/requests/reject"
-        translatingAuthErrors { http.postDiscardingResponse(path, JSONObject().put("i", token).put("userId", userId)) }
+        return try {
+            http.postDiscardingResponse(path, JSONObject().put("i", token).put("userId", userId))
+            RequestAnswerResult.Done
+        } catch (e: HttpStatusException) {
+            if (e.apiErrorCode == ApiErrorCodes.NO_FOLLOW_REQUEST) RequestAnswerResult.Gone else throw translateAuthError(e)
+        }
     }
 }

@@ -300,6 +300,12 @@ private fun FollowRequestActions(
                 )
             }
         }
+        FollowRequestProgress.Gone -> Text(
+            text = stringResource(R.string.follows_request_gone),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 

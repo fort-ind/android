@@ -164,8 +164,17 @@ class PeopleViewModel(
                     }
                 }
                 .distinctUntilChanged()
-                .collectLatest { next -> reset(next) }
+                .collectLatest { next -> if (next.learnsUserOf(auth)) adoptUserId(next) else reset(next) }
         }
+    }
+
+    private fun PeopleAuth.learnsUserOf(previous: PeopleAuth): Boolean =
+        this is PeopleAuth.SignedIn && previous is PeopleAuth.SignedIn &&
+            previous.token == token && previous.userId == null && userId != null
+
+    private fun adoptUserId(next: PeopleAuth) {
+        auth = next
+        _uiState.update { it.copy(myUserId = (next as? PeopleAuth.SignedIn)?.userId) }
     }
 
     private fun reset(next: PeopleAuth) {

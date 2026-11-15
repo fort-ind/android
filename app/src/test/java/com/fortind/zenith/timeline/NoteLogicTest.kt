@@ -27,6 +27,15 @@ class NoteLogicTest {
     }
 
     @Test
+    fun mergingChronologicallyKeepsRepliesOldestFirstByTime() {
+        val existing = listOf(testNote("n1"), testNote("n9"))
+        val merged = mergeChronological(existing, listOf(testNote("n2"), testNote("n3"), testNote("n9")))
+
+        assertEquals(listOf("n1", "n2", "n3", "n9"), merged.map { it.id })
+        assertSame(existing, mergeChronological(existing, listOf(testNote("n9"))))
+    }
+
+    @Test
     fun mappingReachesRenotesAndReplies() {
         val target = testNote("t1", renoteCount = 0)
         val items = listOf(

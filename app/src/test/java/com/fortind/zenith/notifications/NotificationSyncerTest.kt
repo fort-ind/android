@@ -69,6 +69,24 @@ class NotificationSyncerTest {
     }
 
     @Test
+    fun aFailedUnreadCountKeepsTheNotificationsForTheRetry() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 1_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L), testNotification("1", createdAt = 1_000L))
+        f.api.unread = 1
+        f.api.unreadFailure = IOException("offline")
+
+        assertEquals(SyncOutcome.Retry, f.syncer.sync())
+        assertEquals(1_000L, f.syncStore.lastSeen)
+        assertTrue(f.notifier.shown.isEmpty())
+
+        f.api.unreadFailure = null
+        assertEquals(SyncOutcome.Done, f.syncer.sync())
+        assertEquals(listOf("2"), f.notifier.shown.map { it.id })
+        assertEquals(2_000L, f.syncStore.lastSeen)
+    }
+
+    @Test
     fun nothingIsShownWhenEverythingWasAlreadyReadElsewhere() = runTest {
         val f = Fixture()
         f.syncStore.lastSeen = 1_000L

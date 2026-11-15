@@ -4,6 +4,7 @@ import com.fortind.zenith.account.AccountSettings
 import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.TokenStore
 import com.fortind.zenith.auth.UserApi
+import com.fortind.zenith.people.RequestAnswerResult
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
@@ -90,16 +91,24 @@ class FakeNotificationsApi : NotificationsApi {
         return matching.drop(start).take(limit)
     }
 
-    override suspend fun unreadCount(token: String): Int = unread
+    @Volatile var unreadFailure: IOException? = null
+
+    override suspend fun unreadCount(token: String): Int {
+        unreadFailure?.let { throw it }
+        return unread
+    }
 
     override suspend fun markAllAsRead(token: String) {
         markReadFailure?.let { throw it }
         markAllReadTokens += token
     }
 
-    override suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean) {
+    var followResult = RequestAnswerResult.Done
+
+    override suspend fun respondToFollowRequest(token: String, userId: String, accept: Boolean): RequestAnswerResult {
         followFailure?.let { throw it }
         followResponses += userId to accept
+        return followResult
     }
 }
 

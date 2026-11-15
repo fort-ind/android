@@ -1460,6 +1460,73 @@ class FeedViewModelTest {
     }
 
     @Test
+    fun repliesComeOldestFirstAndPageForwardFromTheLastServerReply() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = (10..40).map { testNote("n$it") }
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+        f.viewModel.noteCreated(testNote("n99", user = testUser("me"), reply = testNote("n5")))
+        f.viewModel.loadMoreReplies()
+        val thread = f.viewModel.uiState.first { it.thread?.repliesEnd == true }.thread!!
+
+        assertEquals(listOf("n5" to null, "n5" to "n39"), f.api.childrenCalls.toList())
+        assertEquals((10..40).map { "n$it" } + "n99", thread.replies.map { it.id })
+    }
+
+    @Test
+    fun learningWhoYouAreKeepsTheOpenThreadAndTheTimeline() = runTest {
+        val f = fixture(offline = true)
+        f.api.timelines[TimelineKind.Home] = page(5, 4)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = listOf(testNote("n6"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+        val homeCalls = f.api.calls.size
+
+        f.userApi.failure = null
+        f.now += FeedViewModel.UNKNOWN_USER_RETRY_MS
+        f.viewModel.setActive(true)
+        val state = f.viewModel.uiState.first { it.myUserId != null }
+
+        assertEquals("n5", state.thread?.noteId)
+        assertEquals(listOf("n6"), state.thread?.replies?.map { it.id })
+        assertEquals(listOf("n5", "n4"), state.timeline(TimelineKind.Home).items.map { it.id })
+        assertEquals(homeCalls, f.api.calls.size)
+    }
+
+    @Test
+    fun aNewLoginReopensTheOpenThread() = runTest {
+        val f = fixture()
+        f.api.timelines[TimelineKind.Home] = page(5)
+        f.api.notes["n5"] = testNote("n5")
+        f.api.replies = listOf(testNote("n6"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n5")
+        f.viewModel.uiState.first { it.thread?.loading == false }
+
+        f.session.signIn("token2")
+        val thread = f.viewModel.uiState.first { it.thread?.loading == false && f.api.childrenCalls.size == 2 }.thread!!
+
+        assertEquals("n5", thread.noteId)
+        assertEquals(listOf("n6"), thread.replies.map { it.id })
+    }
+
+    @Test
+    fun aMissingPermissionOnTheFirstPageStopsTheSpinner() = runTest {
+        val f = fixture()
+        f.api.failures[TimelineKind.Home] = MissingPermissionException()
+
+        val state = f.viewModel.uiState.first { it.needsPermission && it.timeline(TimelineKind.Home).status != TimelineStatus.Loading }
+
+        assertEquals(TimelineStatus.Failed, state.timeline(TimelineKind.Home).status)
+    }
+
+    @Test
     fun aFailedRepliesPageKeepsTheThreadOpenAndRetries() = runTest {
         val f = fixture()
         f.api.timelines[TimelineKind.Home] = page(5)
@@ -1568,7 +1635,7 @@ class FeedViewModelTest {
         f.viewModel.noteCreated(testNote("n9", user = testUser("me"), reply = testNote("n6")))
 
         val thread = f.viewModel.uiState.value.thread!!
-        assertEquals(listOf("n9", "n7"), thread.branches.getValue("n6").children.map { it.id })
+        assertEquals(listOf("n7", "n9"), thread.branches.getValue("n6").children.map { it.id })
         assertEquals(listOf("n6"), thread.replies.map { it.id })
     }
 

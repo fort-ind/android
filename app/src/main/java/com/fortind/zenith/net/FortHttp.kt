@@ -87,8 +87,13 @@ class FortHttp(
     private fun readErrorBody(connection: HttpURLConnection): String? = try {
         connection.errorStream?.bufferedReader()?.use { reader ->
             val buffer = CharArray(MAX_ERROR_BODY_CHARS)
-            val read = reader.read(buffer)
-            if (read <= 0) null else String(buffer, 0, read)
+            var filled = 0
+            while (filled < buffer.size) {
+                val read = reader.read(buffer, filled, buffer.size - filled)
+                if (read < 0) break
+                filled += read
+            }
+            if (filled == 0) null else String(buffer, 0, filled)
         }
     } catch (_: IOException) {
         null

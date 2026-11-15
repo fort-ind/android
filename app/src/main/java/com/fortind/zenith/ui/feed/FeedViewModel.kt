@@ -50,6 +50,7 @@ import com.fortind.zenith.timeline.evictSecondary
 import com.fortind.zenith.timeline.hasVoted
 import com.fortind.zenith.timeline.isRenoteOf
 import com.fortind.zenith.timeline.mapNote
+import com.fortind.zenith.timeline.mergeChronological
 import com.fortind.zenith.timeline.mergeNewer
 import com.fortind.zenith.timeline.mergeOlder
 import com.fortind.zenith.timeline.trimNewest
@@ -68,6 +69,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -147,6 +149,7 @@ class FeedViewModel(
     private val listJobs = HashMap<NoteListKey, Job>()
     private val listsUsed = ArrayList<NoteListKey>()
     private var auth: FeedAuth = FeedAuth.Pending
+    private var authGeneration = 0
     private val patternGuard = PatternGuard()
     private var muteFilter = WordMuteFilter(WordMutes(), null, patternGuard)
     private var settingsReadAt = clock()
@@ -158,10 +161,21 @@ class FeedViewModel(
     init {
         instance.ensureFresh()
         viewModelScope.launch {
-            authStates().collectLatest { next ->
+            var serving: Job? = null
+            authStates().collect { next ->
+                val previous = auth
+                if (next is FeedAuth.SignedIn && next.learnsUserOf(previous)) {
+                    adoptUserId(next)
+                    return@collect
+                }
+                serving?.cancelAndJoin()
+                val openThreadId = _uiState.value.thread?.noteId
                 auth = next
                 reset(next)
-                if (next != FeedAuth.Pending) serve()
+                if (next != FeedAuth.Pending) {
+                    openThreadId?.let(::openThread)
+                    serving = launch { serve() }
+                }
             }
         }
         viewModelScope.launch { windows.fromOtherWindows.collect(::applyFromOtherWindow) }
@@ -223,11 +237,11 @@ class FeedViewModel(
         if (timeline.status != TimelineStatus.Ready || timeline.loadingMore || timeline.endReached || timeline.refreshing) return
         if (timeline.loadMoreFailed && !force) return
         updateTimeline(kind) { it.copy(loadingMore = true, loadMoreFailed = false) }
-        val currentAuth = auth
+        val generation = authGeneration
         loadJobs[kind] = viewModelScope.launch {
             try {
                 val page = fetchTimeline(kind, untilId = timeline.cursor ?: last.id)
-                if (auth != currentAuth) return@launch
+                if (authGeneration != generation) return@launch
                 updateTimeline(kind) {
                     val merged = mergeOlder(it.items, page.notes)
                     val windowed = trimNewest(merged, MAX_LOADED)
@@ -243,7 +257,8 @@ class FeedViewModel(
                     )
                 }
             } catch (e: IOException) {
-                handleFailure(e) { updateTimeline(kind) { it.copy(loadingMore = false, loadMoreFailed = true) } }
+                if (authGeneration == generation) updateTimeline(kind) { it.copy(loadingMore = false, loadMoreFailed = true) }
+                handleFailure(e) {}
             }
         }
     }
@@ -253,7 +268,7 @@ class FeedViewModel(
         val head = timeline.items.firstOrNull() ?: return
         if (!timeline.headTrimmed || timeline.loadingNewer || timeline.status != TimelineStatus.Ready || timeline.refreshing) return
         updateTimeline(kind) { it.copy(loadingNewer = true, loadNewerFailed = false) }
-        val currentAuth = auth
+        val generation = authGeneration
         val chosen = collection.value
         viewModelScope.launch {
             try {
@@ -275,7 +290,7 @@ class FeedViewModel(
                         break
                     }
                 }
-                if (auth != currentAuth || collection.value != chosen) return@launch
+                if (authGeneration != generation || collection.value != chosen) return@launch
                 updateTimeline(kind) { current ->
                     if (!current.headTrimmed || current.items.firstOrNull()?.id != head.id) return@updateTimeline current.copy(loadingNewer = false)
                     val merged = mergeNewer(current.items, kept)
@@ -292,7 +307,8 @@ class FeedViewModel(
                     )
                 }
             } catch (e: IOException) {
-                handleFailure(e) { updateTimeline(kind) { it.copy(loadingNewer = false, loadNewerFailed = true) } }
+                if (authGeneration == generation) updateTimeline(kind) { it.copy(loadingNewer = false, loadNewerFailed = true) }
+                handleFailure(e) {}
             }
         }
     }
@@ -336,30 +352,31 @@ class FeedViewModel(
         val cached = threadCache[noteId]
         val seed = cached?.settled() ?: ThreadState(noteId = noteId, note = findAnywhere(noteId), loading = true)
         _uiState.update { it.copy(thread = seed.copy(loading = true, failed = false)) }
-        val currentAuth = auth
+        val generation = authGeneration
         threadJob = viewModelScope.launch {
             try {
                 coroutineScope {
                     val note = api.show(token, noteId)
                     val ancestors = if (note.reply != null) api.conversation(token, noteId, THREAD_ANCESTORS) else emptyList()
-                    val replies = api.children(token, noteId, untilId = null, limit = PAGE_SIZE)
-                    if (auth != currentAuth) return@coroutineScope
+                    val replies = api.children(token, noteId, sinceId = null, limit = PAGE_SIZE)
+                    if (authGeneration != generation) return@coroutineScope
                     val loaded = ThreadState(
                         noteId = noteId,
                         ancestors = ancestors,
                         note = note,
-                        replies = replies,
+                        replies = mergeChronological(emptyList(), replies),
                         loading = false,
                         repliesEnd = replies.size < PAGE_SIZE,
+                        repliesCursor = replies.lastOrNull()?.id,
                     )
                     threadCache[noteId] = loaded
                     _uiState.update { state -> if (state.thread?.noteId == noteId) state.copy(thread = loaded) else state }
                 }
             } catch (e: IOException) {
+                _uiState.update { state ->
+                    if (state.thread?.noteId == noteId) state.copy(thread = state.thread.copy(loading = false, failed = true)) else state
+                }
                 handleFailure(e) {
-                    _uiState.update { state ->
-                        if (state.thread?.noteId == noteId) state.copy(thread = state.thread.copy(loading = false, failed = true)) else state
-                    }
                     if (e is HttpStatusException && e.apiErrorCode == ApiErrorCodes.NO_SUCH_NOTE) _events.trySend(FeedEvent.NoteUnavailable)
                 }
             }
@@ -373,12 +390,12 @@ class FeedViewModel(
 
     fun loadMoreReplies() {
         val thread = _uiState.value.thread ?: return
-        val last = thread.replies.lastOrNull() ?: return
+        val cursor = thread.repliesCursor ?: return
         if (thread.loading || thread.repliesLoadingMore || thread.repliesEnd) return
         updateReplies(thread.noteId) { it.copy(repliesLoadingMore = true, repliesLoadMoreFailed = false) }
         viewModelScope.launch {
             val page = try {
-                api.children(token, thread.noteId, untilId = last.id, limit = PAGE_SIZE)
+                api.children(token, thread.noteId, sinceId = cursor, limit = PAGE_SIZE)
             } catch (e: IOException) {
                 handleFailure(e) {}
                 null
@@ -388,9 +405,10 @@ class FeedViewModel(
                     current.copy(repliesLoadingMore = false, repliesLoadMoreFailed = true)
                 } else {
                     current.copy(
-                        replies = mergeOlder(current.replies, page),
+                        replies = mergeChronological(current.replies, page),
                         repliesLoadingMore = false,
                         repliesEnd = page.size < PAGE_SIZE,
+                        repliesCursor = page.lastOrNull()?.id ?: cursor,
                     )
                 }
             }
@@ -409,7 +427,7 @@ class FeedViewModel(
         val thread = _uiState.value.thread ?: return
         val branch = thread.branches[parentId]
         when {
-            branch == null || branch.failed || (branch.children.isEmpty() && !branch.end && !branch.loading) -> loadBranch(thread.noteId, parentId, untilId = null)
+            branch == null || branch.failed || (branch.children.isEmpty() && !branch.end && !branch.loading) -> loadBranch(thread.noteId, parentId, sinceId = null)
             branch.loading -> Unit
             else -> updateBranch(thread.noteId, parentId) { it.copy(expanded = !it.expanded) }
         }
@@ -418,33 +436,33 @@ class FeedViewModel(
     fun loadMoreBranch(parentId: String) {
         val thread = _uiState.value.thread ?: return
         val branch = thread.branches[parentId] ?: return
-        val last = branch.children.lastOrNull() ?: return
+        val cursor = branch.cursor ?: return
         if (branch.loading || branch.loadingMore || branch.end) return
-        loadBranch(thread.noteId, parentId, untilId = last.id)
+        loadBranch(thread.noteId, parentId, sinceId = cursor)
     }
 
-    private fun loadBranch(threadId: String, parentId: String, untilId: String?) {
-        val first = untilId == null
+    private fun loadBranch(threadId: String, parentId: String, sinceId: String?) {
+        val first = sinceId == null
         updateBranch(threadId, parentId, persist = false) {
             it.copy(expanded = true, loading = first, loadingMore = !first, failed = false, moreFailed = false)
         }
         viewModelScope.launch {
             try {
-                val page = api.children(token, parentId, untilId = untilId, limit = PAGE_SIZE)
+                val page = api.children(token, parentId, sinceId = sinceId, limit = PAGE_SIZE)
                 updateBranch(threadId, parentId) {
                     it.copy(
-                        children = mergeOlder(it.children, page),
+                        children = mergeChronological(it.children, page),
                         loading = false,
                         loadingMore = false,
                         end = page.size < PAGE_SIZE,
+                        cursor = page.lastOrNull()?.id ?: it.cursor,
                     )
                 }
             } catch (e: IOException) {
-                handleFailure(e) {
-                    updateBranch(threadId, parentId) {
-                        it.copy(loading = false, loadingMore = false, failed = first, moreFailed = !first)
-                    }
+                updateBranch(threadId, parentId) {
+                    it.copy(loading = false, loadingMore = false, failed = first, moreFailed = !first)
                 }
+                handleFailure(e) {}
             }
         }
     }
@@ -788,11 +806,11 @@ class FeedViewModel(
                 loadMoreFailed = false,
             )
         }
-        val currentAuth = auth
+        val generation = authGeneration
         listJobs[key] = viewModelScope.launch {
             try {
                 val page = source.page(token, key, cursor = null, limit = PAGE_SIZE)
-                if (auth != currentAuth) return@launch
+                if (authGeneration != generation) return@launch
                 updateList(key) {
                     TimelineState(items = page.notes, status = TimelineStatus.Ready, endReached = page.notes.isEmpty(), cursor = page.nextCursor)
                 }
@@ -812,11 +830,11 @@ class FeedViewModel(
         val cursor = state.cursor ?: return
         if (state.status != TimelineStatus.Ready || state.loadingMore || state.refreshing || state.endReached) return
         updateList(key) { it.copy(loadingMore = true, loadMoreFailed = false) }
-        val currentAuth = auth
+        val generation = authGeneration
         listJobs[key] = viewModelScope.launch {
             try {
                 val page = source.page(token, key, cursor = cursor, limit = PAGE_SIZE)
-                if (auth != currentAuth) return@launch
+                if (authGeneration != generation) return@launch
                 updateList(key) {
                     it.copy(
                         items = mergeOlder(it.items, page.notes),
@@ -1096,7 +1114,17 @@ class FeedViewModel(
         }
         .distinctUntilChanged()
 
+    private fun FeedAuth.SignedIn.learnsUserOf(previous: FeedAuth): Boolean =
+        previous is FeedAuth.SignedIn && previous.token == token && previous.userId == null && userId != null
+
+    private fun adoptUserId(next: FeedAuth.SignedIn) {
+        auth = next
+        muteFilter = WordMuteFilter(muteFilter.mutes, next.userId, patternGuard)
+        _uiState.update { it.copy(myUserId = next.userId) }
+    }
+
     private fun reset(next: FeedAuth) {
+        authGeneration++
         loadJobs.values.forEach { it.cancel() }
         loadJobs.clear()
         threadJob?.cancel()
@@ -1278,16 +1306,17 @@ class FeedViewModel(
         if (kind == TimelineKind.Lists && collection.value == null) return
         loadJobs[kind]?.cancel()
         updateTimeline(kind) { it.copy(status = TimelineStatus.Loading, loadMoreFailed = false) }
-        val currentAuth = auth
+        val generation = authGeneration
         loadJobs[kind] = viewModelScope.launch {
             try {
                 val page = fetchTimeline(kind, untilId = null)
-                if (auth != currentAuth) return@launch
+                if (authGeneration != generation) return@launch
                 updateTimeline(kind) { page.toState() }
             } catch (_: TimelineUnavailableException) {
                 updateTimeline(kind) { it.copy(status = TimelineStatus.Unavailable) }
             } catch (e: IOException) {
-                handleFailure(e) { updateTimeline(kind) { it.copy(status = TimelineStatus.Failed) } }
+                if (authGeneration == generation) updateTimeline(kind) { it.copy(status = TimelineStatus.Failed) }
+                handleFailure(e) {}
             }
         }
     }
@@ -1295,11 +1324,11 @@ class FeedViewModel(
     private fun reload(kind: TimelineKind) {
         loadJobs[kind]?.cancel()
         updateTimeline(kind) { it.copy(refreshing = true) }
-        val currentAuth = auth
+        val generation = authGeneration
         loadJobs[kind] = viewModelScope.launch {
             try {
                 val page = fetchTimeline(kind, untilId = null)
-                if (auth != currentAuth) return@launch
+                if (authGeneration != generation) return@launch
                 updateTimeline(kind) { page.toState() }
                 _events.trySend(FeedEvent.ScrollToTop(kind))
             } catch (e: IOException) {
@@ -1318,19 +1347,19 @@ class FeedViewModel(
         val newest = (timeline.pending + timeline.items).maxWithOrNull(compareBy<Note> { it.createdAtMillis }.thenBy { it.id })
             ?: return reload(kind)
         if (toTop) updateTimeline(kind) { it.copy(refreshing = true) }
-        val currentAuth = auth
+        val generation = authGeneration
         val chosen = collection.value
         viewModelScope.launch {
             try {
                 val page = rawTimeline(kind, untilId = null, sinceId = newest.id, limit = CATCH_UP_LIMIT)
-                if (auth != currentAuth || collection.value != chosen) return@launch
+                if (authGeneration != generation || collection.value != chosen) return@launch
                 val overflow = page.size >= CATCH_UP_LIMIT
                 if (toTop && overflow) {
                     reload(kind)
                     return@launch
                 }
                 val muted = applyMutes(page)
-                if (auth != currentAuth) return@launch
+                if (authGeneration != generation) return@launch
                 updateTimeline(kind) { current ->
                     val softMuted = current.softMuted + muted.softMuted
                     if (toTop || (atTop[kind] == true && !current.gap)) {

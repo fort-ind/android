@@ -14,6 +14,15 @@ fun mergeOlder(existing: List<Note>, incoming: List<Note>): List<Note> {
     return if (fresh.isEmpty()) existing else existing + fresh
 }
 
+val OldestFirst: Comparator<Note> = compareBy<Note> { it.createdAtMillis }.thenBy { it.id }
+
+fun mergeChronological(existing: List<Note>, incoming: List<Note>): List<Note> {
+    if (incoming.isEmpty()) return existing
+    val known = existing.mapTo(HashSet()) { it.id }
+    val fresh = incoming.filter { known.add(it.id) }
+    return if (fresh.isEmpty()) existing else (existing + fresh).sortedWith(OldestFirst)
+}
+
 fun trimNewest(items: List<Note>, max: Int): List<Note> =
     if (items.size <= max) items else items.subList(items.size - max, items.size).toList()
 

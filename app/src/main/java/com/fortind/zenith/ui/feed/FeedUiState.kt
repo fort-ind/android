@@ -6,7 +6,7 @@ import com.fortind.zenith.timeline.NoteCollection
 import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.timeline.findNote
-import com.fortind.zenith.timeline.mergeNewer
+import com.fortind.zenith.timeline.mergeChronological
 
 enum class TimelineStatus { Idle, Loading, Ready, Failed, Unavailable, SignInRequired }
 
@@ -46,6 +46,7 @@ data class ReplyBranch(
     val failed: Boolean = false,
     val moreFailed: Boolean = false,
     val end: Boolean = false,
+    val cursor: String? = null,
 )
 
 data class ThreadState(
@@ -58,6 +59,7 @@ data class ThreadState(
     val repliesLoadingMore: Boolean = false,
     val repliesEnd: Boolean = false,
     val repliesLoadMoreFailed: Boolean = false,
+    val repliesCursor: String? = null,
     val branches: Map<String, ReplyBranch> = emptyMap(),
     val renotes: ThreadPeople = ThreadPeople(),
     val reactions: Map<String?, ThreadPeople> = emptyMap(),
@@ -65,9 +67,9 @@ data class ThreadState(
     val notes: List<Note> get() = ancestors + listOfNotNull(note) + replies + branches.values.flatMap { it.children }
 
     fun withReply(reply: Note, parentId: String): ThreadState = when {
-        parentId == noteId -> copy(replies = mergeNewer(replies, listOf(reply)))
+        parentId == noteId -> copy(replies = mergeChronological(replies, listOf(reply)))
         parentId in branches -> copy(
-            branches = branches + (parentId to branches.getValue(parentId).let { it.copy(children = mergeNewer(it.children, listOf(reply)), expanded = true) }),
+            branches = branches + (parentId to branches.getValue(parentId).let { it.copy(children = mergeChronological(it.children, listOf(reply)), expanded = true) }),
         )
         else -> this
     }

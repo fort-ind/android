@@ -82,6 +82,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -235,6 +238,7 @@ class ComposerViewModel(
     private val remindAltText: Boolean = true,
     private val mentionDebounceMs: Long = MENTION_DEBOUNCE_MS,
     private val cleanupScope: CoroutineScope? = null,
+    private val resolveUsers: suspend (String?, List<String>) -> List<NoteUser> = { _, _ -> emptyList() },
 ) : ViewModel() {
 
     val text = TextFieldState()
@@ -537,6 +541,7 @@ class ComposerViewModel(
             removedRecipients.clear()
             recipientQuery.clearText()
             _recipientResults.value = emptyList()
+            val seedRecipients = seed?.let { seedRecipientIds(target, it) }.orEmpty()
             seedPollChoices(draft.poll?.choices.orEmpty())
             text.setTextAndPlaceCursorAtEnd(draft.text)
             if (shared?.caretAtStart == true) text.edit { selection = TextRange.Zero }
@@ -548,7 +553,7 @@ class ComposerViewModel(
                 visibility = draft.visibility,
                 localOnly = draft.localOnly,
                 cwEnabled = draft.cw != null,
-                visibleUserIds = recipients(target, note),
+                visibleUserIds = (recipients(target, note) + seedRecipients).distinct(),
                 textLimit = limits?.maxNoteTextLength ?: DEFAULT_MAX_NOTE_TEXT_LENGTH,
                 cwLimit = limits?.maxCwLength ?: DEFAULT_MAX_CW_LENGTH,
                 attachments = attachments,
@@ -564,6 +569,33 @@ class ComposerViewModel(
             _uiState.value = opened.copy(dropsEndedPoll = opened.pollHasEnded(clock()))
             if (shared?.refusedFiles == true) _uiState.update { it?.copy(failure = ComposerFailure.UnsupportedShare) }
             shared?.uris?.takeIf { it.isNotEmpty() }?.let { addShared(it) }
+            if (seedRecipients.isNotEmpty()) showSeedRecipients(target, seedRecipients)
+        }
+    }
+
+    private fun seedRecipientIds(target: ComposerTarget, seed: Note): List<String> {
+        if (seed.visibility != Visibility.Specified || target is ComposerTarget.Reply) return emptyList()
+        val me = myUserId
+        return seed.visibleUserIds.filter { it != me }.distinct()
+    }
+
+    private suspend fun showSeedRecipients(target: ComposerTarget, ids: List<String>) {
+        val resolved = try {
+            resolveUsers(session.token(), ids)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: IOException) {
+            emptyList()
+        }
+        if (resolved.isEmpty()) return
+        _uiState.update { state ->
+            if (state == null || state.target != target) return@update state
+            val shown = state.recipients.mapTo(HashSet()) { it.id }
+            val added = resolved.filter { it.id in ids && shown.add(it.id) }
+            state.copy(
+                recipients = state.recipients + added,
+                visibleUserIds = state.visibleUserIds - added.mapTo(HashSet()) { it.id },
+            )
         }
     }
 
@@ -1032,6 +1064,19 @@ class ComposerViewModel(
                     people = app.container.suggestionsApi,
                     resolveHandle = { token, username, host -> app.container.usersApi.showByHandle(token, username, host).user },
                     cleanupScope = app.container.scope,
+                    resolveUsers = { token, ids ->
+                        coroutineScope {
+                            ids.map { id ->
+                                async {
+                                    try {
+                                        app.container.usersApi.show(token, id).user
+                                    } catch (_: IOException) {
+                                        null
+                                    }
+                                }
+                            }.awaitAll().filterNotNull()
+                        }
+                    },
                 )
             }
         }

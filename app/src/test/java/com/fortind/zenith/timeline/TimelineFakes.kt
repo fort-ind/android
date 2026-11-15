@@ -74,6 +74,7 @@ class FakeNotesApi : NotesApi {
     var ancestors: List<Note> = emptyList()
     var replies: List<Note> = emptyList()
     val branchReplies = mutableMapOf<String, List<Note>>()
+    val childrenCalls = CopyOnWriteArrayList<Pair<String, String?>>()
     var branchFailure: IOException? = null
     var moreRepliesFailure: IOException? = null
     var reactFailure: IOException? = null
@@ -117,15 +118,16 @@ class FakeNotesApi : NotesApi {
 
     override suspend fun conversation(token: String?, noteId: String, limit: Int): List<Note> = ancestors
 
-    override suspend fun children(token: String?, noteId: String, untilId: String?, limit: Int): List<Note> {
+    override suspend fun children(token: String?, noteId: String, sinceId: String?, limit: Int): List<Note> {
+        childrenCalls += noteId to sinceId
         branchReplies[noteId]?.let { branch ->
             branchFailure?.let { throw it }
-            val older = if (untilId == null) branch else branch.dropWhile { it.id != untilId }.drop(1)
-            return older.take(limit)
+            val newer = if (sinceId == null) branch else branch.dropWhile { it.id != sinceId }.drop(1)
+            return newer.take(limit)
         }
-        if (untilId != null) moreRepliesFailure?.let { throw it }
-        val older = if (untilId == null) replies else replies.dropWhile { it.id != untilId }.drop(1)
-        return older.take(limit)
+        if (sinceId != null) moreRepliesFailure?.let { throw it }
+        val newer = if (sinceId == null) replies else replies.dropWhile { it.id != sinceId }.drop(1)
+        return newer.take(limit)
     }
 
     override suspend fun renotedByMe(token: String, noteId: String, userId: String): Boolean {

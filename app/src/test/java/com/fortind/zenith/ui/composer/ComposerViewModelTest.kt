@@ -216,6 +216,7 @@ class ComposerViewModelTest {
 
     private class Fixture(maxText: Int, compress: Boolean, nowMillis: Long, remindAltText: Boolean) {
         val handles = HashMap<String, NoteUser>()
+        val users = HashMap<String, NoteUser>()
         val suggestionsApi = FakeSuggestionsApi()
         val engine = SuggestionEngine(suggestionsApi, { null }, { emptyList() })
         val session = UserSessionService(FakeTokenStore("token"), FakeUserApi())
@@ -234,6 +235,7 @@ class ComposerViewModelTest {
             resolveHandle = { _, username, _ -> handles[username] },
             remindAltText = remindAltText,
             mentionDebounceMs = 0,
+            resolveUsers = { _, ids -> ids.mapNotNull { users[it] } },
         )
     }
 
@@ -1112,6 +1114,23 @@ class ComposerViewModelTest {
         assertTrue(state.localOnly)
         assertEquals("old1", state.attachments.single().remote!!.id)
         assertTrue(f.viewModel.hasUnsavedChanges())
+    }
+
+    @Test
+    fun redraftingADirectNoteKeepsItsRecipients() = runTest {
+        val f = fixture()
+        f.users["u2"] = testUser("u2")
+
+        f.viewModel.redraft(deletedPost().copy(visibility = Visibility.Specified, localOnly = false, visibleUserIds = listOf("u2", "u3")))
+        val state = f.viewModel.uiState.first { it?.recipients?.isNotEmpty() == true }!!
+
+        assertEquals(Visibility.Specified, state.visibility)
+        assertEquals(listOf("u2"), state.recipients.map { it.id })
+        assertEquals(listOf("u3"), state.visibleUserIds)
+
+        f.viewModel.submit()
+        f.viewModel.awaitSettled()
+        assertEquals(setOf("u2", "u3"), f.api.createCalls.single().visibleUserIds.toSet())
     }
 
     @Test

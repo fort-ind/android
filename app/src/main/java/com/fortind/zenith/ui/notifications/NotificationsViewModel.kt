@@ -15,6 +15,7 @@ import com.fortind.zenith.notifications.NotificationStream
 import com.fortind.zenith.notifications.NotificationStreamEvent
 import com.fortind.zenith.notifications.NotificationType
 import com.fortind.zenith.notifications.NotificationsApi
+import com.fortind.zenith.people.RequestAnswerResult
 import java.io.IOException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -46,7 +47,7 @@ enum class NotificationFilter(val types: List<NotificationType>?) {
     fun accepts(type: NotificationType): Boolean = types == null || type in types
 }
 
-enum class FollowRequestProgress { Accepting, Rejecting, Accepted, Rejected }
+enum class FollowRequestProgress { Accepting, Rejecting, Accepted, Rejected, Gone }
 
 sealed interface NotificationsUiState {
     data object Loading : NotificationsUiState
@@ -158,7 +159,7 @@ class NotificationsViewModel(
                         state.copy(
                             items = state.items + page.filter { it.id !in known },
                             loadingMore = false,
-                            endReached = page.size < PAGE_SIZE,
+                            endReached = page.isEmpty(),
                         )
                     } else {
                         state
@@ -193,10 +194,14 @@ class NotificationsViewModel(
         )
         viewModelScope.launch {
             try {
-                api.respondToFollowRequest(token, actor.id, accept)
+                val result = api.respondToFollowRequest(token, actor.id, accept)
                 setFollowRequestProgress(
                     notification.id,
-                    if (accept) FollowRequestProgress.Accepted else FollowRequestProgress.Rejected,
+                    when {
+                        result == RequestAnswerResult.Gone -> FollowRequestProgress.Gone
+                        accept -> FollowRequestProgress.Accepted
+                        else -> FollowRequestProgress.Rejected
+                    },
                 )
             } catch (e: IOException) {
                 setFollowRequestProgress(notification.id, null)
@@ -257,7 +262,7 @@ class NotificationsViewModel(
                             loading = false,
                             loadingMore = false,
                             failed = false,
-                            endReached = page.size < PAGE_SIZE,
+                            endReached = page.isEmpty(),
                         )
                     } else {
                         state

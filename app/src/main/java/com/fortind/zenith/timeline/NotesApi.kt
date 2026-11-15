@@ -56,7 +56,7 @@ interface NotesApi {
 
     suspend fun conversation(token: String?, noteId: String, limit: Int): List<Note>
 
-    suspend fun children(token: String?, noteId: String, untilId: String?, limit: Int): List<Note>
+    suspend fun children(token: String?, noteId: String, sinceId: String?, limit: Int): List<Note>
 
     suspend fun renotedByMe(token: String, noteId: String, userId: String): Boolean
 
@@ -183,9 +183,12 @@ class HttpNotesApi(private val http: FortHttp) : NotesApi {
     override suspend fun conversation(token: String?, noteId: String, limit: Int): List<Note> =
         notes("/api/notes/conversation", request(token).put("noteId", noteId).put("limit", limit)).asReversed()
 
-    override suspend fun children(token: String?, noteId: String, untilId: String?, limit: Int): List<Note> {
-        val body = request(token).put("noteId", noteId).put("limit", limit)
-        untilId?.let { body.put("untilId", it) }
+    override suspend fun children(token: String?, noteId: String, sinceId: String?, limit: Int): List<Note> {
+        val body = request(token)
+            .put("noteId", noteId)
+            .put("limit", limit)
+            .put("sinceId", sinceId ?: noteId)
+            .put("showQuotes", false)
         return notes("/api/notes/children", body)
     }
 

@@ -54,7 +54,7 @@ fun defaultNetworkOf(context: Context, scope: CoroutineScope): Flow<NetworkId?> 
         false
     }
     if (!registered) trySend(NetworkId.Unmonitored)
-    awaitClose { if (registered) connectivity?.unregisterNetworkCallback(callback) }
+    awaitClose { if (registered) connectivity.unregisterNetworkCallback(callback) }
 }.distinctUntilChanged().shareIn(scope, SharingStarted.WhileSubscribed(NETWORK_STOP_TIMEOUT_MS, replayExpirationMillis = 0), replay = 1)
 
 private const val NETWORK_STOP_TIMEOUT_MS = 5_000L

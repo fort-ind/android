@@ -36,10 +36,10 @@ class NotificationSyncer(
         val token = session.token() ?: return SyncOutcome.Done
         return try {
             val page = api.fetch(token, null, null, SYNC_PAGE_SIZE)
-            val baseline = syncStore.lastSeenMillis()
             val newest = page.maxOfOrNull { it.createdAtMillis } ?: return SyncOutcome.Done
-            syncStore.advanceLastSeenMillis(newest)
             val unread = api.unreadCount(token)
+            val baseline = syncStore.lastSeenMillis()
+            syncStore.advanceLastSeenMillis(newest)
             if (unread == 0) notifier.clearAll()
             if (baseline == 0L || foreground.inForeground) return SyncOutcome.Done
             val toShow = page

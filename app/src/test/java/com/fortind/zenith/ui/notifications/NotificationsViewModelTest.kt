@@ -12,6 +12,7 @@ import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.notifications.NotificationStreamEvent
 import com.fortind.zenith.notifications.NotificationType
 import com.fortind.zenith.notifications.testNotification
+import com.fortind.zenith.people.RequestAnswerResult
 import java.io.IOException
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -80,7 +82,21 @@ class NotificationsViewModelTest {
         f.viewModel.unreadCount.first { it == 2 }
 
         assertEquals(listOf("3", "2", "1"), ready.items.map { it.id })
-        assertTrue(ready.endReached)
+        assertFalse(ready.endReached)
+    }
+
+    @Test
+    fun onlyAnEmptyPageEndsTheList() = runTest {
+        val f = fixture()
+        f.api.items = listOf(testNotification("3"), testNotification("2"))
+        f.session.restore()
+        val first = f.viewModel.awaitReady()
+        assertFalse(first.endReached)
+
+        f.viewModel.loadMore()
+        val ended = f.viewModel.awaitReady { !it.loadingMore && it.endReached }
+
+        assertEquals(listOf("3", "2"), ended.items.map { it.id })
     }
 
     @Test
@@ -123,7 +139,10 @@ class NotificationsViewModelTest {
         val second = f.viewModel.awaitReady { !it.loadingMore && it.items.size > NotificationsViewModel.PAGE_SIZE }
 
         assertEquals(all.map { it.id }, second.items.map { it.id })
-        assertTrue(second.endReached)
+        assertFalse(second.endReached)
+
+        f.viewModel.loadMore()
+        assertTrue(f.viewModel.awaitReady { !it.loadingMore && it.endReached }.endReached)
     }
 
     @Test
@@ -200,6 +219,21 @@ class NotificationsViewModelTest {
 
         assertEquals(FollowRequestProgress.Accepted, ready.followRequests[request.id])
         assertEquals(listOf("actor-1" to true), f.api.followResponses.toList())
+    }
+
+    @Test
+    fun aFollowRequestHandledElsewhereShowsNoLongerPending() = runTest {
+        val f = fixture()
+        val request = testNotification("1", NotificationType.FollowRequest)
+        f.api.items = listOf(request)
+        f.api.followResult = RequestAnswerResult.Gone
+        f.session.restore()
+        f.viewModel.awaitReady()
+
+        f.viewModel.respondToFollowRequest(request, accept = true)
+        val ready = f.viewModel.awaitReady { it.followRequests[request.id] == FollowRequestProgress.Gone }
+
+        assertEquals(FollowRequestProgress.Gone, ready.followRequests[request.id])
     }
 
     @Test
