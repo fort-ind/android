@@ -3,6 +3,7 @@
 package com.fortind.zenith.ui.social
 
 import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.shortcuts.LauncherShortcut
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filter
@@ -312,9 +313,11 @@ fun SocialHost(
             listStates = listStates,
             callbacks = noteCallbacks,
             startNewPost = {
-                when {
-                    !signedIn -> feedViewModel.promptSignIn()
-                    !composerWindows.open(ComposerWindowTarget.NewPost) -> composerViewModel.open(ComposerTarget.NewPost, null)
+                if (!signedIn) {
+                    feedViewModel.promptSignIn()
+                } else {
+                    container.launcherShortcuts.reportUsed(LauncherShortcut.NEW_POST.id)
+                    if (!composerWindows.open(ComposerWindowTarget.NewPost)) composerViewModel.open(ComposerTarget.NewPost, null)
                 }
             },
             people = peopleViewModel,

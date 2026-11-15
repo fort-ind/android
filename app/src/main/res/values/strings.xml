@@ -941,4 +941,20 @@
     <string name="widget_error_open_app">Open app</string>
     <string name="widget_error_retry_description">we cant load shortcuts :( try launching fort.android to fix it</string>
     <string name="widget_error_fallback">Shortcuts can\'t be shown right now. Tap to open fort.android.</string>
+    <string name="shortcut_new_post_short">New post</string>
+    <string name="shortcut_new_post_long">Write a new post</string>
+    <string name="shortcut_search_short">Search</string>
+    <string name="shortcut_search_long">Search fort.social</string>
+    <string name="shortcut_notifications_short">Alerts</string>
+    <string name="shortcut_notifications_long">Your notifications</string>
+    <string name="shortcut_profile_short">Profile</string>
+    <string name="shortcut_profile_long">Your profile</string>
+    <string name="shortcut_games_short">Games</string>
+    <string name="shortcut_games_long">Browse games</string>
+    <string name="shortcut_sign_in_short">Sign in</string>
+    <string name="shortcut_sign_in_long">Sign in to fort.social</string>
+    <string name="shortcut_add_to_home">Add to home screen</string>
+    <string name="shortcut_pin_failed">Couldn\'t add it to your home screen</string>
+    <string name="shortcut_game_unavailable">This game isn\'t available anymore</string>
+    <string name="page_more">More options</string>
 </resources>

@@ -85,6 +85,8 @@ import com.fortind.zenith.timeline.LinkPreviewSource
 import com.fortind.zenith.timeline.NotesApi
 import com.fortind.zenith.timeline.StreamingTimelineStream
 import com.fortind.zenith.timeline.TimelineStream
+import com.fortind.zenith.shortcuts.AndroidShortcutStore
+import com.fortind.zenith.shortcuts.LauncherShortcuts
 import com.fortind.zenith.widget.WidgetUpdater
 import java.io.File
 import java.util.Locale
@@ -158,6 +160,15 @@ class AppContainer(application: Application) {
 
     val widgetUpdater = WidgetUpdater(application, sessionService, appIconSwitcher)
 
+    val launcherShortcuts = LauncherShortcuts(
+        store = AndroidShortcutStore(application),
+        sessions = sessionService.state,
+        appIcon = appIconSwitcher.selected,
+        catalog = gameCatalog,
+        scope = scope,
+        locales = { application.resources.configuration.locales.toLanguageTags() },
+    )
+
     init {
         http.onPermissionDenied = { scope.launch { sessionService.markScopesStale() } }
         scope.launch { androidNotifier.ensureChannels() }
@@ -178,6 +189,7 @@ class ZenithApplication : Application(), SingletonImageLoader.Factory, Configura
         appScope.launch { container.sessionService.restore() }
         container.notificationSyncCoordinator.start(container.scope)
         container.widgetUpdater.start(container.scope)
+        container.launcherShortcuts.start()
     }
 
     override val workManagerConfiguration: Configuration

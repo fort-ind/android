@@ -150,4 +150,68 @@ class GamesViewModelTest {
         assertEquals(emptyList<String>(), store.current)
         assertEquals(null, viewModel.favoriteNotice.value)
     }
+
+    @Test
+    fun aRequestedGameOpensOnceAndThenClears() = runTest {
+        val viewModel = GamesViewModel(ScriptedCatalog({ games }), FakeFavoritesStore(), SavedStateHandle())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.gameRequest.collect {} }
+
+        viewModel.requestGame("d")
+
+        val request = viewModel.gameRequest.value
+        assertEquals(GameRequest.Open(games[1]), request)
+        viewModel.gameRequestHandled(request!!)
+        assertEquals(null, viewModel.gameRequest.value)
+    }
+
+    @Test
+    fun aRequestedGameMissingFromTheCatalogIsReportedMissing() = runTest {
+        val viewModel = GamesViewModel(ScriptedCatalog({ games }), FakeFavoritesStore(), SavedStateHandle())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.gameRequest.collect {} }
+
+        viewModel.requestGame("gone")
+
+        assertEquals(GameRequest.Missing("gone"), viewModel.gameRequest.value)
+    }
+
+    @Test
+    fun aRequestWaitsForAFailedCatalogToLoad() = runTest {
+        val viewModel = GamesViewModel(
+            ScriptedCatalog({ throw IOException("missing") }, { games }),
+            FakeFavoritesStore(),
+            SavedStateHandle(),
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.gameRequest.collect {} }
+
+        viewModel.requestGame("a")
+        assertEquals(null, viewModel.gameRequest.value)
+
+        viewModel.retry()
+
+        assertEquals(GameRequest.Open(games[0]), viewModel.gameRequest.value)
+    }
+
+    @Test
+    fun anOlderRequestDoesNotClearANewerOne() = runTest {
+        val viewModel = GamesViewModel(ScriptedCatalog({ games }), FakeFavoritesStore(), SavedStateHandle())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.gameRequest.collect {} }
+        viewModel.requestGame("a")
+        val older = viewModel.gameRequest.value!!
+
+        viewModel.requestGame("d")
+        viewModel.gameRequestHandled(older)
+
+        assertEquals(GameRequest.Open(games[1]), viewModel.gameRequest.value)
+    }
+
+    @Test
+    fun aPendingRequestSurvivesProcessDeath() = runTest {
+        val saved = SavedStateHandle()
+        GamesViewModel(ScriptedCatalog({ games }), FakeFavoritesStore(), saved).requestGame("dl")
+
+        val restored = GamesViewModel(ScriptedCatalog({ games }), FakeFavoritesStore(), saved)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { restored.gameRequest.collect {} }
+
+        assertEquals(GameRequest.Open(games[2]), restored.gameRequest.value)
+    }
 }

@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class AppIcon(val aliasName: String) {
     DEFAULT("LauncherDefault"),
     FALL("LauncherFall"),
+    ;
+
+    val launcherClassName: String get() = "com.fortind.zenith.$aliasName"
 }
 
 interface AppIconSwitcher {
@@ -34,7 +37,7 @@ class PackageManagerAppIconSwitcher(context: Context) : AppIconSwitcher {
         _selected.value = current()
     }
 
-    private fun component(icon: AppIcon) = ComponentName(context.packageName, "com.fortind.zenith.${icon.aliasName}")
+    private fun component(icon: AppIcon) = ComponentName(context.packageName, icon.launcherClassName)
 
     private fun stateOf(icon: AppIcon) = packageManager.getComponentEnabledSetting(component(icon))
 

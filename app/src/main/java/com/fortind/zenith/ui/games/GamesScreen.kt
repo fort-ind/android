@@ -64,6 +64,7 @@ import androidx.compose.material3.adaptive.separatingVerticalHingeBounds
 import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -130,7 +131,10 @@ fun GamesScreen(
     val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
     val favoritesOnly by viewModel.favoritesOnly.collectAsStateWithLifecycle()
     val favoriteNotice by viewModel.favoriteNotice.collectAsStateWithLifecycle()
+    val gameRequest by viewModel.gameRequest.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val actions = gameActions(snackbarHostState, onToggleFavorite = viewModel::toggleFavorite)
+    val gameUnavailable = stringResource(R.string.shortcut_game_unavailable)
 
     FavoriteNoticeEffect(
         notice = favoriteNotice,
@@ -138,6 +142,19 @@ fun GamesScreen(
         onUndo = viewModel::undoFavorite,
         onShown = viewModel::favoriteNoticeShown,
     )
+    LaunchedEffect(gameRequest) {
+        when (val request = gameRequest) {
+            is GameRequest.Open -> {
+                viewModel.gameRequestHandled(request)
+                actions.open(request.game)
+            }
+            is GameRequest.Missing -> {
+                viewModel.gameRequestHandled(request)
+                snackbarHostState.showSnackbar(gameUnavailable)
+            }
+            null -> Unit
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         GamesContent(
@@ -148,7 +165,7 @@ fun GamesScreen(
             onToggleFavoritesOnly = viewModel::toggleFavoritesOnly,
             onClearFilters = viewModel::clearFilters,
             onRetry = viewModel::retry,
-            actions = gameActions(snackbarHostState, onToggleFavorite = viewModel::toggleFavorite),
+            actions = actions,
         )
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
@@ -524,6 +541,7 @@ internal fun GameItem(
             GameMenuItem(if (favorite) R.string.favorites_remove else R.string.favorites_add) {
                 closeMenuThen(actions.toggleFavorite)
             }
+            actions.pinToHome?.let { pin -> GameMenuItem(R.string.shortcut_add_to_home) { closeMenuThen(pin) } }
         }
     }
 }

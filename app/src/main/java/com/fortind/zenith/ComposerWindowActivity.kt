@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.settings.WindowSizeDp
+import com.fortind.zenith.shortcuts.LauncherShortcut
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.ui.composer.ComposerEvent
 import com.fortind.zenith.ui.composer.ComposerHost
@@ -79,6 +80,9 @@ class ComposerWindowActivity : ComponentActivity() {
         }
         openerWindowId = savedInstanceState?.getString(AppWindows.EXTRA_OPENER_WINDOW_ID)
             ?: intent.getStringExtra(AppWindows.EXTRA_OPENER_WINDOW_ID)
+        if (savedInstanceState == null && openerWindowId == null && target == ComposerWindowTarget.NewPost) {
+            container.launcherShortcuts.reportUsed(LauncherShortcut.NEW_POST.id)
+        }
         AppWindows.setWindowLabel(
             this,
             getString(if (target is ComposerWindowTarget.Edit) R.string.composer_title_edit else R.string.composer_title_new),

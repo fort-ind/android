@@ -22,8 +22,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
@@ -45,12 +48,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -60,6 +65,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.R
+import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.shortcuts.ShortcutTarget
 import com.fortind.zenith.timeline.NoteListKey
 import com.fortind.zenith.timeline.NoteSearch
 import com.fortind.zenith.timeline.SearchMedia
@@ -77,6 +84,28 @@ import com.fortind.zenith.ui.rememberTopBarReveal
 import com.fortind.zenith.ui.revealTopBarOnWheel
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
+import kotlinx.coroutines.launch
+
+private class PageMenuItem(@param:StringRes val label: Int, val onClick: () -> Unit)
+
+@Composable
+private fun PageOverflowMenu(items: List<PageMenuItem>) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    Box {
+        TooltipIconButton(label = stringResource(R.string.page_more), icon = Icons.Default.MoreVert, onClick = { open = true })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(item.label)) },
+                    onClick = {
+                        open = false
+                        item.onClick()
+                    },
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun NoteListPage(
@@ -86,6 +115,7 @@ private fun NoteListPage(
     ui: SocialUi,
     onBack: () -> Unit,
     stickyHeader: (@Composable () -> Unit)? = null,
+    menuItems: List<PageMenuItem> = emptyList(),
 ) {
     val feed by ui.feed.uiState.collectAsStateWithLifecycle()
     val timeline = feed.list(key)
@@ -130,6 +160,7 @@ private fun NoteListPage(
                 },
                 actions = {
                     TooltipIconButton(label = stringResource(R.string.feed_refresh), icon = Icons.Default.Refresh, onClick = refresh)
+                    if (menuItems.isNotEmpty()) PageOverflowMenu(menuItems)
                 },
                 windowInsets = WindowInsets(0),
                 scrollBehavior = scrollBehavior,
@@ -163,12 +194,28 @@ private fun NoteListPage(
 
 @Composable
 fun TagPage(tag: String, ui: SocialUi, onBack: () -> Unit) {
+    val shortcuts = (LocalContext.current.applicationContext as ZenithApplication).container.launcherShortcuts
+    val canPin = remember(shortcuts) { shortcuts.canPin() }
+    val scope = rememberCoroutineScope()
+    val pinFailed = stringResource(R.string.shortcut_pin_failed)
+    val menuItems = remember(canPin, tag, ui, pinFailed) {
+        if (!canPin) {
+            emptyList()
+        } else {
+            listOf(
+                PageMenuItem(R.string.shortcut_add_to_home) {
+                    if (!shortcuts.requestPin(ShortcutTarget.PinnedTag(tag))) scope.launch { ui.snackbar.showSnackbar(pinFailed) }
+                },
+            )
+        }
+    }
     NoteListPage(
         key = NoteListKey.Tag(tag),
         title = stringResource(R.string.tag_title, tag),
         emptyBody = R.string.tag_empty,
         ui = ui,
         onBack = onBack,
+        menuItems = menuItems,
     )
 }
 

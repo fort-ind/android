@@ -7,4 +7,6 @@
     <color name="widget_on_container">#FF503888</color>
     <color name="widget_accent">#FFA1048B</color>
     <color name="widget_on_accent">#FFFFFFFF</color>
+    <color name="shortcut_icon_background">@color/widget_container</color>
+    <color name="shortcut_icon_foreground">@color/widget_on_container</color>
 </resources>

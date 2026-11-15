@@ -38,6 +38,7 @@ import com.fortind.zenith.ui.nav.AppRoute
 import com.fortind.zenith.ui.nav.AppShell
 import com.fortind.zenith.ui.nav.AppShortcutDispatcher
 import com.fortind.zenith.ui.nav.CaptionBarHost
+import com.fortind.zenith.ui.nav.MainWindowIntents
 import com.fortind.zenith.ui.nav.ShellRequest
 import com.fortind.zenith.ui.nav.ShellWindow
 import com.fortind.zenith.ui.nav.destinationKeyCode
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
     private val requestedThreadId = mutableStateOf<String?>(null)
     private val requestedReplyId = mutableStateOf<String?>(null)
     private val searchRequested = mutableStateOf(false)
+    private val requestedGameUrl = mutableStateOf<String?>(null)
     private val shortcuts = AppShortcutDispatcher()
 
     private val container get() = (application as ZenithApplication).container
@@ -90,6 +92,8 @@ class MainActivity : ComponentActivity() {
                     onRequestedReplyHandled = { requestedReplyId.value = null },
                     searchRequested = searchRequested.value,
                     onSearchRequestHandled = { searchRequested.value = false },
+                    requestedGameUrl = requestedGameUrl.value,
+                    onRequestedGameHandled = { requestedGameUrl.value = null },
                     shortcuts = shortcuts,
                 )
             }
@@ -114,6 +118,7 @@ class MainActivity : ComponentActivity() {
         outState.putString(STATE_THREAD_NOTE_ID, requestedThreadId.value)
         outState.putString(STATE_REPLY_NOTE_ID, requestedReplyId.value)
         outState.putBoolean(STATE_SEARCH, searchRequested.value)
+        outState.putString(STATE_GAME_URL, requestedGameUrl.value)
     }
 
     private fun restoreRequests(state: Bundle) {
@@ -122,6 +127,7 @@ class MainActivity : ComponentActivity() {
         requestedThreadId.value = state.getString(STATE_THREAD_NOTE_ID)
         requestedReplyId.value = state.getString(STATE_REPLY_NOTE_ID)
         searchRequested.value = state.getBoolean(STATE_SEARCH)
+        requestedGameUrl.value = state.getString(STATE_GAME_URL)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -160,15 +166,16 @@ class MainActivity : ComponentActivity() {
             AppWindows.openTab(this, destination, route)
             return
         }
-        val intent = Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra(EXTRA_TAB, destination.name)
-        route?.let { intent.putExtra(EXTRA_ROUTE, it.encode()) }
-        startActivity(intent)
+        startActivity(if (route == null) MainWindowIntents.tab(this, destination) else MainWindowIntents.route(this, destination, route))
     }
 
     private fun handleIntent(intent: Intent?) {
         if (poppedOutTab == null && handleShellRequest(ShellRequest.fromName(intent?.getStringExtra(EXTRA_SHELL_REQUEST)))) return
+        val gameUrl = intent?.getStringExtra(EXTRA_GAME_URL)?.takeIf { it.isNotEmpty() && it.length <= MAX_GAME_URL_LENGTH }
+        if (poppedOutTab == null && gameUrl != null) {
+            requestedGameUrl.value = gameUrl
+            return
+        }
         val route = intent?.getStringExtra(EXTRA_ROUTE)?.let(AppRoute::decode)
         val tab = poppedOutTab ?: intent?.getStringExtra(EXTRA_TAB)?.let { name -> AppDestination.entries.firstOrNull { it.name == name } }
         if (tab != null && (route != null || poppedOutTab == null)) {
@@ -208,12 +215,15 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TAB = "com.fortind.zenith.extra.TAB"
         const val EXTRA_ROUTE = "com.fortind.zenith.extra.ROUTE"
         const val EXTRA_SHELL_REQUEST = "com.fortind.zenith.extra.SHELL_REQUEST"
+        const val EXTRA_GAME_URL = "com.fortind.zenith.extra.GAME_URL"
         const val DESTINATION_NOTIFICATIONS = "notifications"
+        private const val MAX_GAME_URL_LENGTH = 2048
         private const val STATE_DESTINATION = "requested_destination"
         private const val STATE_ROUTE = "requested_route"
         private const val STATE_THREAD_NOTE_ID = "requested_thread_note_id"
         private const val STATE_REPLY_NOTE_ID = "requested_reply_note_id"
         private const val STATE_SEARCH = "search_requested"
+        private const val STATE_GAME_URL = "requested_game_url"
     }
 }
 
@@ -230,6 +240,8 @@ fun ZenithRoot(
     onRequestedReplyHandled: () -> Unit,
     searchRequested: Boolean,
     onSearchRequestHandled: () -> Unit,
+    requestedGameUrl: String?,
+    onRequestedGameHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
     val app = LocalContext.current.applicationContext as ZenithApplication
@@ -269,6 +281,8 @@ fun ZenithRoot(
                         onRequestedReplyHandled = onRequestedReplyHandled,
                         searchRequested = searchRequested,
                         onSearchRequestHandled = onSearchRequestHandled,
+                        requestedGameUrl = requestedGameUrl,
+                        onRequestedGameHandled = onRequestedGameHandled,
                         shortcuts = shortcuts,
                     )
                 }

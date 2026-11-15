@@ -107,6 +107,9 @@ import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.settings.AppSettings
+import com.fortind.zenith.shortcuts.LauncherShortcut
+import com.fortind.zenith.shortcuts.LauncherShortcuts
+import com.fortind.zenith.shortcuts.ShortcutTarget
 import com.fortind.zenith.ui.feed.ThreadPane
 import com.fortind.zenith.ui.feed.ThreadPlaceholder
 import com.fortind.zenith.ui.feed.TooltipIconButton
@@ -165,6 +168,8 @@ fun AppShell(
     onRequestedReplyHandled: () -> Unit,
     searchRequested: Boolean,
     onSearchRequestHandled: () -> Unit,
+    requestedGameUrl: String?,
+    onRequestedGameHandled: () -> Unit,
     shortcuts: AppShortcutDispatcher,
 ) {
     val poppedOut = window.poppedOutTab != null
@@ -195,8 +200,13 @@ fun AppShell(
         else -> NavigationSuiteType.ShortNavigationBarCompact
     }
 
+    var shortcutTab by rememberSaveable { mutableStateOf(stacks.tab) }
     LaunchedEffect(requestedDestination, requestedRoute) {
         if (requestedDestination != null) {
+            shortcutTab = requestedDestination
+            val usedShortcut = (requestedRoute as? AppRoute.Tag)?.let { ShortcutTarget.tagId(it.tag) }
+                ?: LauncherShortcut.forDestination(requestedDestination)?.id
+            usedShortcut?.let(app.container.launcherShortcuts::reportUsed)
             when {
                 requestedRoute == AppRoute.Settings(openEditProfile = true) -> stacks.openEditProfile()
                 requestedRoute != null && requestedRoute != requestedDestination.root -> stacks.openIn(requestedDestination, requestedRoute)
@@ -210,6 +220,19 @@ fun AppShell(
         if (requestedThreadId != null) {
             stacks.openIn(AppDestination.HOME, AppRoute.Thread(requestedThreadId))
             onRequestedThreadHandled()
+        }
+    }
+    LaunchedEffect(requestedGameUrl) {
+        if (requestedGameUrl != null) {
+            gamesViewModel.requestGame(requestedGameUrl)
+            stacks.showRoot(AppDestination.GAMES)
+            onRequestedGameHandled()
+        }
+    }
+    LaunchedEffect(stacks.tab) {
+        if (stacks.tab != shortcutTab) {
+            shortcutTab = stacks.tab
+            LauncherShortcut.forDestination(stacks.tab)?.let { app.container.launcherShortcuts.reportUsed(it.id) }
         }
     }
     LifecycleStartEffect(notificationsViewModel) {
@@ -229,7 +252,7 @@ fun AppShell(
         onOpenPerson = { userId -> stacks.push(AppRoute.Person(userId)) },
         onOpenOwnProfile = { stacks.select(AppDestination.PROFILE) },
         onOpenHandle = { handle -> stacks.push(AppRoute.PersonHandle(handle.username, handle.host)) },
-        onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+        onOpenTag = { tag -> stacks.openTag(tag, app.container.launcherShortcuts) },
     ) { ui ->
         val feedState by ui.feed.uiState.collectAsStateWithLifecycle()
         val feedActive = stacks.tab == AppDestination.HOME || stacks.current.any { it is AppRoute.Thread }
@@ -553,6 +576,11 @@ private fun AppNavDisplay(
     }
 }
 
+private fun AppBackStacks.openTag(tag: String, shortcuts: LauncherShortcuts) {
+    shortcuts.reportUsed(ShortcutTarget.tagId(tag))
+    push(AppRoute.Tag(tag))
+}
+
 @Composable
 private fun TabNavDisplay(
     tab: AppDestination,
@@ -568,6 +596,7 @@ private fun TabNavDisplay(
 ) {
     val reduceMotion = rememberReduceMotion()
     val sharedScope = LocalSharedTransitionScope.current.takeIf { !reduceMotion }
+    val shortcuts = (LocalContext.current.applicationContext as ZenithApplication).container.launcherShortcuts
     val people by ui.people.uiState.collectAsStateWithLifecycle()
     val personLayout = rememberPersonLayout()
     val browseGames = { stacks.select(AppDestination.GAMES) }
@@ -629,7 +658,7 @@ private fun TabNavDisplay(
                             onBrowseGames = browseGames,
                             onSeeAllFavorites = seeAllFavorites,
                             onOpenSearch = { query -> stacks.push(AppRoute.Search(query)) },
-                            onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+                            onOpenTag = { tag -> stacks.openTag(tag, shortcuts) },
                             onOpenHandle = { username, host -> stacks.push(AppRoute.PersonHandle(username, host)) },
                         )
                     }
@@ -717,7 +746,7 @@ private fun TabNavDisplay(
                     EntryPage(contentPadding, null) {
                         HashtagsPage(
                             discovery = ui.discovery,
-                            onOpenTag = { tag -> stacks.push(AppRoute.Tag(tag)) },
+                            onOpenTag = { tag -> stacks.openTag(tag, shortcuts) },
                             onBack = { stacks.pop() },
                         )
                     }

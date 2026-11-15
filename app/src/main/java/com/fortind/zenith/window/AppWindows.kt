@@ -6,9 +6,11 @@ import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.Display
 import androidx.annotation.RequiresApi
 import com.fortind.zenith.ComposerWindowActivity
 import com.fortind.zenith.MainActivity
@@ -68,6 +70,17 @@ object AppWindows {
             null
         }
         opener.startActivity(intent, options)
+    }
+
+    fun outsideComposerIntent(context: Context): Intent = Intent(context, ComposerWindowActivity::class.java)
+        .setData(composerUri(ComposerWindowTarget.NewPost))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+
+    fun defaultDisplayComposerOptions(context: Context, size: WindowSizeDp?): Bundle? {
+        val display = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY) ?: return null
+        val metrics = context.createDisplayContext(display).resources.displayMetrics
+        if (metrics.widthPixels <= 0 || metrics.heightPixels <= 0) return null
+        return composerLaunchOptions(Rect(0, 0, metrics.widthPixels, metrics.heightPixels), metrics.density, size)
     }
 
     fun composerLaunchOptions(display: Rect, density: Float, size: WindowSizeDp?): Bundle {

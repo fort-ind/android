@@ -10,6 +10,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.toArgb
@@ -19,8 +20,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import com.fortind.zenith.R
+import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.games.FavoriteNotice
 import com.fortind.zenith.games.Game
+import com.fortind.zenith.shortcuts.ShortcutTarget
 import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.theme.isThemeDark
 import kotlinx.coroutines.launch
@@ -30,6 +33,7 @@ class GameActions(
     val copyLink: (Game) -> Unit,
     val share: (Game) -> Unit,
     val toggleFavorite: (Game) -> Unit,
+    val pinToHome: ((Game) -> Unit)?,
 )
 
 @Composable
@@ -41,9 +45,13 @@ fun gameActions(snackbarHostState: SnackbarHostState, onToggleFavorite: (Game) -
     val scope = rememberCoroutineScope()
     val noBrowserMessage = stringResource(R.string.login_error_no_browser)
     val linkCopiedMessage = stringResource(R.string.games_link_copied)
+    val pinFailedMessage = stringResource(R.string.shortcut_pin_failed)
+    val shortcuts = (context.applicationContext as ZenithApplication).container.launcherShortcuts
+    val canPin = remember(shortcuts) { shortcuts.canPin() }
 
     return GameActions(
         open = { game ->
+            shortcuts.reportUsed(ShortcutTarget.gameId(game.url))
             if (!launchCustomTab(context, game.url, darkTheme, toolbarColor)) {
                 scope.launch { snackbarHostState.showSnackbar(noBrowserMessage) }
             }
@@ -64,6 +72,15 @@ fun gameActions(snackbarHostState: SnackbarHostState, onToggleFavorite: (Game) -
             context.startActivity(Intent.createChooser(send, game.title))
         },
         toggleFavorite = onToggleFavorite,
+        pinToHome = if (canPin) {
+            { game ->
+                if (!shortcuts.requestPin(ShortcutTarget.PinnedGame(game))) {
+                    scope.launch { snackbarHostState.showSnackbar(pinFailedMessage) }
+                }
+            }
+        } else {
+            null
+        },
     )
 }
 

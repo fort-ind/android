@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -60,6 +61,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -76,6 +78,8 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
+import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.shortcuts.LauncherShortcut
 import com.fortind.zenith.discovery.SearchIntent
 import com.fortind.zenith.discovery.searchIntent
 import com.fortind.zenith.timeline.NoteUser
@@ -219,9 +223,13 @@ fun SearchOverlay(
     val content = @Composable {
         SearchContent(text, signedIn, discovery, actions, pick)
     }
+    val shortcuts = (LocalContext.current.applicationContext as ZenithApplication).container.launcherShortcuts
+    var usageReported by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state, discovery) {
         snapshotFlow { state.currentValue == SearchBarValue.Expanded }.collect { expanded ->
             if (expanded) discovery.loadHashtags()
+            if (expanded && !usageReported) shortcuts.reportUsed(LauncherShortcut.SEARCH.id)
+            usageReported = expanded
         }
     }
     LaunchedEffect(text, discovery) {
