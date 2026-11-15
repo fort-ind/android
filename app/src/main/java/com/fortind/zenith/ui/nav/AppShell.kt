@@ -531,18 +531,21 @@ private fun AppNavDisplay(
     val reduceMotion = rememberReduceMotion()
     val previewFraction = backPreview.takeIf { !reduceMotion }
     val tabState = remember { SeekableTransitionState(stacks.tab) }
+    var settlingPreview by remember { mutableStateOf(false) }
     LaunchedEffect(stacks.tab, previewFraction) {
         if (previewFraction != null) {
+            settlingPreview = true
             tabState.seekTo(fraction = previewFraction, targetState = AppDestination.HOME)
         } else {
             tabState.animateTo(stacks.tab)
+            settlingPreview = false
         }
     }
     val previewScale by animateFloatAsState(
         targetValue = previewFraction?.let(::predictiveBackScale) ?: 1f,
         label = "tabBackScale",
     )
-    val slidesBack = previewFraction != null
+    val slidesBack = previewFraction != null || settlingPreview
     rememberTransition(tabState, label = "appTab").AnimatedContent(
         modifier = Modifier
             .fillMaxSize()
@@ -551,11 +554,14 @@ private fun AppNavDisplay(
                 scaleY = previewScale
             },
         transitionSpec = {
-            if (slidesBack && targetState == AppDestination.HOME) {
-                slideIntoContainer(SlideDirection.End, PaneMotionDefaults.OffsetAnimationSpec) togetherWith
-                    slideOutOfContainer(SlideDirection.End, PaneMotionDefaults.OffsetAnimationSpec)
-            } else {
-                EnterTransition.None togetherWith ExitTransition.None
+            when {
+                !slidesBack -> EnterTransition.None togetherWith ExitTransition.None
+                targetState == AppDestination.HOME ->
+                    slideIntoContainer(SlideDirection.End, PaneMotionDefaults.OffsetAnimationSpec) togetherWith
+                        slideOutOfContainer(SlideDirection.End, PaneMotionDefaults.OffsetAnimationSpec)
+                else ->
+                    slideIntoContainer(SlideDirection.Start, PaneMotionDefaults.OffsetAnimationSpec) togetherWith
+                        slideOutOfContainer(SlideDirection.Start, PaneMotionDefaults.OffsetAnimationSpec)
             }
         },
     ) { shownTab ->
