@@ -39,7 +39,7 @@ jobs:
           echo "value=android-sdk-${{ runner.os }}-api${compile_sdk}-agp${agp}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Android SDK
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.android/sdk
           key: ${{ steps.sdk-key.outputs.value }}
