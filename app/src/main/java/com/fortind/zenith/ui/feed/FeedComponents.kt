@@ -16,6 +16,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.snap
@@ -73,8 +74,10 @@ import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.ui.Avatar
+import com.fortind.zenith.ui.Cursors
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
+import com.fortind.zenith.ui.handCursor
 
 val FeedMaxWidth = 640.dp
 
@@ -144,6 +147,7 @@ fun TimelineSwitcher(
                         modifier = Modifier
                             .width(width)
                             .testTag("timeline:${option.kind.name}")
+                            .handCursor()
                             .semantics { role = Role.RadioButton },
                     ) {
                         Icon(
@@ -212,7 +216,7 @@ fun NewPostsPill(
 
 @Composable
 fun FeedLoading(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = modifier.fillMaxWidth().pointerHoverIcon(Cursors.Wait).padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
         LoadingIndicator(modifier = Modifier.size(56.dp))
     }
 }

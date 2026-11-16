@@ -59,6 +59,7 @@ import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.rememberMorphingShape
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.verticalScrollWithBar
 
 @Composable
 fun LoginScreen(
@@ -135,7 +136,7 @@ fun LoginContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
+                .verticalScrollWithBar(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 24.dp),
             contentAlignment = Alignment.Center,
         ) {

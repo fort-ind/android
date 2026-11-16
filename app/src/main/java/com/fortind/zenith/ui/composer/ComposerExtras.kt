@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material.icons.Icons
@@ -77,6 +78,16 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -111,8 +122,10 @@ import com.fortind.zenith.ui.contextMenuTrigger
 import com.fortind.zenith.ui.discovery.PersonName
 import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.media.NetworkImage
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.scrollbar
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -339,6 +352,7 @@ internal fun DrivePickerOverlay(
     onClose: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
+    val driveGrid = rememberLazyGridState()
     val pickerArea = remember { LayoutHolder() }
     var menuAnchor by remember { mutableStateOf(Offset.Zero) }
     val menuOpen = picker.menuFileId != null
@@ -356,7 +370,16 @@ internal fun DrivePickerOverlay(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.widthIn(max = PickerMaxWidth).fillMaxSize().padding(8.dp).testTag("composer:drive"),
         ) {
-            Column(modifier = behindMenu) {
+            Column(
+                modifier = behindMenu.onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.A && picker.status == DriveStatus.Ready) {
+                        viewModel.selectAllDrive(slots, attachedIds)
+                        true
+                    } else {
+                        false
+                    }
+                },
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
                     TooltipIconButton(
                         label = stringResource(if (picker.path.isEmpty()) R.string.composer_close else R.string.drive_up),
@@ -382,10 +405,11 @@ internal fun DrivePickerOverlay(
                         TextButton(onClick = viewModel::reloadDrive) { Text(stringResource(R.string.drive_retry)) }
                     }
                     DriveStatus.Ready -> LazyVerticalGrid(
+                        state = driveGrid,
                         columns = GridCells.Adaptive(104.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                        modifier = Modifier.fillMaxSize().scrollbar(driveGrid).padding(horizontal = 8.dp),
                     ) {
                         items(picker.folders, key = { "folder:${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "folder" }) { folder ->
                             DriveFolderRow(folder) { viewModel.openDriveFolder(folder) }
@@ -408,6 +432,7 @@ internal fun DrivePickerOverlay(
                                 enabled = !attached && (selected || picker.selected.size < slots),
                                 animate = !reduceMotion,
                                 onToggle = { viewModel.toggleDriveFile(file, slots) },
+                                onRangeSelect = { viewModel.selectDriveRange(file, slots, attachedIds) },
                                 onOpenMenu = { tile, point ->
                                     menuAnchor = pickerArea.coordinates?.localPositionOf(tile, point) ?: Offset.Zero
                                     viewModel.openDriveMenu(file.id)
@@ -555,12 +580,14 @@ internal fun DriveTile(
     animate: Boolean,
     onToggle: () -> Unit,
     onOpenMenu: (LayoutCoordinates, Offset) -> Unit,
+    onRangeSelect: () -> Unit = onToggle,
 ) {
     val name = file.name ?: file.id
     val tile = remember { LayoutHolder() }
     val density = LocalDensity.current
+    var shiftHeld by remember { mutableStateOf(false) }
     Surface(
-        onClick = onToggle,
+        onClick = { if (shiftHeld) onRangeSelect() else onToggle() },
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
@@ -568,7 +595,20 @@ internal fun DriveTile(
         modifier = Modifier
             .fillMaxWidth()
             .height(104.dp)
+            .focusRing(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
             .onPlaced { tile.coordinates = it }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) shiftHeld = event.keyboardModifiers.isShiftPressed
+                    }
+                }
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) shiftHeld = event.isShiftPressed
+                false
+            }
             .contextMenuTrigger { offset ->
                 tile.coordinates?.let { coordinates ->
                     val point = with(density) { Offset(offset.x.toPx(), offset.y.toPx() + coordinates.size.height) }

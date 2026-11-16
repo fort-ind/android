@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.account.reportTextLimit
 import com.fortind.zenith.people.FollowState
+import com.fortind.zenith.ui.rememberInitialFocus
 
 @Composable
 fun ConfirmFollowChangeDialog(state: FollowState, name: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
@@ -81,6 +83,7 @@ fun ReportDialog(name: String, prefix: String, onSend: (String) -> Unit, onDismi
                         .fillMaxWidth()
                         .heightIn(min = 120.dp)
                         .padding(top = 4.dp)
+                        .focusRequester(rememberInitialFocus())
                         .onPreviewKeyEvent { event ->
                             if (canSend && event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Enter) {
                                 onSend(text)

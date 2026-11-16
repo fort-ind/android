@@ -38,6 +38,7 @@ import com.fortind.zenith.autocomplete.UnicodeEmojiSuggestion
 import com.fortind.zenith.autocomplete.UserSuggestion
 import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.mfm.CustomEmojiImage
+import com.fortind.zenith.ui.scrollbar
 
 @Composable
 fun SuggestionStrip(
@@ -55,7 +56,7 @@ fun SuggestionStrip(
         state = listState,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 8.dp),
-        modifier = modifier.semantics { paneTitle = summary },
+        modifier = modifier.scrollbar(listState).semantics { paneTitle = summary },
     ) {
         itemsIndexed(state.items, key = { _, item -> item.key }, contentType = { _, item -> item::class }) { index, item ->
             SuggestionItem(item, selected = index == state.selected, animate = animate, onClick = { onPick(index) })

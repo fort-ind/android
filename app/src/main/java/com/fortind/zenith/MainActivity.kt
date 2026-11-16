@@ -1,5 +1,6 @@
 package com.fortind.zenith
 
+import android.app.assist.AssistContent
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.ui.CustomTabUriHandler
@@ -41,7 +43,9 @@ import com.fortind.zenith.ui.nav.CaptionBarHost
 import com.fortind.zenith.ui.nav.MainWindowIntents
 import com.fortind.zenith.ui.nav.ShellRequest
 import com.fortind.zenith.ui.nav.ShellWindow
+import com.fortind.zenith.ui.nav.appRouteForWebLink
 import com.fortind.zenith.ui.nav.destinationKeyCode
+import com.fortind.zenith.ui.nav.webUrlFor
 import com.fortind.zenith.ui.theme.SettingsTheme
 import com.fortind.zenith.ui.theme.applySystemBarStyle
 import com.fortind.zenith.ui.theme.isThemeDark
@@ -53,6 +57,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val requestedDestination = mutableStateOf<AppDestination?>(null)
     private val requestedRoute = mutableStateOf<AppRoute?>(null)
+    private var topRoute: AppRoute? = null
     private val requestedThreadId = mutableStateOf<String?>(null)
     private val requestedReplyId = mutableStateOf<String?>(null)
     private val searchRequested = mutableStateOf(false)
@@ -81,6 +86,7 @@ class MainActivity : ComponentActivity() {
                         poppedOutTab = poppedOutTab,
                         onLeaveTab = ::leaveTab,
                         onOpenTabWindow = { destination, remembered -> AppWindows.openTab(this, destination, remembered = remembered) },
+                        onTopRouteChanged = { topRoute = it },
                     ),
                     requestedDestination = requestedDestination.value,
                     onRequestedDestinationHandled = { requestedDestination.value = null },
@@ -130,6 +136,11 @@ class MainActivity : ComponentActivity() {
         requestedGameUrl.value = state.getString(STATE_GAME_URL)
     }
 
+    override fun onProvideAssistContent(outContent: AssistContent) {
+        super.onProvideAssistContent(outContent)
+        webUrlFor(topRoute)?.let { outContent.webUri = it.toUri() }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
@@ -143,9 +154,30 @@ class MainActivity : ComponentActivity() {
                 add(KeyboardShortcutInfo(getString(destination.labelRes), destinationKeyCode(destination), KeyEvent.META_CTRL_ON))
             }
             add(KeyboardShortcutInfo(getString(R.string.feed_compose), KeyEvent.KEYCODE_N, KeyEvent.META_CTRL_ON))
+            add(KeyboardShortcutInfo(getString(R.string.feed_compose), KeyEvent.KEYCODE_N, 0))
+            add(KeyboardShortcutInfo(getString(R.string.shortcut_search), KeyEvent.KEYCODE_F, KeyEvent.META_CTRL_ON))
+            add(KeyboardShortcutInfo(getString(R.string.shortcut_search), KeyEvent.KEYCODE_S, 0))
             add(KeyboardShortcutInfo(getString(R.string.feed_refresh), KeyEvent.KEYCODE_R, KeyEvent.META_CTRL_ON))
+            add(KeyboardShortcutInfo(getString(R.string.feed_refresh), KeyEvent.KEYCODE_F5, 0))
+            add(KeyboardShortcutInfo(getString(R.string.shortcut_next_tab), KeyEvent.KEYCODE_TAB, KeyEvent.META_CTRL_ON))
+            add(KeyboardShortcutInfo(getString(R.string.shortcut_previous_tab), KeyEvent.KEYCODE_TAB, KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON))
+            add(KeyboardShortcutInfo(getString(R.string.shortcut_toggle_dark), KeyEvent.KEYCODE_D, 0))
+            add(KeyboardShortcutInfo(getString(R.string.shortcut_dismiss), KeyEvent.KEYCODE_ESCAPE, 0))
         }
+        val posts = listOf(
+            R.string.note_action_reply to KeyEvent.KEYCODE_R,
+            R.string.note_action_react to KeyEvent.KEYCODE_E,
+            R.string.note_action_like to KeyEvent.KEYCODE_L,
+            R.string.note_action_renote to KeyEvent.KEYCODE_Q,
+            R.string.note_action_more to KeyEvent.KEYCODE_M,
+            R.string.shortcut_open_media to KeyEvent.KEYCODE_O,
+            R.string.shortcut_toggle_content to KeyEvent.KEYCODE_V,
+            R.string.shortcut_next_post to KeyEvent.KEYCODE_J,
+            R.string.shortcut_previous_post to KeyEvent.KEYCODE_K,
+            R.string.shortcut_show_new to KeyEvent.KEYCODE_PERIOD,
+        ).map { (label, key) -> KeyboardShortcutInfo(getString(label), key, 0) }
         data.add(KeyboardShortcutGroup(getString(R.string.app_name), shortcuts))
+        data.add(KeyboardShortcutGroup(getString(R.string.shortcut_group_posts), posts))
     }
 
     override fun onStart() {
@@ -171,6 +203,16 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (poppedOutTab == null && handleShellRequest(ShellRequest.fromName(intent?.getStringExtra(EXTRA_SHELL_REQUEST)))) return
+        val webRoute = intent?.takeIf { it.action == Intent.ACTION_VIEW && poppedOutTab == null }?.dataString?.let(::appRouteForWebLink)
+        if (webRoute is AppRoute.Thread) {
+            requestedThreadId.value = webRoute.noteId
+            return
+        }
+        if (webRoute != null) {
+            requestedRoute.value = webRoute
+            requestedDestination.value = AppDestination.HOME
+            return
+        }
         val gameUrl = intent?.getStringExtra(EXTRA_GAME_URL)?.takeIf { it.isNotEmpty() && it.length <= MAX_GAME_URL_LENGTH }
         if (poppedOutTab == null && gameUrl != null) {
             requestedGameUrl.value = gameUrl

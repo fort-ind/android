@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
@@ -56,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -76,6 +78,8 @@ import com.fortind.zenith.ui.feed.FeedLoading
 import com.fortind.zenith.ui.feed.FeedMaxWidth
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import androidx.compose.material3.SnackbarHostState
+import com.fortind.zenith.ui.rememberInitialFocus
+import com.fortind.zenith.ui.scrollbar
 import kotlinx.coroutines.launch
 
 private val SheetMaxWidth = 640.dp
@@ -259,7 +263,7 @@ private fun ListNameDialog(initial: String, renaming: Boolean, onConfirm: (Strin
                 lineLimits = TextFieldLineLimits.SingleLine,
                 isError = clean.length > LIST_NAME_MAX_LENGTH,
                 supportingText = { Text(stringResource(R.string.account_counter, clean.length, LIST_NAME_MAX_LENGTH)) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(rememberInitialFocus()),
             )
         },
         confirmButton = {
@@ -317,9 +321,11 @@ private fun ListMembersSheet(members: MembersState, listName: String, collection
         snapshotFlow { query.text.toString() }.collect(collections::searchPeople)
     }
     ModalBottomSheet(onDismissRequest = collections::closeMembers, sheetMaxWidth = SheetMaxWidth) {
+        val membersList = rememberLazyListState()
         LazyColumn(
+            state = membersList,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp).testTag("collections:members"),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp).scrollbar(membersList).testTag("collections:members"),
         ) {
             item(key = "title", contentType = "title") {
                 Text(
@@ -336,7 +342,7 @@ private fun ListMembersSheet(members: MembersState, listName: String, collection
                     label = { Text(stringResource(R.string.collections_members_search)) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     lineLimits = TextFieldLineLimits.SingleLine,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).focusRequester(rememberInitialFocus(keyboardOnly = true)),
                 )
             }
             items(members.results, key = { "result:${it.id}" }, contentType = { "person" }) { person ->
@@ -424,9 +430,12 @@ fun AddToListSheet(user: NoteUser, collections: CollectionsViewModel, onDismiss:
                     Text(stringResource(R.string.feed_retry))
                 }
                 state.status != CollectionsStatus.Ready -> FeedLoading(Modifier.fillMaxWidth().padding(24.dp))
-                else -> LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
-                    items(state.lists, key = { it.id }, contentType = { "list" }) { list ->
-                        MembershipRow(list, user, list.id !in state.membershipBusy, collections)
+                else -> {
+                    val listsState = rememberLazyListState()
+                    LazyColumn(state = listsState, modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).scrollbar(listsState)) {
+                        items(state.lists, key = { it.id }, contentType = { "list" }) { list ->
+                            MembershipRow(list, user, list.id !in state.membershipBusy, collections)
+                        }
                     }
                 }
             }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -60,8 +61,11 @@ import com.fortind.zenith.composer.Attachment
 import com.fortind.zenith.composer.AttachmentFailure
 import com.fortind.zenith.composer.AttachmentPhase
 import com.fortind.zenith.timeline.MediaKind
+import com.fortind.zenith.ui.feed.LabelTooltip
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.media.NetworkImage
 import com.fortind.zenith.ui.pointerHover
+import com.fortind.zenith.ui.scrollbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -77,7 +81,8 @@ fun AttachmentStrip(
     onRetry: (id: String, compress: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
+    val listState = rememberLazyListState()
+    LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.scrollbar(listState)) {
         items(attachments.size, key = { attachments[it].localId }, contentType = { "attachment" }) { index ->
             AttachmentTile(
                 attachment = attachments[index],
@@ -157,8 +162,10 @@ private fun AttachmentTile(
             contentColor = Color.White,
             modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
         ) {
-            IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.attachment_remove), modifier = Modifier.size(16.dp))
+            LabelTooltip(stringResource(R.string.attachment_remove)) {
+                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp).handCursor()) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.attachment_remove), modifier = Modifier.size(16.dp))
+                }
             }
         }
     }

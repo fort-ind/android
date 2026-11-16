@@ -100,3 +100,18 @@ fun replyPrefix(parent: Note, myUsername: String?): String {
     }
     return if (handles.isEmpty()) "" else handles.joinToString(" ", postfix = " ")
 }
+
+fun <T> rangeSelection(items: List<T>, idOf: (T) -> String, selected: List<T>, anchorId: String?, targetId: String, slots: Int, blocked: Set<String>): List<T> {
+    val target = items.indexOfFirst { idOf(it) == targetId }
+    if (target < 0) return selected
+    val anchor = anchorId?.let { id -> items.indexOfFirst { idOf(it) == id } }?.takeIf { it >= 0 } ?: target
+    val chosen = selected.mapTo(LinkedHashSet(), idOf)
+    val result = selected.toMutableList()
+    for (index in minOf(anchor, target)..maxOf(anchor, target)) {
+        if (result.size >= slots) break
+        val item = items[index]
+        val id = idOf(item)
+        if (id !in blocked && chosen.add(id)) result += item
+    }
+    return result
+}

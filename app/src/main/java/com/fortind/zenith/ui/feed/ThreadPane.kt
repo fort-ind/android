@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.discovery.PersonName
+import com.fortind.zenith.ui.horizontalScrollWithBar
 import com.fortind.zenith.ui.people.SegmentTabs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,7 @@ import com.fortind.zenith.R
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
+import com.fortind.zenith.ui.scrollbar
 
 private val ThreadMaxWidth = 720.dp
 
@@ -162,7 +164,7 @@ private fun ThreadContent(
         state = listState,
         contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().scrollbar(listState),
     ) {
         items(thread.ancestors, key = { "ancestor:${it.id}" }, contentType = { "ancestor" }) { note ->
             Column(modifier = itemModifier) {
@@ -277,7 +279,7 @@ private fun ReactionFilters(focal: Note, selected: String?, environment: NoteEnv
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = modifier.horizontalScrollWithBar(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         FilterChip(selected = selected == null, onClick = { onSelect(null) }, label = { Text(stringResource(R.string.thread_reactions_all)) })
         sorted.forEach { (key, count) ->

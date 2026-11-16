@@ -7,7 +7,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 
-fun Modifier.pointerHover(onHoverChanged: (Boolean) -> Unit): Modifier = this
+fun Modifier.pointerHover(icon: PointerIcon = PointerIcon.Hand, onHoverChanged: (Boolean) -> Unit): Modifier = this
     .pointerInput(Unit) {
         awaitPointerEventScope {
             while (true) {
@@ -20,4 +20,4 @@ fun Modifier.pointerHover(onHoverChanged: (Boolean) -> Unit): Modifier = this
             }
         }
     }
-    .pointerHoverIcon(PointerIcon.Hand)
+    .pointerHoverIcon(icon)

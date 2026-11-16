@@ -9,7 +9,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.compose.CameraXViewfinder
 import androidx.camera.core.Camera
+import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalLensFacing
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -46,12 +48,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraFront
+import androidx.compose.material.icons.filled.CameraRear
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +84,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -117,11 +126,12 @@ fun CameraCaptureOverlay(
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
-    var lensFacing by rememberSaveable { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var cameraIndex by rememberSaveable { mutableIntStateOf(0) }
+    var cameraMenu by remember { mutableStateOf(false) }
     var videoMode by rememberSaveable { mutableStateOf(false) }
     var flashMode by rememberSaveable { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
     var camera by remember { mutableStateOf<Camera?>(null) }
-    var lenses by remember { mutableStateOf(emptyList<Int>()) }
+    var cameras by remember { mutableStateOf(emptyList<CameraOption>()) }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordedMillis by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf<Int?>(null) }
@@ -156,19 +166,18 @@ fun CameraCaptureOverlay(
         VideoCapture.withOutput(Recorder.Builder().setQualitySelector(quality).build())
     }
 
-    LaunchedEffect(lensFacing, videoMode) {
+    LaunchedEffect(cameraIndex, videoMode) {
         val provider = ProcessCameraProvider.awaitInstance(context)
-        lenses = listOf(CameraSelector.LENS_FACING_BACK, CameraSelector.LENS_FACING_FRONT)
-            .filter { provider.hasCamera(CameraSelector.Builder().requireLensFacing(it).build()) }
+        cameras = cameraOptions(provider.availableCameraInfos)
         when {
-            lenses.isEmpty() -> message = R.string.camera_unavailable
-            lensFacing !in lenses -> lensFacing = lenses.first()
+            cameras.isEmpty() -> message = R.string.camera_unavailable
+            cameraIndex !in cameras.indices -> cameraIndex = 0
             else -> {
                 provider.unbindAll()
                 camera = try {
                     provider.bindToLifecycle(
                         lifecycleOwner,
-                        CameraSelector.Builder().requireLensFacing(lensFacing).build(),
+                        cameras[cameraIndex].selector,
                         preview,
                         if (videoMode) videoCapture else imageCapture,
                     )
@@ -303,13 +312,28 @@ fun CameraCaptureOverlay(
                     tint = Color.White,
                 )
             }
-            if (lenses.size > 1 && recording == null) {
-                TooltipIconButton(
-                    label = stringResource(R.string.camera_flip),
-                    icon = Icons.Default.FlipCameraAndroid,
-                    onClick = { lensFacing = lenses.first { it != lensFacing } },
-                    tint = Color.White,
-                )
+            if (cameras.size > 1 && recording == null) {
+                Box {
+                    TooltipIconButton(
+                        label = stringResource(R.string.camera_flip),
+                        icon = Icons.Default.FlipCameraAndroid,
+                        onClick = { if (cameras.size > 2) cameraMenu = true else cameraIndex = (cameraIndex + 1) % cameras.size },
+                        tint = Color.White,
+                    )
+                    DropdownMenu(expanded = cameraMenu && cameras.size > 2, onDismissRequest = { cameraMenu = false }) {
+                        cameras.forEachIndexed { index, option ->
+                            DropdownMenuItem(
+                                text = { Text(cameraLabel(cameras, index)) },
+                                leadingIcon = { Icon(option.icon(), contentDescription = null) },
+                                trailingIcon = { if (index == cameraIndex) Icon(Icons.Default.Check, contentDescription = null) },
+                                onClick = {
+                                    cameraMenu = false
+                                    cameraIndex = index
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
         message?.let { res ->
@@ -450,3 +474,37 @@ private fun captureFile(context: Context, prefix: String, extension: String): Fi
 private const val NANOS_PER_MILLI = 1_000_000L
 private const val MILLIS_PER_SECOND = 1000L
 private const val SECONDS_PER_MINUTE = 60L
+
+class CameraOption(val selector: CameraSelector, val facing: CameraFacing)
+
+enum class CameraFacing { Back, Front, External }
+
+@androidx.annotation.OptIn(markerClass = [ExperimentalLensFacing::class])
+private fun facingOf(info: CameraInfo): CameraFacing? = when (info.lensFacing) {
+    CameraSelector.LENS_FACING_BACK -> CameraFacing.Back
+    CameraSelector.LENS_FACING_FRONT -> CameraFacing.Front
+    CameraSelector.LENS_FACING_EXTERNAL -> CameraFacing.External
+    else -> null
+}
+
+private fun cameraOptions(infos: List<CameraInfo>): List<CameraOption> =
+    infos.mapNotNull { info -> facingOf(info)?.let { CameraOption(info.cameraSelector, it) } }.sortedBy { it.facing.ordinal }
+
+private fun CameraOption.icon(): ImageVector = when (facing) {
+    CameraFacing.Back -> Icons.Default.CameraRear
+    CameraFacing.Front -> Icons.Default.CameraFront
+    CameraFacing.External -> Icons.Default.Videocam
+}
+
+@Composable
+private fun cameraLabel(cameras: List<CameraOption>, index: Int): String {
+    val option = cameras[index]
+    val sameKind = cameras.filter { it.facing == option.facing }
+    val number = sameKind.indexOf(option) + 1
+    val base = when (option.facing) {
+        CameraFacing.Back -> R.string.camera_back
+        CameraFacing.Front -> R.string.camera_front
+        CameraFacing.External -> R.string.camera_external
+    }
+    return if (sameKind.size > 1) stringResource(R.string.camera_numbered, stringResource(base), number) else stringResource(base)
+}

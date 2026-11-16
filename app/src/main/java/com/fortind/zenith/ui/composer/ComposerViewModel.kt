@@ -11,6 +11,7 @@ import com.fortind.zenith.composer.isPostableMime
 import com.fortind.zenith.composer.mentionsIn
 import com.fortind.zenith.composer.pollEditResetsVotes
 import com.fortind.zenith.composer.problem
+import com.fortind.zenith.composer.rangeSelection
 import com.fortind.zenith.composer.replyPrefix
 import com.fortind.zenith.composer.replyText
 import com.fortind.zenith.drive.DRIVE_PAGE_SIZE
@@ -253,6 +254,7 @@ class ComposerViewModel(
     private val mentionLookups = HashMap<String, NoteUser>()
     private val removedRecipients = HashSet<String>()
     private var driveJob: Job? = null
+    private var driveAnchorId: String? = null
     private var driveLastPath: List<DriveFolder> = emptyList()
 
     private val _uiState = MutableStateFlow<ComposerUiState?>(null)
@@ -474,12 +476,27 @@ class ComposerViewModel(
     }
 
     fun toggleDriveFile(file: NoteFile, slots: Int) {
+        driveAnchorId = file.id
         updateDrive { state ->
             when {
                 state.selected.any { it.id == file.id } -> state.copy(selected = state.selected.filterNot { it.id == file.id })
                 state.selected.size < slots -> state.copy(selected = state.selected + file)
                 else -> state
             }
+        }
+    }
+
+    fun selectDriveRange(file: NoteFile, slots: Int, attachedIds: Set<String>) {
+        val anchor = driveAnchorId
+        driveAnchorId = anchor ?: file.id
+        updateDrive { state -> state.copy(selected = rangeSelection(state.files, NoteFile::id, state.selected, anchor, file.id, slots, attachedIds)) }
+    }
+
+    fun selectAllDrive(slots: Int, attachedIds: Set<String>) {
+        updateDrive { state ->
+            val first = state.files.firstOrNull() ?: return@updateDrive state
+            val last = state.files.last()
+            state.copy(selected = rangeSelection(state.files, NoteFile::id, state.selected, first.id, last.id, slots, attachedIds))
         }
     }
 

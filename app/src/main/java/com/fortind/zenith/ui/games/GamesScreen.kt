@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -112,11 +113,13 @@ import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.horizontalScrollWithBar
 import com.fortind.zenith.ui.pointerHover
 import com.fortind.zenith.games.GameCategory
 import com.fortind.zenith.games.GameSection
 import com.fortind.zenith.games.searchGames
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.scrollbar
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -353,7 +356,7 @@ private fun CategoryChips(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+            .horizontalScrollWithBar(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CategoryChip(
@@ -412,9 +415,10 @@ private fun GameGrid(
         with(density) { hingeSplitCells(it, gridBoundsInWindow, gutter.toPx(), HingeClearance.roundToPx(), layoutDirection) }
     }
     val segmented = columns == 1 && hingeSplit == null
+    val gridState = rememberLazyGridState()
     LazyVerticalGrid(
         columns = hingeSplit ?: GridCells.Fixed(columns),
-        state = rememberLazyGridState(),
+        state = gridState,
         contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 16.dp),
         horizontalArrangement = if (hingeSplit != null) HingeSplitArrangement else Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(if (segmented) ListItemDefaults.SegmentedGap else 8.dp),
@@ -589,7 +593,8 @@ private fun SearchResults(query: String, results: List<Game>, onOpen: (Game) -> 
         )
         return
     }
-    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().scrollbar(listState)) {
         items(results, key = { it.url }) { game ->
             var hovered by remember { mutableStateOf(false) }
             ListItem(

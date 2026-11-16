@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteUser
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.media.FeedPlayback
 import com.fortind.zenith.ui.mfm.MfmEnvironment
 import com.fortind.zenith.ui.motion.SharedMotion
@@ -94,13 +95,8 @@ fun TooltipIconButton(
     tint: Color = Color.Unspecified,
     enabled: Boolean = true,
 ) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-        tooltip = { PlainTooltip { Text(label) } },
-        state = rememberTooltipState(),
-        modifier = modifier,
-    ) {
-        IconButton(onClick = onClick, enabled = enabled) {
+    LabelTooltip(label = label, modifier = modifier) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.handCursor(enabled)) {
             if (tint == Color.Unspecified) {
                 Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp))
             } else {
@@ -108,4 +104,16 @@ fun TooltipIconButton(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LabelTooltip(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+        modifier = modifier,
+        content = content,
+    )
 }

@@ -145,6 +145,7 @@ import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.ui.Avatar
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.openAppDetailsSettings
 import com.fortind.zenith.ui.shouldExplain
 import com.fortind.zenith.ui.feed.NoteEnvironment
@@ -153,6 +154,8 @@ import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.theme.isThemeDark
+import com.fortind.zenith.ui.verticalScrollWithBar
+import com.fortind.zenith.ui.waitCursor
 import kotlinx.coroutines.launch
 
 private val ComposerMaxWidth = 640.dp
@@ -549,6 +552,7 @@ private fun ComposerContent(
                 .padding(inner)
                 .consumeWindowInsets(inner)
                 .contentReceiver(receiver)
+                .waitCursor(state.posting)
                 .dropHighlight(dragOver, dropHint),
         ) {
             Column(
@@ -557,7 +561,7 @@ private fun ComposerContent(
                     .weight(1f)
                     .widthIn(max = ComposerMaxWidth)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScrollWithBar(rememberScrollState())
                     .padding(horizontal = 16.dp),
             ) {
                 val context = state.contextNote
@@ -878,6 +882,7 @@ private fun ToggleTooltipButton(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
+            modifier = Modifier.handCursor(enabled),
             colors = IconButtonDefaults.iconToggleButtonColors(
                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                 checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,

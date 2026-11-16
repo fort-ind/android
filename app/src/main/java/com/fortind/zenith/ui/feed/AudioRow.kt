@@ -36,7 +36,10 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import com.fortind.zenith.R
 import com.fortind.zenith.timeline.NoteFile
+import com.fortind.zenith.ui.feed.LabelTooltip
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.media.FeedPlayback
+import com.fortind.zenith.ui.media.OutputSwitcherButton
 import com.fortind.zenith.ui.media.formatPlaybackTime
 import kotlinx.coroutines.delay
 
@@ -96,14 +99,17 @@ fun AudioRow(file: NoteFile, playback: FeedPlayback, modifier: Modifier = Modifi
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
-            FilledTonalIconButton(
-                onClick = { if (playing) playback.pause() else playback.play(file) },
-                modifier = Modifier.size(48.dp),
-            ) {
-                Icon(
-                    imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = stringResource(if (playing) R.string.note_audio_pause else R.string.note_audio_play),
-                )
+            val playLabel = stringResource(if (playing) R.string.note_audio_pause else R.string.note_audio_play)
+            LabelTooltip(playLabel) {
+                FilledTonalIconButton(
+                    onClick = { if (playing) playback.pause() else playback.play(file) },
+                    modifier = Modifier.size(48.dp).handCursor(),
+                ) {
+                    Icon(
+                        imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = playLabel,
+                    )
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -131,6 +137,7 @@ fun AudioRow(file: NoteFile, playback: FeedPlayback, modifier: Modifier = Modifi
                     )
                 }
             }
+            if (active) OutputSwitcherButton()
         }
     }
 }

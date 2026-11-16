@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.verticalScrollWithBar
 
 private const val SpinDurationMillis = 20_000
 
@@ -56,7 +57,7 @@ fun ComingSoonPage(title: String, icon: ImageVector, modifier: Modifier = Modifi
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScrollWithBar(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),

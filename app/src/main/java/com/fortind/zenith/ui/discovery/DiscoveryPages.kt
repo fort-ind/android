@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -78,10 +79,12 @@ import com.fortind.zenith.ui.feed.TimelineListCallbacks
 import com.fortind.zenith.ui.feed.TimelineStatus
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.home.ReauthorizeBanner
+import com.fortind.zenith.ui.horizontalScrollWithBar
 import com.fortind.zenith.ui.people.PageKeyTarget
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.rememberTopBarReveal
 import com.fortind.zenith.ui.revealTopBarOnWheel
+import com.fortind.zenith.ui.scrollbar
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
 import kotlinx.coroutines.launch
@@ -254,7 +257,7 @@ private fun SearchFilters(media: SearchMedia?, onlyHere: Boolean, onMedia: (Sear
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .widthIn(max = FeedMaxWidth)
-                .horizontalScroll(rememberScrollState())
+                .horizontalScrollWithBar(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 4.dp),
         ) {
             SearchChip(onlyHere, R.string.search_filter_here) { onOnlyHere(!onlyHere) }
@@ -283,6 +286,7 @@ private fun SearchChip(selected: Boolean, @StringRes label: Int, onClick: () -> 
 fun HashtagsPage(discovery: DiscoveryViewModel, onOpenTag: (String) -> Unit, onBack: () -> Unit) {
     val state by discovery.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(discovery) { discovery.loadHashtags() }
+    val hashtagGrid = rememberLazyGridState()
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
@@ -305,6 +309,7 @@ fun HashtagsPage(discovery: DiscoveryViewModel, onOpenTag: (String) -> Unit, onB
                     TextButton(onClick = { discovery.loadHashtags(force = true) }) { Text(stringResource(R.string.search_hashtags_retry)) }
                 }
                 CollectionsStatus.Ready -> LazyVerticalGrid(
+                    state = hashtagGrid,
                     columns = GridCells.Adaptive(320.dp),
                     contentPadding = PaddingValues(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

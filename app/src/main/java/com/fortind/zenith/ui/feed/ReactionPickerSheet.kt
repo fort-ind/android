@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -59,6 +60,7 @@ import com.fortind.zenith.timeline.Reactions
 import com.fortind.zenith.timeline.acceptsSensitiveReactions
 import com.fortind.zenith.ui.mfm.CustomEmojiImage
 import com.fortind.zenith.ui.pointerHover
+import com.fortind.zenith.ui.scrollbar
 
 private sealed interface PickerEntry {
     val reaction: String
@@ -154,9 +156,11 @@ fun ReactionPickerSheet(
                         }
                     },
             )
+            val gridState = rememberLazyGridState()
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(52.dp),
-                modifier = Modifier.weight(1f),
+                state = gridState,
+                modifier = Modifier.weight(1f).scrollbar(gridState),
             ) {
                 if (query.isNotBlank()) {
                     if (results.isEmpty()) {

@@ -6,6 +6,7 @@
 
 package com.fortind.zenith.ui.home
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.rememberSearchBarState
@@ -107,6 +108,7 @@ import com.fortind.zenith.ui.pointerHover
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.rememberTopBarReveal
 import com.fortind.zenith.ui.revealTopBarOnWheel
+import com.fortind.zenith.ui.scrollbar
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
 
@@ -450,8 +452,10 @@ private fun FavoritesPane(
     onBrowseGames: () -> Unit,
     onSeeAll: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize().scrollbar(listState),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

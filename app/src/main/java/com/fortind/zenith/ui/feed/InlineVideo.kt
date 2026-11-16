@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
@@ -54,6 +55,8 @@ import androidx.media3.ui.compose.material3.Player
 import com.fortind.zenith.R
 import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.ui.media.FeedPlayback
+import com.fortind.zenith.ui.media.OutputSwitcherButton
+import com.fortind.zenith.ui.media.rememberWindowFullscreenState
 
 private val VideoFocusRing = 2.dp
 
@@ -89,6 +92,7 @@ fun InlineVideo(playback: FeedPlayback, file: NoteFile, modifier: Modifier = Mod
             topControls = { _, visible ->
                 AnimatedVisibility(visible = visible, modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        OutputSwitcherButton(tint = Color.White)
                         TooltipIconButton(
                             label = fullscreenLabel,
                             icon = Icons.Default.Fullscreen,
@@ -114,18 +118,28 @@ fun FullscreenVideo(playback: FeedPlayback, onDismiss: () -> Unit) {
     ) {
         var controls by remember { mutableStateOf(true) }
         val focusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        val windowFullscreen = rememberWindowFullscreenState()
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            windowFullscreen.enter()
+        }
         val closeLabel = stringResource(R.string.viewer_close)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        onDismiss()
-                        true
-                    } else {
-                        false
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Escape -> {
+                            if (windowFullscreen.active) windowFullscreen.exit() else onDismiss()
+                            true
+                        }
+                        Key.F -> {
+                            if (windowFullscreen.canToggle) windowFullscreen.toggle() else onDismiss()
+                            true
+                        }
+                        else -> false
                     }
                 }
                 .playbackKeys(playback, file) { controls = !controls }
@@ -170,6 +184,19 @@ fun FullscreenVideo(playback: FeedPlayback, onDismiss: () -> Unit) {
                         tint = Color.White,
                         modifier = Modifier.safeDrawingPadding().padding(8.dp),
                     )
+                }
+                AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.TopEnd)) {
+                    Row(modifier = Modifier.safeDrawingPadding().padding(8.dp)) {
+                        OutputSwitcherButton(tint = Color.White)
+                        if (windowFullscreen.canToggle) {
+                            TooltipIconButton(
+                                label = stringResource(if (windowFullscreen.active) R.string.viewer_exit_fullscreen else R.string.viewer_fullscreen),
+                                icon = if (windowFullscreen.active) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                onClick = windowFullscreen::toggle,
+                                tint = Color.White,
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -1,7 +1,9 @@
 package com.fortind.zenith.ui
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
@@ -12,6 +14,7 @@ internal fun isWebLink(url: String): Boolean =
 
 fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarColor: Int): Boolean {
     if (!isWebLink(url)) return false
+    if (context.findActivity()?.isInMultiWindowMode == true && launchBrowserView(context, url, adjacent = true)) return true
     val tab = CustomTabsIntent.Builder()
         .setShowTitle(true)
         .setColorScheme(
@@ -30,8 +33,9 @@ fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarCo
     }
 }
 
-private fun launchBrowserView(context: Context, url: String): Boolean {
+private fun launchBrowserView(context: Context, url: String, adjacent: Boolean = false): Boolean {
     val view = Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+    if (adjacent) view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
     return try {
         context.startActivity(view)
         true
@@ -40,4 +44,10 @@ private fun launchBrowserView(context: Context, url: String): Boolean {
     } catch (_: SecurityException) {
         false
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

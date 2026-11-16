@@ -2,6 +2,7 @@
 
 package com.fortind.zenith.ui.discovery
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalTextStyle
@@ -13,6 +14,7 @@ import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.people.PeopleActions
 import com.fortind.zenith.ui.people.PersonMenuItems
+import com.fortind.zenith.ui.scrollbar
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -257,7 +259,8 @@ private fun SearchContent(
     val state by discovery.uiState.collectAsStateWithLifecycle()
     val reduceMotion = rememberReduceMotion()
     val query = text.text.toString().trim()
-    LazyColumn(modifier = Modifier.fillMaxWidth().testTag("search:results")) {
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().scrollbar(listState).testTag("search:results")) {
         if (query.isEmpty()) {
             item(key = "popular:title", contentType = "title") { SearchHeading(stringResource(R.string.search_popular_hashtags)) }
             when (state.hashtagStatus) {

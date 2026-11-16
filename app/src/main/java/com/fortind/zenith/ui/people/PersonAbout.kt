@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
@@ -45,7 +46,9 @@ fun PersonAboutContent(detail: UserDetail, environment: NoteEnvironment, modifie
     val textEnvironment = remember(detail.user, environment.mfm) { environment.mfm.withEmoji(environment.userEmoji(detail.user)) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (detail.bioMfm.isNotEmpty()) {
-            MfmContent(detail.bioMfm, textEnvironment, style = MaterialTheme.typography.bodyLarge)
+            SelectionContainer {
+                MfmContent(detail.bioMfm, textEnvironment, style = MaterialTheme.typography.bodyLarge)
+            }
         }
         if (detail.roles.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -66,7 +69,9 @@ fun PersonAboutContent(detail: UserDetail, environment: NoteEnvironment, modifie
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                MfmContent(field.valueMfm, textEnvironment, style = MaterialTheme.typography.bodyMedium)
+                SelectionContainer {
+                    MfmContent(field.valueMfm, textEnvironment, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }

@@ -3,8 +3,10 @@
 package com.fortind.zenith.ui.social
 
 import com.fortind.zenith.ZenithApplication
+import com.fortind.zenith.composer.SharedContent
 import com.fortind.zenith.shortcuts.LauncherShortcut
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import com.fortind.zenith.ui.nav.parseNoteLink
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.Flow
@@ -155,6 +157,7 @@ fun SocialHost(
     onOpenOwnProfile: () -> Unit,
     onOpenHandle: (ProfileHandle) -> Unit,
     onOpenTag: (String) -> Unit,
+    onOpenNoteId: (String) -> Unit = {},
     requestedReplyId: String? = null,
     onRequestedReplyHandled: () -> Unit = {},
     feedViewModel: FeedViewModel = viewModel(factory = FeedViewModel.Factory),
@@ -195,12 +198,15 @@ fun SocialHost(
     val browser = LocalUriHandler.current
     val openHandle by rememberUpdatedState(onOpenHandle)
     val openTag by rememberUpdatedState(onOpenTag)
+    val openNoteId by rememberUpdatedState(onOpenNoteId)
     val linkRouter = remember(browser) {
         object : UriHandler {
             override fun openUri(uri: String) {
                 val tag = parseTagLink(uri)
                 val handle = parseProfileLink(uri)
+                val noteId = parseNoteLink(uri.substringBefore('#').substringBefore('?'))
                 when {
+                    noteId != null -> openNoteId(noteId)
                     tag != null -> openTag(tag)
                     handle != null -> openHandle(handle)
                     else -> browser.openUri(uri)
@@ -343,7 +349,14 @@ fun SocialHost(
     }
 
     val viewerShown = viewerNoteId != null
-    SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+    val composerState by composerViewModel.uiState.collectAsStateWithLifecycle()
+    val dropToPost = rememberDropToPost(
+        activity = LocalActivity.current,
+        reader = container.mediaReader,
+        enabled = feed.signedIn && !viewerShown && composerState == null,
+        onMedia = { uris -> composerViewModel.open(ComposerTarget.NewPost, null, shared = SharedContent("", caretAtStart = false, uris = uris)) },
+    )
+    SharedTransitionLayout(modifier = Modifier.fillMaxSize().dropToPost(dropToPost)) {
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             Box(
                 modifier = Modifier
@@ -355,6 +368,7 @@ fun SocialHost(
                 CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit()) {
                     content(ui)
                 }
+                DropToPostOverlay(dropToPost)
             }
             val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
             AnimatedContent(

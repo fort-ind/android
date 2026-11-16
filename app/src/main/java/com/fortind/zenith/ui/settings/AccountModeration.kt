@@ -43,6 +43,7 @@ import com.fortind.zenith.ui.account.AccountSettingsViewModel
 import com.fortind.zenith.ui.account.ListStatus
 import com.fortind.zenith.ui.account.ModerationViewModel
 import com.fortind.zenith.ui.account.busyKey
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.rememberReduceMotion
 
 private const val WORDS_TAB = 3
@@ -74,17 +75,20 @@ internal fun ModerationContent(viewModel: ModerationViewModel, settings: Account
                 Tab(
                     selected = index == selectedIndex,
                     onClick = { selectedIndex = index },
+                    modifier = Modifier.handCursor(),
                     text = { Text(stringResource(item.tabRes()), maxLines = 1) },
                 )
             }
             Tab(
                 selected = selectedIndex == WORDS_TAB,
                 onClick = { selectedIndex = WORDS_TAB },
+                modifier = Modifier.handCursor(),
                 text = { Text(stringResource(R.string.moderation_tab_words), maxLines = 1) },
             )
             Tab(
                 selected = selectedIndex == INSTANCES_TAB,
                 onClick = { selectedIndex = INSTANCES_TAB },
+                modifier = Modifier.handCursor(),
                 text = { Text(stringResource(R.string.moderation_tab_instances), maxLines = 1) },
             )
         }

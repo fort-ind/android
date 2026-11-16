@@ -50,6 +50,7 @@ import com.fortind.zenith.ui.people.OwnProfileActions
 import com.fortind.zenith.ui.people.PersonPage
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.social.SocialUi
+import com.fortind.zenith.ui.verticalScrollWithBar
 
 @Composable
 fun ProfileScreen(
@@ -109,7 +110,7 @@ private fun ProfileMessage(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScrollWithBar(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -193,7 +194,7 @@ private fun LogoutConfirmationSheet(onConfirm: () -> Unit, onDismiss: () -> Unit
     ) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .verticalScrollWithBar(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

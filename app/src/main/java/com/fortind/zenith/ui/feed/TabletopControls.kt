@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.timeline.NoteFile
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.media.FeedPlayback
 import com.fortind.zenith.ui.media.formatPlaybackTime
 
@@ -79,17 +80,17 @@ internal fun TabletopControls(playback: FeedPlayback, file: NoteFile, modifier: 
                     Text(duration, style = MaterialTheme.typography.labelMedium)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    FilledTonalIconButton(onClick = { playback.seekBy(-TABLETOP_SEEK_MS) }, modifier = Modifier.size(SideButtonSize)) {
+                    FilledTonalIconButton(onClick = { playback.seekBy(-TABLETOP_SEEK_MS) }, modifier = Modifier.size(SideButtonSize).handCursor()) {
                         Icon(Icons.Default.Replay5, contentDescription = stringResource(R.string.note_video_back))
                     }
-                    FilledIconButton(onClick = { playback.toggle(file) }, modifier = Modifier.size(PlayButtonSize)) {
+                    FilledIconButton(onClick = { playback.toggle(file) }, modifier = Modifier.size(PlayButtonSize).handCursor()) {
                         Icon(
                             imageVector = if (progress.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = stringResource(if (progress.isPlaying) R.string.note_video_pause else R.string.note_video_play),
                             modifier = Modifier.size(PlayIconSize),
                         )
                     }
-                    FilledTonalIconButton(onClick = { playback.seekBy(TABLETOP_SEEK_MS) }, modifier = Modifier.size(SideButtonSize)) {
+                    FilledTonalIconButton(onClick = { playback.seekBy(TABLETOP_SEEK_MS) }, modifier = Modifier.size(SideButtonSize).handCursor()) {
                         Icon(Icons.Default.Forward5, contentDescription = stringResource(R.string.note_video_forward))
                     }
                 }

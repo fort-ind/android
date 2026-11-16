@@ -102,7 +102,8 @@ class AppContainer(application: Application) {
     val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http), DataStoreScopeStampStore(application))
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val okHttpClient: OkHttpClient by lazy { OkHttpClient() }
-    private val streaming = MisskeyStreaming(OkHttpStreamTransport { okHttpClient }, scope, networks = defaultNetworkOf(application, scope))
+    val networks = defaultNetworkOf(application, scope)
+    private val streaming = MisskeyStreaming(OkHttpStreamTransport { okHttpClient }, scope, networks = networks)
     val notificationsApi: NotificationsApi = HttpNotificationsApi(http)
     val notificationStream: NotificationStream = StreamingNotificationStream(streaming)
     val notesApi: NotesApi = HttpNotesApi(http)

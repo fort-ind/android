@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import com.fortind.zenith.media.MediaReader
+import com.fortind.zenith.media.RemoteMediaProvider
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -25,7 +26,8 @@ fun rememberMediaReceiver(
 ): ReceiveContentListener {
     val currentOnMedia by rememberUpdatedState(onMedia)
     val currentOnDragOver by rememberUpdatedState(onDragOver)
-    val resolver = LocalContext.current.contentResolver
+    val context = LocalContext.current
+    val resolver = context.contentResolver
     return remember(reader, resolver) {
         object : ReceiveContentListener {
             override fun onDragEnter() = currentOnDragOver(true)
@@ -43,7 +45,7 @@ fun rememberMediaReceiver(
                 val remaining = transferableContent.consume { item ->
                     val uri = item.uri
                     if (uri != null && resolver.isMedia(uri)) {
-                        staged += reader.stage(uri.toString())
+                        staged += if (RemoteMediaProvider.isRemoteMedia(context, uri)) uri.toString() else reader.stage(uri.toString())
                         true
                     } else {
                         false

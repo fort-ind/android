@@ -8,4 +8,5 @@ class ShellWindow(
     val poppedOutTab: AppDestination?,
     val onLeaveTab: (AppDestination, AppRoute?) -> Unit,
     val onOpenTabWindow: (AppDestination, WindowBounds?) -> Unit,
+    val onTopRouteChanged: (AppRoute?) -> Unit = {},
 )

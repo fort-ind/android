@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.ui.contextMenuTrigger
+import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.games.GameActions
 import com.fortind.zenith.ui.icons.GamesIcon
 import com.fortind.zenith.ui.pointerHover
@@ -107,6 +109,7 @@ private fun FavoriteTile(game: Game, actions: GameActions, modifier: Modifier = 
             color = if (hovered) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier
                 .fillMaxSize()
+                .focusRing(MaterialTheme.colorScheme.primary, RectangleShape)
                 .pointerHover { hovered = it }
                 .contextMenuTrigger { offset ->
                     menuOffset = offset

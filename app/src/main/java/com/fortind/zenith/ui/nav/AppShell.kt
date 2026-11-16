@@ -6,7 +6,15 @@
 
 package com.fortind.zenith.ui.nav
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalWindowInfo
+import com.fortind.zenith.net.NetworkId
+import com.fortind.zenith.settings.ThemeMode
+import com.fortind.zenith.ui.Cursors
+import com.fortind.zenith.ui.OfflineBanner
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.window.AppWindows
 import com.fortind.zenith.ui.contextMenuTrigger
 import androidx.compose.runtime.setValue
@@ -175,6 +183,8 @@ fun AppShell(
     val poppedOut = window.poppedOutTab != null
     val stacks = rememberAppBackStacks(window.poppedOutTab)
     stacks.onLeaveFixedTab = window.onLeaveTab
+    val topRoute = stacks.current.lastOrNull()
+    LaunchedEffect(topRoute) { window.onTopRouteChanged(topRoute) }
     val canPopOut = !poppedOut && WindowInsets.isCaptionBarVisible
     val app = LocalContext.current.applicationContext as ZenithApplication
     val scope = rememberCoroutineScope()
@@ -253,6 +263,7 @@ fun AppShell(
         onOpenOwnProfile = { stacks.select(AppDestination.PROFILE) },
         onOpenHandle = { handle -> stacks.push(AppRoute.PersonHandle(handle.username, handle.host)) },
         onOpenTag = { tag -> stacks.openTag(tag, app.container.launcherShortcuts) },
+        onOpenNoteId = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
     ) { ui ->
         val feedState by ui.feed.uiState.collectAsStateWithLifecycle()
         val feedActive = stacks.tab == AppDestination.HOME || stacks.current.any { it is AppRoute.Thread }
@@ -289,6 +300,14 @@ fun AppShell(
         val tabBackProgress = (tabBackState.transitionState as? NavigationEventTransitionState.InProgress)?.latestEvent?.progress
         val tabBackPreview = tabBackProgress?.takeIf { tabBackEnabled }?.let(::predictiveBackSeekFraction)
 
+        val systemDark = isSystemInDarkTheme()
+        val currentDark by rememberUpdatedState(
+            when (settings?.themeMode) {
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+                else -> systemDark
+            },
+        )
         DisposableEffect(shortcuts, ui, stacks, notificationsViewModel) {
             shortcuts.handler = handler@{ shortcut ->
                 if (ui.viewer.isOpen) {
@@ -332,6 +351,11 @@ fun AppShell(
                         }
                     }
                     AppShortcut.Dismiss -> stacks.pop()
+                    AppShortcut.ToggleDarkMode -> {
+                        val mode = if (currentDark) ThemeMode.LIGHT else ThemeMode.DARK
+                        scope.launch { app.container.settingsStore.setThemeMode(mode) }
+                        true
+                    }
                     is AppShortcut.MoveTab -> ui.pageKeys.target?.let { page ->
                         page.onMoveTab(shortcut.step)
                         true
@@ -365,6 +389,7 @@ fun AppShell(
                         navigationSuiteType = suiteType,
                         modifier = Modifier
                             .testTag("nav:${destination.name}")
+                            .handCursor()
                             .contextMenuTrigger(enabled = poppable) { menuOpen = true },
                         icon = {
                             Box {
@@ -427,7 +452,11 @@ fun AppShell(
                 }
             },
         ) {
-            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            val network by app.container.networks.collectAsStateWithLifecycle(initialValue = NetworkId.Unmonitored)
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                bottomBar = { OfflineBanner(offline = network == null) },
+            ) { innerPadding ->
                 Box(modifier = Modifier.fillMaxSize()) {
                     AppNavDisplay(
                         stacks = stacks,
@@ -505,11 +534,13 @@ private fun RailActions(
 private fun ThreePaneScaffoldScope.PaneDragHandle(state: PaneExpansionState) {
     val interactionSource = remember { MutableInteractionSource() }
     VerticalDragHandle(
-        modifier = Modifier.paneExpansionDraggable(
-            state,
-            LocalMinimumInteractiveComponentSize.current,
-            interactionSource,
-        ),
+        modifier = Modifier
+            .paneExpansionDraggable(
+                state,
+                LocalMinimumInteractiveComponentSize.current,
+                interactionSource,
+            )
+            .pointerHoverIcon(Cursors.ResizeHorizontal),
         interactionSource = interactionSource,
     )
 }

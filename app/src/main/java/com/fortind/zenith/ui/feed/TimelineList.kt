@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.TimelineKind
+import com.fortind.zenith.ui.scrollbar
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -133,6 +134,7 @@ fun TimelineList(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .fillMaxSize()
+            .scrollbar(listState)
             .testTag("feed:list")
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

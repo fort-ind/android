@@ -79,11 +79,15 @@ import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.notifications.FortNotification
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
+import com.fortind.zenith.ui.handCursor
+import com.fortind.zenith.ui.horizontalScrollWithBar
 import com.fortind.zenith.ui.login.AuthPageEffects
 import com.fortind.zenith.ui.login.ErrorMessage
 import com.fortind.zenith.ui.login.LoginViewModel
 import com.fortind.zenith.ui.rememberNow
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.scrollbar
+import com.fortind.zenith.ui.verticalScrollWithBar
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -297,7 +301,7 @@ private fun TooltipIconButton(
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick, enabled = enabled) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.handCursor(enabled)) {
             Icon(imageVector = icon, contentDescription = label)
         }
     }
@@ -308,7 +312,7 @@ private fun FilterChips(selected: NotificationFilter, onSelect: (NotificationFil
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+            .horizontalScrollWithBar(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         NotificationFilter.entries.forEach { filter ->
@@ -377,7 +381,8 @@ private fun NotificationList(
         modifier = modifier
             .widthIn(max = ContentMaxWidth)
             .fillMaxWidth()
-            .fillMaxHeight(),
+            .fillMaxHeight()
+            .scrollbar(listState),
     ) {
         itemsIndexed(
             items = items,
@@ -524,7 +529,7 @@ private fun CenteredMessage(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScrollWithBar(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

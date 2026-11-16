@@ -48,6 +48,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -71,6 +72,7 @@ import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.timeline.firstPreviewLink
 import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.contextMenuTrigger
+import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.mfm.MfmEnvironment
 import com.fortind.zenith.ui.motion.rememberThreadBounds
@@ -81,7 +83,7 @@ import com.fortind.zenith.ui.relativeTime
 private const val LONG_TEXT_CHARS = 500
 private const val LONG_TEXT_LINES = 15
 
-private fun Note.isLong(): Boolean =
+internal fun Note.isLong(): Boolean =
     (text?.length ?: 0) > LONG_TEXT_CHARS || (text?.count { it == '\n' } ?: 0) >= LONG_TEXT_LINES
 
 @Composable
@@ -101,6 +103,9 @@ fun NoteCard(
     }
     val target = note.target
     var hovered by remember { mutableStateOf(false) }
+    var cwShown by rememberSaveable(target.id) { mutableStateOf(false) }
+    var longExpanded by rememberSaveable(target.id) { mutableStateOf(false) }
+    val reveal = NoteReveal(cwShown, { cwShown = !cwShown }, longExpanded, { longExpanded = !longExpanded })
     var menuOpen by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
     val selected = environment.selectedNoteId == target.id
@@ -131,22 +136,14 @@ fun NoteCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("note")
+                .focusRing(MaterialTheme.colorScheme.primary, RectangleShape)
                 .pointerHover { hovered = it }
                 .contextMenuTrigger(enabled = !target.deleted, onOpen = openMenu)
                 .onPreviewKeyEvent { event ->
                     val plain = !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
-                    if (event.type != KeyEventType.KeyDown || !plain || target.deleted) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.R -> {
-                            callbacks.openReactionPicker(target)
-                            true
-                        }
-                        Key.L -> {
-                            callbacks.reactDefault(target)
-                            true
-                        }
-                        else -> false
-                    }
+                    if (event.type != KeyEventType.KeyDown || !plain || target.deleted || target.isHidden) return@onPreviewKeyEvent false
+                    val key = noteKeyFor(event.key, event.isShiftPressed) ?: return@onPreviewKeyEvent false
+                    runNoteKey(key, target, environment, callbacks, reveal, collapsible = !focal, renoted = renoted, openMenu = openMenu)
                 }
                 .semantics {
                     customActions = listOf(
@@ -169,7 +166,7 @@ fun NoteCard(
                 } else if (target.isHidden) {
                     DeletedStub(R.string.note_hidden)
                 } else {
-                    NoteMain(target, environment, callbacks, focal, showReplyContext)
+                    NoteMain(target, environment, callbacks, focal, showReplyContext, reveal)
                 }
             }
         }
@@ -226,7 +223,7 @@ private fun MutedNoteRow(words: List<String>, onShow: () -> Unit, modifier: Modi
 }
 
 @Composable
-private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean, showReplyContext: Boolean) {
+private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean, showReplyContext: Boolean, reveal: NoteReveal) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Avatar(
             name = note.user.displayName,
@@ -240,7 +237,7 @@ private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCa
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             NoteHeader(note, environment)
             if (showReplyContext) note.reply?.let { ReplyContext(it) }
-            NoteContent(note, environment, callbacks, focal)
+            NoteContent(note, environment, callbacks, focal, reveal)
             if (note.reactions.isNotEmpty()) ReactionChips(note, environment, callbacks)
             NoteActionBar(note, environment, callbacks)
         }
@@ -364,13 +361,12 @@ private fun VisibilityIcon(note: Note) {
 }
 
 @Composable
-private fun NoteContent(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean) {
+private fun NoteContent(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean, reveal: NoteReveal) {
     val cw = note.cwMfm
     if (cw == null) {
-        NoteBody(note, environment, callbacks, focal)
+        NoteBody(note, environment, callbacks, focal, reveal)
         return
     }
-    var shown by rememberSaveable(note.id) { mutableStateOf(false) }
     val textEnvironment = remember(note.id, environment.mfm) { environment.mfm.withEmoji(environment.noteEmoji(note)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (cw.isEmpty()) {
@@ -378,9 +374,9 @@ private fun NoteContent(note: Note, environment: NoteEnvironment, callbacks: Not
         } else {
             MfmContent(cw, textEnvironment, style = MaterialTheme.typography.bodyLarge)
         }
-        CwToggle(shown) { shown = !shown }
-        AnimatedVisibility(visible = shown) {
-            NoteBody(note, environment, callbacks, focal)
+        CwToggle(reveal.cwShown, reveal.toggleCw)
+        AnimatedVisibility(visible = reveal.cwShown) {
+            NoteBody(note, environment, callbacks, focal, reveal)
         }
     }
 }
@@ -403,12 +399,12 @@ private fun CwToggle(shown: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun NoteBody(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean) {
+private fun NoteBody(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean, reveal: NoteReveal) {
     val textEnvironment = remember(note.id, environment.mfm) { environment.mfm.withEmoji(environment.noteEmoji(note)) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (note.textMfm.isNotEmpty()) {
             if (!focal && note.isLong()) {
-                CollapsibleText(note, textEnvironment)
+                CollapsibleText(note, textEnvironment, reveal.longExpanded, reveal.toggleLong)
             } else {
                 MfmContent(note.textMfm, textEnvironment, style = bodyStyle(focal))
             }
@@ -435,8 +431,7 @@ private fun bodyStyle(focal: Boolean) =
     if (focal) MaterialTheme.typography.bodyLarge.copy(fontSize = MaterialTheme.typography.titleMedium.fontSize) else MaterialTheme.typography.bodyLarge
 
 @Composable
-private fun CollapsibleText(note: Note, environment: MfmEnvironment) {
-    var expanded by rememberSaveable(note.id) { mutableStateOf(false) }
+private fun CollapsibleText(note: Note, environment: MfmEnvironment, expanded: Boolean, onToggle: () -> Unit) {
     val surface = MaterialTheme.colorScheme.surface
     Column {
         Box(modifier = if (expanded) Modifier else Modifier.heightIn(max = 240.dp).clipToBounds()) {
@@ -449,7 +444,7 @@ private fun CollapsibleText(note: Note, environment: MfmEnvironment) {
                 )
             }
         }
-        TextButton(onClick = { expanded = !expanded }) {
+        TextButton(onClick = onToggle) {
             Text(stringResource(if (expanded) R.string.note_show_less else R.string.note_show_more))
         }
     }
@@ -464,7 +459,7 @@ private fun QuoteCard(quoted: Note, environment: NoteEnvironment, callbacks: Not
         enabled = !quoted.deleted,
         shape = MaterialTheme.shapes.medium,
         color = if (hovered) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth().pointerHover { hovered = it },
+        modifier = Modifier.fillMaxWidth().focusRing(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium).pointerHover { hovered = it },
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (quoted.deleted) {

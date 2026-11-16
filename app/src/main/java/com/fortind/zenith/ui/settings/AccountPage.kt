@@ -99,6 +99,7 @@ import com.fortind.zenith.ui.account.ModerationEvent
 import com.fortind.zenith.ui.account.ModerationViewModel
 import com.fortind.zenith.ui.account.ProfileFormState
 import com.fortind.zenith.ui.account.ProfileSaveState
+import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.launchCustomTab
 import com.fortind.zenith.ui.predictiveBackScale
 import com.fortind.zenith.ui.predictiveBackSeekFraction
@@ -106,6 +107,7 @@ import com.fortind.zenith.ui.profile.ProfileUiState
 import com.fortind.zenith.ui.rememberLastNonNull
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.theme.isThemeDark
+import com.fortind.zenith.ui.verticalScrollWithBar
 import kotlinx.coroutines.launch
 
 private enum class AccountSection(
@@ -372,12 +374,7 @@ private fun AccountSectionPage(
                 },
                 subtitle = { Text(text = stringResource(section.supportingRes), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.settings_back),
-                        )
-                    }
+                    TooltipIconButton(label = stringResource(R.string.settings_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },
                 actions = {
                     if (shownForm != null && account is ProfileUiState.Loaded) {
@@ -399,7 +396,7 @@ private fun AccountSectionPage(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScrollWithBar(rememberScrollState())
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

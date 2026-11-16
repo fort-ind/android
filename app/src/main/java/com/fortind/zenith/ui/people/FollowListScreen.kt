@@ -67,6 +67,7 @@ import com.fortind.zenith.ui.feed.FeedLoading
 import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.mfm.MfmContent
+import com.fortind.zenith.ui.scrollbar
 import com.fortind.zenith.ui.settings.ReauthorizePrompt
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
@@ -223,7 +224,7 @@ private fun UserGrid(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxSize().testTag("follows:list"),
+        modifier = Modifier.fillMaxSize().scrollbar(gridState).testTag("follows:list"),
     ) {
         val remoteHost = owner?.user?.host?.takeIf(ValidHost::matches)
         if (remoteHost != null && kind != FollowListKind.Requests) {

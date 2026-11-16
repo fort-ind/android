@@ -15,11 +15,20 @@ class AppShortcutsTest {
     }
 
     @Test
-    fun plainDigitsAndLettersAreLeftForTyping() {
+    fun plainLettersMatchSharkeyWebHotkeys() {
+        assertEquals(AppShortcut.NewPost, shortcutFor(KeyEvent.KEYCODE_N, command = false))
+        assertEquals(AppShortcut.NewPost, shortcutFor(KeyEvent.KEYCODE_P, command = false))
+        assertEquals(AppShortcut.Find, shortcutFor(KeyEvent.KEYCODE_S, command = false))
+        assertEquals(AppShortcut.ToggleDarkMode, shortcutFor(KeyEvent.KEYCODE_D, command = false))
+    }
+
+    @Test
+    fun otherPlainKeysAndModifiedLettersAreLeftAlone() {
         assertNull(shortcutFor(KeyEvent.KEYCODE_1, command = false))
-        assertNull(shortcutFor(KeyEvent.KEYCODE_N, command = false))
         assertNull(shortcutFor(KeyEvent.KEYCODE_R, command = false))
         assertNull(shortcutFor(KeyEvent.KEYCODE_F, command = false))
+        assertNull(shortcutFor(KeyEvent.KEYCODE_N, command = false, shift = true))
+        assertNull(shortcutFor(KeyEvent.KEYCODE_D, command = false, alt = true))
         assertEquals(AppShortcut.Find, shortcutFor(KeyEvent.KEYCODE_F, command = true))
     }
 

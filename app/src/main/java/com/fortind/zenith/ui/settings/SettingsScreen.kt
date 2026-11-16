@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.selection.selectableGroup
@@ -150,6 +151,8 @@ import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.pointerHover
 import com.fortind.zenith.ui.rememberLastNonNull
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.scrollbar
+import com.fortind.zenith.ui.verticalScrollWithBar
 import kotlinx.coroutines.launch
 
 private enum class SettingsPage(
@@ -491,7 +494,7 @@ private fun SettingsList(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScrollWithBar(rememberScrollState())
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -571,7 +574,8 @@ private fun SearchResults(query: String, results: List<SettingsEntry>, onOpen: (
         )
         return
     }
-    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().scrollbar(listState)) {
         items(results, key = { it.name }) { entry ->
             var hovered by remember { mutableStateOf(false) }
             ListItem(
@@ -718,12 +722,7 @@ private fun SettingsDetail(
                     Text(text = stringResource(page.supportingRes), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
                 navigationIcon = {
-                    IconButton(onClick = leavePage) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.settings_back),
-                        )
-                    }
+                    TooltipIconButton(label = stringResource(R.string.settings_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = leavePage)
                 },
                 windowInsets = WindowInsets(0),
                 scrollBehavior = scrollBehavior,
@@ -734,7 +733,7 @@ private fun SettingsDetail(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScrollWithBar(rememberScrollState())
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

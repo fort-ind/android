@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.composer.Attachment
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.verticalScrollWithBar
 import kotlin.math.roundToInt
 
 private val OverlayEntryKeys = setOf(Key.Tab, Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
@@ -213,7 +214,7 @@ private fun BottomSheet(
             ) {
                 BottomSheetDefaults.DragHandle()
             }
-            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), content = content)
+            Column(modifier = Modifier.weight(1f, fill = false).verticalScrollWithBar(rememberScrollState()), content = content)
         }
     }
 }

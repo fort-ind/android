@@ -1,5 +1,6 @@
 package com.fortind.zenith.ui.feed
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,13 +19,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onVisibilityChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fortind.zenith.R
 import com.fortind.zenith.timeline.LinkPreview
 import com.fortind.zenith.timeline.LinkPreviewState
+import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.media.NetworkImage
+import com.fortind.zenith.ui.media.dragShadowSource
+import com.fortind.zenith.ui.media.linkDragSource
+import com.fortind.zenith.ui.media.linkPayload
+import com.fortind.zenith.ui.media.rememberTouchDragStarter
 import kotlinx.coroutines.launch
 
 private val LinkCardHeight = 88.dp
@@ -66,13 +75,22 @@ internal fun LinkPreviewSlot(url: String, environment: NoteEnvironment, callback
 @Composable
 private fun LinkPreviewCard(preview: LinkPreview, animate: Boolean, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val touchDrag = rememberTouchDragStarter()
     Surface(
-        onClick = onOpen,
         shape = MaterialTheme.shapes.medium,
         color = colors.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = LinkCardHeight)
+            .dragShadowSource(touchDrag)
+            .clip(MaterialTheme.shapes.medium)
+            .focusRing(colors.primary, MaterialTheme.shapes.medium)
+            .linkDragSource(preview.url, preview.title)
+            .combinedClickable(
+                onLongClickLabel = stringResource(R.string.media_drag),
+                onLongClick = { touchDrag.start(linkPayload(preview.url, preview.title)) },
+                onClick = onOpen,
+            )
             .testTag("note:link"),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

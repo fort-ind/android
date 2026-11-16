@@ -112,7 +112,7 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun Intent.readShare(): SharedContent? {
-        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return null
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE && action != Intent.ACTION_VIEW) return null
         return try {
             sharedContent(
                 text = getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString(),
@@ -125,10 +125,9 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    private fun Intent.sharedUris(): List<Uri> =
-        if (action == Intent.ACTION_SEND_MULTIPLE) {
-            IntentCompat.getParcelableArrayListExtra(this, Intent.EXTRA_STREAM, Uri::class.java).orEmpty().filterNotNull()
-        } else {
-            listOfNotNull(IntentCompat.getParcelableExtra(this, Intent.EXTRA_STREAM, Uri::class.java))
-        }
+    private fun Intent.sharedUris(): List<Uri> = when (action) {
+        Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(this, Intent.EXTRA_STREAM, Uri::class.java).orEmpty().filterNotNull()
+        Intent.ACTION_VIEW -> listOfNotNull(data)
+        else -> listOfNotNull(IntentCompat.getParcelableExtra(this, Intent.EXTRA_STREAM, Uri::class.java))
+    }
 }

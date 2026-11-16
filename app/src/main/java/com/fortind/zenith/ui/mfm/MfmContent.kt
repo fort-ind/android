@@ -54,6 +54,7 @@ import com.fortind.zenith.mfm.MfmNode
 import com.fortind.zenith.mfm.MfmQuote
 import com.fortind.zenith.mfm.MfmSearch
 import com.fortind.zenith.mfm.isBlock
+import com.fortind.zenith.ui.horizontalScrollWithBar
 import java.net.URLEncoder
 
 class MfmEnvironment(
@@ -189,7 +190,7 @@ private fun CodeSurface(code: String) {
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
             softWrap = false,
             modifier = Modifier
-                .horizontalScroll(rememberScrollState())
+                .horizontalScrollWithBar(rememberScrollState())
                 .padding(12.dp),
         )
     }

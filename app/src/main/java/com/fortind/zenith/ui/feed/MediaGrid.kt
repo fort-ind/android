@@ -3,6 +3,7 @@ package com.fortind.zenith.ui.feed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -40,13 +41,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.layout.onVisibilityChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.Cursors
+import com.fortind.zenith.ui.media.dragShadowSource
+import com.fortind.zenith.ui.media.isDraggableMedia
+import com.fortind.zenith.ui.media.mediaDragSource
+import com.fortind.zenith.ui.media.mediaPayload
+import com.fortind.zenith.ui.media.rememberTouchDragStarter
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.rememberCoroutineScope
@@ -209,15 +218,23 @@ private fun MediaTile(
     }
     val colors = MaterialTheme.colorScheme
     val posterUrl = if (file.kind == MediaKind.Image) file.thumbnailUrl ?: file.url else file.thumbnailUrl
+    val context = LocalContext.current
+    val touchDrag = rememberTouchDragStarter()
+    val draggable = !hidden && isDraggableMedia(file)
+    val dragLabel = stringResource(R.string.media_drag)
     Box(
         modifier = modifier
+            .dragShadowSource(touchDrag)
             .background(colors.surfaceContainerHighest)
-            .pointerHover { hovered = it }
+            .pointerHover(icon = if (file.kind == MediaKind.Image && !hidden) Cursors.ZoomIn else PointerIcon.Hand) { hovered = it }
             .focusRequester(focus)
-            .clickable(
+            .mediaDragSource(context, file, enabled = !hidden)
+            .combinedClickable(
                 interactionSource = interaction,
                 indication = ripple(),
                 role = if (file.kind == MediaKind.Image) Role.Image else Role.Button,
+                onLongClickLabel = if (draggable) dragLabel else null,
+                onLongClick = if (draggable) ({ touchDrag.start(mediaPayload(context, file)) }) else null,
                 onClick = onClick,
             )
             .then(if (focused) Modifier.border(3.dp, colors.primary, MaterialTheme.shapes.small) else Modifier)

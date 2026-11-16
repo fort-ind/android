@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -78,10 +79,14 @@ import com.fortind.zenith.ui.account.ProfileFormState
 import com.fortind.zenith.ui.account.ProfileSaveFailure
 import com.fortind.zenith.ui.account.ProfileSaveState
 import com.fortind.zenith.ui.StatusMessage
+import com.fortind.zenith.ui.feed.LabelTooltip
+import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.login.AuthPageEffects
 import com.fortind.zenith.ui.login.ErrorMessage
 import com.fortind.zenith.ui.login.LoginViewModel
 import com.fortind.zenith.ui.media.PickOsMedia
+import com.fortind.zenith.ui.rememberInitialFocus
 import com.fortind.zenith.ui.rememberReduceMotion
 import java.text.DateFormat
 import java.util.Date
@@ -141,11 +146,10 @@ private fun ImageHeader(
                 )
             }
             if (onPickBanner != null) {
-                FilledTonalIconButton(
-                    onClick = onPickBanner,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                ) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = stringResource(R.string.account_change_banner))
+                LabelTooltip(stringResource(R.string.account_change_banner), modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+                    FilledTonalIconButton(onClick = onPickBanner, modifier = Modifier.handCursor()) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = stringResource(R.string.account_change_banner))
+                    }
                 }
             }
         }
@@ -160,11 +164,10 @@ private fun ImageHeader(
         ) {
             Avatar(name = name, url = avatarModel, size = AvatarSize)
             if (onPickAvatar != null) {
-                FilledTonalIconButton(
-                    onClick = onPickAvatar,
-                    modifier = Modifier.align(Alignment.BottomEnd).size(40.dp),
-                ) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = stringResource(R.string.account_change_avatar))
+                LabelTooltip(stringResource(R.string.account_change_avatar), modifier = Modifier.align(Alignment.BottomEnd)) {
+                    FilledTonalIconButton(onClick = onPickAvatar, modifier = Modifier.size(40.dp).handCursor()) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = stringResource(R.string.account_change_avatar))
+                    }
                 }
             }
         }
@@ -217,6 +220,7 @@ internal fun EditProfileContent(user: CurrentUser, form: ProfileFormState, saveS
             over = ProfileProblem.NameTooLong in problems,
             enabled = enabled,
             singleLine = true,
+            modifier = Modifier.focusRequester(rememberInitialFocus(keyboardOnly = true)),
         )
         CountedField(
             state = form.bio,
@@ -250,11 +254,12 @@ private fun CountedField(
     over: Boolean,
     enabled: Boolean,
     singleLine: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val count = normalizeProfileText(state.text.toString()).codePointLength()
     OutlinedTextField(
         state = state,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         enabled = enabled,
         label = { Text(stringResource(labelRes)) },
         isError = over,
@@ -289,13 +294,9 @@ private fun BirthdayField(form: ProfileFormState, enabled: Boolean) {
             Text(text = shown, style = MaterialTheme.typography.bodyLarge)
         }
         if (millis != null) {
-            IconButton(onClick = { form.birthday = null }, enabled = enabled) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.account_birthday_clear))
-            }
+            TooltipIconButton(label = stringResource(R.string.account_birthday_clear), icon = Icons.Default.Close, onClick = { form.birthday = null }, enabled = enabled)
         }
-        IconButton(onClick = { picking = true }, enabled = enabled) {
-            Icon(Icons.Default.Cake, contentDescription = stringResource(R.string.account_birthday_pick))
-        }
+        TooltipIconButton(label = stringResource(R.string.account_birthday_pick), icon = Icons.Default.Cake, onClick = { picking = true }, enabled = enabled)
     }
 
     if (picking) {
@@ -383,9 +384,7 @@ private fun FieldEditor(row: FieldRow, enabled: Boolean, onRemove: () -> Unit) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             )
         }
-        IconButton(onClick = onRemove, enabled = enabled) {
-            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.account_field_remove))
-        }
+        TooltipIconButton(label = stringResource(R.string.account_field_remove), icon = Icons.Default.Close, onClick = onRemove, enabled = enabled)
     }
 }
 

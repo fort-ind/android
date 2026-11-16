@@ -75,6 +75,7 @@ import com.fortind.zenith.ui.feed.TimelineList
 import com.fortind.zenith.ui.feed.TimelineListCallbacks
 import com.fortind.zenith.ui.feed.TimelineStatus
 import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.home.ReauthorizeBanner
 import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.ui.rememberReduceMotion
@@ -82,6 +83,7 @@ import com.fortind.zenith.ui.rememberTopBarReveal
 import com.fortind.zenith.ui.revealTopBarOnWheel
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
+import com.fortind.zenith.ui.verticalScrollWithBar
 
 val PersonListWidth: Dp = 440.dp
 
@@ -206,7 +208,7 @@ fun PersonPage(
                     when {
                         detail != null && detail.limited -> LimitedAccount(header, detail, ui.peopleActions)
                         layout == PersonLayout.Split -> Column(
-                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                            modifier = Modifier.fillMaxSize().verticalScrollWithBar(rememberScrollState()),
                         ) { header() }
                         else -> PersonNotes(
                             userId = userId,
@@ -393,6 +395,7 @@ fun SegmentTabs(
                     modifier = Modifier
                         .weight(1f)
                         .testTag(testTag(index))
+                        .handCursor()
                         .semantics {
                             role = Role.RadioButton
                             contentDescription = spoken
@@ -409,7 +412,7 @@ fun SegmentTabs(
 @Composable
 private fun LimitedAccount(header: @Composable () -> Unit, detail: UserDetail, actions: PeopleActions) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().verticalScrollWithBar(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth()) { header() }
