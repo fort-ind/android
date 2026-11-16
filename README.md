@@ -1,5 +1,5 @@
-## project zenith!
-a version of fort.android made in jetpack compose using material 3 expressive (in alpha)
+## fort.android
+a lightweight simple fort.ind app made for android based devices :D
 
 ## bulid it! 
 wanna test it out? grab one of the releases or bulid it 
