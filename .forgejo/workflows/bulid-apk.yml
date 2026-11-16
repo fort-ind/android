@@ -51,7 +51,7 @@ jobs:
           packages: platform-tools
 
       - name: Set up Gradle
-        uses: https://github.com/gradle/actions/setup-gradle@v4
+        uses: https://github.com/gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ forgejo.ref != 'refs/heads/master' }}
           add-job-summary: never
