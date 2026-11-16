@@ -12,6 +12,7 @@ import com.fortind.zenith.composer.quickReplyNote
 import com.fortind.zenith.composer.replyText
 import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
+import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.timeline.FakeNotesApi
 import com.fortind.zenith.timeline.Visibility
 import com.fortind.zenith.timeline.testNote
@@ -185,6 +186,15 @@ class QuickActionsTest {
     fun aRefusedLikeIsReportedAndNotRetried() = runTest {
         val f = fixture()
         f.notes.reactFailure = HttpStatusException(404, ApiErrorCodes.NO_SUCH_NOTE)
+
+        assertEquals(QuickOutcome.Done, f.actions.like("n1"))
+        assertEquals(listOf(QuickAction.Like to "n1"), f.notifier.failed.toList())
+    }
+
+    @Test
+    fun aLikeWithoutTheReactionsScopeFailsAtOnce() = runTest {
+        val f = fixture()
+        f.notes.reactFailure = MissingPermissionException()
 
         assertEquals(QuickOutcome.Done, f.actions.like("n1"))
         assertEquals(listOf(QuickAction.Like to "n1"), f.notifier.failed.toList())

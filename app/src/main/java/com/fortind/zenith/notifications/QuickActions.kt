@@ -11,6 +11,7 @@ import com.fortind.zenith.composer.failedReplySlot
 import com.fortind.zenith.composer.quickReplyNote
 import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
+import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.timeline.NotesApi
 import java.io.IOException
 import kotlinx.coroutines.flow.first
@@ -65,6 +66,9 @@ class NotificationQuickActions(
             QuickOutcome.Done
         } catch (_: TokenRejectedException) {
             session.signOut()
+            notifier.showActionFailed(QuickAction.Like, noteId)
+            QuickOutcome.Done
+        } catch (_: MissingPermissionException) {
             notifier.showActionFailed(QuickAction.Like, noteId)
             QuickOutcome.Done
         } catch (e: HttpStatusException) {

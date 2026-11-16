@@ -24,6 +24,7 @@ import com.fortind.zenith.timeline.NoteCollection
 import com.fortind.zenith.timeline.NoteUser
 import com.fortind.zenith.timeline.testUser
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -71,7 +72,12 @@ class DiscoveryViewModelsTest {
 
         override suspend fun deleteList(token: String, listId: String) = check("delete:$listId")
 
-        override suspend fun addToList(token: String, listId: String, userId: String) = check("push:$listId:$userId")
+        var pushGate: CompletableDeferred<Unit>? = null
+
+        override suspend fun addToList(token: String, listId: String, userId: String) {
+            pushGate?.await()
+            check("push:$listId:$userId")
+        }
 
         override suspend fun removeFromList(token: String, listId: String, userId: String) = check("pull:$listId:$userId")
 
@@ -294,6 +300,29 @@ class DiscoveryViewModelsTest {
         awaitTrue { model.uiState.value.members?.members?.size == 2 }
         assertTrue("push:l2:u9" in api.calls)
         assertEquals(listOf("u9"), model.uiState.value.lists.first { it.id == "l2" }.userIds)
+    }
+
+    @Test
+    fun aMemberAddedToOneListNeverLandsInAnotherListsSheet() = runTest {
+        val api = FakeCollections()
+        val gate = CompletableDeferred<Unit>()
+        api.pushGate = gate
+        val model = collections(api)
+        model.loaded()
+        model.openMembers("l2")
+        awaitTrue { model.uiState.value.members?.status == CollectionsStatus.Ready }
+        model.addMember(testUser("u9"))
+        model.openMembers("l1")
+        awaitTrue { model.uiState.value.members?.status == CollectionsStatus.Ready }
+        api.members = listOf(ListMember("m1", testUser("u1")), ListMember("m2", testUser("u9")))
+
+        gate.complete(Unit)
+
+        awaitTrue { api.calls.count { it == "members:null" } == 3 }
+        val sheet = model.uiState.value.members
+        assertEquals("l1", sheet?.listId)
+        assertEquals(listOf("u1"), sheet?.members?.map { it.user.id })
+        assertTrue(sheet?.busy.orEmpty().isEmpty())
     }
 
     @Test

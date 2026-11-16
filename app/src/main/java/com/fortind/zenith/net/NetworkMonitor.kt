@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @JvmInline
 value class NetworkId(private val handle: Long) {
@@ -29,22 +31,34 @@ val unmonitoredNetwork: Flow<NetworkId?> = flow {
 
 fun defaultNetworkOf(context: Context, scope: CoroutineScope): Flow<NetworkId?> = callbackFlow {
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    val reports = Any()
+    var heardFromSystem = false
+    fun report(network: NetworkId?) = synchronized(reports) {
+        heardFromSystem = true
+        trySend(network)
+    }
+    fun reportSilenceAsOffline() = synchronized(reports) {
+        if (!heardFromSystem) {
+            heardFromSystem = true
+            trySend(null)
+        }
+    }
     val callback = object : ConnectivityManager.NetworkCallback() {
         private var current: Network? = null
 
         override fun onAvailable(network: Network) {
             current = network
-            trySend(NetworkId.of(network))
+            report(NetworkId.of(network))
         }
 
         override fun onLost(network: Network) {
             if (network != current) return
             current = null
-            trySend(null)
+            report(null)
         }
 
         override fun onBlockedStatusChanged(network: Network, blocked: Boolean) {
-            if (network == current) trySend(if (blocked) null else NetworkId.of(network))
+            if (network == current) report(if (blocked) null else NetworkId.of(network))
         }
     }
     val registered = connectivity != null && try {
@@ -53,8 +67,16 @@ fun defaultNetworkOf(context: Context, scope: CoroutineScope): Flow<NetworkId?> 
     } catch (_: RuntimeException) {
         false
     }
-    if (!registered) trySend(NetworkId.Unmonitored)
+    if (registered) {
+        launch {
+            delay(FIRST_CALLBACK_GRACE_MS)
+            reportSilenceAsOffline()
+        }
+    } else {
+        trySend(NetworkId.Unmonitored)
+    }
     awaitClose { if (registered) connectivity.unregisterNetworkCallback(callback) }
 }.distinctUntilChanged().shareIn(scope, SharingStarted.WhileSubscribed(NETWORK_STOP_TIMEOUT_MS, replayExpirationMillis = 0), replay = 1)
 
 private const val NETWORK_STOP_TIMEOUT_MS = 5_000L
+private const val FIRST_CALLBACK_GRACE_MS = 1_000L

@@ -232,6 +232,7 @@ class CollectionsViewModel(
 
     fun openMembers(listId: String) {
         membersJob?.cancel()
+        peopleSearch?.cancel()
         _uiState.update { it.copy(members = MembersState(listId)) }
         membersJob = viewModelScope.launch { loadMembers(listId, null) }
     }
@@ -246,7 +247,7 @@ class CollectionsViewModel(
         val members = _uiState.value.members ?: return
         val cursor = members.members.lastOrNull()?.membershipId ?: return
         if (members.loadingMore || members.endReached || members.status != CollectionsStatus.Ready) return
-        updateMembers { it.copy(loadingMore = true) }
+        updateMembers(members.listId) { it.copy(loadingMore = true) }
         membersJob = viewModelScope.launch { loadMembers(members.listId, cursor) }
     }
 
@@ -254,7 +255,7 @@ class CollectionsViewModel(
         try {
             val token = session.token() ?: throw TokenRejectedException(0)
             val page = api.members(token, listId, cursor, MEMBERS_PAGE_SIZE)
-            updateMembers { state ->
+            updateMembers(listId) { state ->
                 val known = state.members.mapTo(HashSet()) { it.user.id }
                 state.copy(
                     status = CollectionsStatus.Ready,
@@ -266,7 +267,7 @@ class CollectionsViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            updateMembers { it.copy(status = if (it.members.isEmpty()) CollectionsStatus.Failed else CollectionsStatus.Ready, loadingMore = false) }
+            updateMembers(listId) { it.copy(status = if (it.members.isEmpty()) CollectionsStatus.Failed else CollectionsStatus.Ready, loadingMore = false) }
             handleAuth(e)
         }
     }
@@ -274,20 +275,20 @@ class CollectionsViewModel(
     fun addMember(user: NoteUser) = changeMember(user.id) { token, listId ->
         api.addToList(token, listId, user.id)
         _uiState.update { state -> state.copy(lists = state.lists.withMember(listId, user.id, true)) }
-        updateMembers { it.copy(members = emptyList(), endReached = false, results = it.results.filterNot { found -> found.id == user.id }) }
+        updateMembers(listId) { it.copy(members = emptyList(), endReached = false, results = it.results.filterNot { found -> found.id == user.id }) }
         loadMembers(listId, null)
     }
 
     fun removeMember(user: NoteUser) = changeMember(user.id) { token, listId ->
         api.removeFromList(token, listId, user.id)
         _uiState.update { state -> state.copy(lists = state.lists.withMember(listId, user.id, false)) }
-        updateMembers { state -> state.copy(members = state.members.filterNot { it.user.id == user.id }) }
+        updateMembers(listId) { state -> state.copy(members = state.members.filterNot { it.user.id == user.id }) }
     }
 
     private fun changeMember(userId: String, action: suspend (String, String) -> Unit) {
         val members = _uiState.value.members ?: return
         if (userId in members.busy) return
-        updateMembers { it.copy(busy = it.busy + userId) }
+        updateMembers(members.listId) { it.copy(busy = it.busy + userId) }
         viewModelScope.launch {
             try {
                 val token = session.token() ?: throw TokenRejectedException(0)
@@ -297,16 +298,17 @@ class CollectionsViewModel(
             } catch (e: IOException) {
                 report(e)
             } finally {
-                updateMembers { it.copy(busy = it.busy - userId) }
+                updateMembers(members.listId) { it.copy(busy = it.busy - userId) }
             }
         }
     }
 
     fun searchPeople(query: String) {
         peopleSearch?.cancel()
+        val listId = _uiState.value.members?.listId ?: return
         val clean = query.trim().removePrefix("@")
         if (clean.length < MIN_PEOPLE_QUERY) {
-            updateMembers { it.copy(results = emptyList()) }
+            updateMembers(listId) { it.copy(results = emptyList()) }
             return
         }
         peopleSearch = viewModelScope.launch {
@@ -316,15 +318,18 @@ class CollectionsViewModel(
             } catch (_: IOException) {
                 emptyList()
             }
-            updateMembers { state ->
+            updateMembers(listId) { state ->
                 val existing = state.members.mapTo(HashSet()) { it.user.id }
                 state.copy(results = found.filterNot { it.id in existing })
             }
         }
     }
 
-    private fun updateMembers(transform: (MembersState) -> MembersState) {
-        _uiState.update { state -> state.copy(members = state.members?.let(transform)) }
+    private fun updateMembers(listId: String, transform: (MembersState) -> MembersState) {
+        _uiState.update { state ->
+            val members = state.members
+            if (members?.listId == listId) state.copy(members = transform(members)) else state
+        }
     }
 
     private fun write(action: suspend (String) -> Unit) {

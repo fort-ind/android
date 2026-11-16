@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.core.graphics.drawable.toBitmap
@@ -13,6 +14,7 @@ import coil3.asDrawable
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
+import coil3.size.Precision
 import com.fortind.zenith.timeline.NoteFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -58,25 +60,42 @@ private val KnownExtensions = mapOf(
     "video/webm" to "webm",
 )
 
-private val UnsafeFileNameChars = Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
+private const val PRINT_MAX_PX = 3_508
+
+private val UnsafeFileNameChars =Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
 
 suspend fun downloadToDocument(context: Context, client: OkHttpClient, url: String, target: Uri): Boolean = withContext(Dispatchers.IO) {
-    try {
-        client.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            if (!response.isSuccessful) return@withContext false
-            val output = context.contentResolver.openOutputStream(target, "wt") ?: return@withContext false
-            output.use { response.body.byteStream().copyTo(it) }
-        }
-        true
+    val saved = try {
+        copyInto(context, client, url, target)
     } catch (_: IOException) {
         false
     } catch (_: SecurityException) {
         false
     }
+    if (!saved) discardDocument(context, target)
+    saved
+}
+
+private fun copyInto(context: Context, client: OkHttpClient, url: String, target: Uri): Boolean =
+    client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+        if (!response.isSuccessful) return false
+        val output = context.contentResolver.openOutputStream(target, "wt") ?: return false
+        output.use { response.body.byteStream().copyTo(it) }
+        true
+    }
+
+private fun discardDocument(context: Context, target: Uri) {
+    try {
+        DocumentsContract.deleteDocument(context.contentResolver, target)
+    } catch (_: IOException) {
+    } catch (_: SecurityException) {
+    } catch (_: IllegalArgumentException) {
+    } catch (_: UnsupportedOperationException) {
+    }
 }
 
 suspend fun loadBitmap(context: Context, url: String): Bitmap? {
-    val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
+    val request = ImageRequest.Builder(context).data(url).size(PRINT_MAX_PX, PRINT_MAX_PX).precision(Precision.INEXACT).allowHardware(false).build()
     val result = SingletonImageLoader.get(context).execute(request) as? SuccessResult ?: return null
     return result.image.asDrawable(context.resources).toBitmap()
 }

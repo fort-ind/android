@@ -37,14 +37,18 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
+import androidx.compose.runtime.rememberCoroutineScope
 import com.fortind.zenith.media.MediaReader
-import com.fortind.zenith.media.RemoteMediaProvider
+import com.fortind.zenith.ui.composer.stageForComposer
 import com.fortind.zenith.ui.media.startedInThisWindow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 @Stable
 class DropToPost internal constructor(
     private val activity: Activity?,
     private val reader: MediaReader,
+    private val scope: CoroutineScope,
 ) {
     var hovering by mutableStateOf(false)
         private set
@@ -72,19 +76,21 @@ class DropToPost internal constructor(
             hovering = false
             val host = activity ?: return false
             val dragEvent = event.toAndroidDragEvent()
+            val clip = dragEvent.clipData ?: return false
             val permissions = host.requestDragAndDropPermissions(dragEvent)
-            try {
-                val clip = dragEvent.clipData ?: return false
-                val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
-                val staged = uris.filter { isPostable(host, it) }.map { uri ->
-                    if (RemoteMediaProvider.isRemoteMedia(host, uri)) uri.toString() else reader.stage(uri.toString())
-                }
-                if (staged.isEmpty()) return false
-                onMedia(staged)
-                return true
-            } finally {
+            val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.filter { isPostable(host, it) }
+            if (uris.isEmpty()) {
                 permissions?.release()
+                return false
             }
+            scope.launch {
+                try {
+                    onMedia(stageForComposer(host, reader, uris))
+                } finally {
+                    permissions?.release()
+                }
+            }
+            return true
         }
     }
 }
@@ -94,7 +100,8 @@ fun acceptsDropToPost(mimeTypes: Collection<String>): Boolean =
 
 @Composable
 fun rememberDropToPost(activity: Activity?, reader: MediaReader, enabled: Boolean, onMedia: (List<String>) -> Unit): DropToPost {
-    val drop = remember(activity, reader) { DropToPost(activity, reader) }
+    val scope = rememberCoroutineScope()
+    val drop = remember(activity, reader, scope) { DropToPost(activity, reader, scope) }
     SideEffect {
         drop.enabled = enabled
         drop.onMedia = onMedia

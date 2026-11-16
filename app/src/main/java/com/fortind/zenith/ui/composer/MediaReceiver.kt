@@ -1,6 +1,7 @@
 package com.fortind.zenith.ui.composer
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,10 +13,14 @@ import androidx.compose.foundation.content.hasMediaType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.RemoteMediaProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -28,7 +33,8 @@ fun rememberMediaReceiver(
     val currentOnDragOver by rememberUpdatedState(onDragOver)
     val context = LocalContext.current
     val resolver = context.contentResolver
-    return remember(reader, resolver) {
+    val scope = rememberCoroutineScope()
+    return remember(reader, resolver, scope) {
         object : ReceiveContentListener {
             override fun onDragEnter() = currentOnDragOver(true)
 
@@ -41,22 +47,33 @@ fun rememberMediaReceiver(
                 if (!transferableContent.hasMediaType(MediaType.Image) && !transferableContent.hasMediaType(VideoMediaType)) {
                     return transferableContent
                 }
-                val staged = mutableListOf<String>()
+                val picked = mutableListOf<Uri>()
                 val remaining = transferableContent.consume { item ->
                     val uri = item.uri
                     if (uri != null && resolver.isMedia(uri)) {
-                        staged += if (RemoteMediaProvider.isRemoteMedia(context, uri)) uri.toString() else reader.stage(uri.toString())
+                        picked += uri
                         true
                     } else {
                         false
                     }
                 }
-                if (staged.isNotEmpty()) currentOnMedia(staged)
+                if (picked.isEmpty()) return remaining
+                if (transferableContent.source == TransferableContent.Source.Keyboard) {
+                    currentOnMedia(picked.map { stageOne(context, reader, it) })
+                } else {
+                    scope.launch { currentOnMedia(stageForComposer(context, reader, picked)) }
+                }
                 return remaining
             }
         }
     }
 }
+
+suspend fun stageForComposer(context: Context, reader: MediaReader, uris: List<Uri>): List<String> =
+    withContext(Dispatchers.IO) { uris.map { stageOne(context, reader, it) } }
+
+private fun stageOne(context: Context, reader: MediaReader, uri: Uri): String =
+    if (RemoteMediaProvider.isRemoteMedia(context, uri)) uri.toString() else reader.stage(uri.toString())
 
 @OptIn(ExperimentalFoundationApi::class)
 private val VideoMediaType = MediaType("video/*")
