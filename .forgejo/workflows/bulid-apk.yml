@@ -46,7 +46,7 @@ jobs:
           restore-keys: android-sdk-${{ runner.os }}-
 
       - name: Set up Android SDK
-        uses: https://github.com/android-actions/setup-android@v3
+        uses: https://github.com/android-actions/setup-android@v4
         with:
           packages: platform-tools
 
