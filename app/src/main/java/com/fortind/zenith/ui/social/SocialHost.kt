@@ -115,6 +115,7 @@ import com.fortind.zenith.ui.people.ProfileHandle
 import com.fortind.zenith.ui.people.ReportDialog
 import com.fortind.zenith.ui.people.ReportFailure
 import com.fortind.zenith.ui.people.parseProfileLink
+import com.fortind.zenith.ui.rememberAnimateMedia
 import com.fortind.zenith.ui.rememberNow
 import com.fortind.zenith.ui.rememberReduceMotion
 import kotlinx.coroutines.flow.filterNotNull
@@ -176,6 +177,7 @@ fun SocialHost(
     val emojis by feedViewModel.emojis.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val reduceMotion = rememberReduceMotion()
+    val animateMedia = rememberAnimateMedia(reduceMotion)
     val listStates = rememberTimelineListStates()
     val motion = remember { SharedMotion() }
 
@@ -222,7 +224,7 @@ fun SocialHost(
     val emojiUrl = remember(emojis) {
         { name: String -> emojis?.get(name)?.url ?: "https://${FortInstance.HOST}/emoji/$name.webp" }
     }
-    val mfm = rememberMfmEnvironment(emojiUrl, animate = !reduceMotion)
+    val mfm = rememberMfmEnvironment(emojiUrl, animate = animateMedia)
     val environment = remember(
         now,
         feed.myUserId,
@@ -390,7 +392,7 @@ fun SocialHost(
                     ImageViewer(
                         files = images,
                         initialIndex = request.index,
-                        animate = !reduceMotion,
+                        animate = animateMedia,
                         heroSource = heroSource,
                         returnFocus = returnFocus,
                         visibility = this,

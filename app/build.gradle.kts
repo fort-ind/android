@@ -1,3 +1,4 @@
+import com.android.build.api.variant.FilterConfiguration.FilterType
 import java.util.Properties
 
 plugins {
@@ -10,6 +11,10 @@ val keystoreProperties = Properties().apply {
     val file = rootProject.file("keystore.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
+
+val abiSplits = providers.environmentVariable("ABI_SPLITS").map { it == "true" }.getOrElse(false)
+val abiVersionCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
+val abiVersionCodeStep = 1_000_000
 
 android {
     namespace = "com.fortind.zenith"
@@ -61,6 +66,26 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    splits {
+        abi {
+            isEnable = abiSplits
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType == FilterType.ABI }?.identifier
+            val abiCode = abiVersionCodes[abi]
+            if (abiCode != null) {
+                output.versionCode.set(abiCode * abiVersionCodeStep + (output.versionCode.get() ?: 0))
+            }
+        }
     }
 }
 

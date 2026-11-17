@@ -37,14 +37,16 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
     private val needsNetwork = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
     override fun schedulePolling() {
+        workManager.cancelUniqueWork(LEGACY_POLL_WORK_NAME)
         val request = PeriodicWorkRequestBuilder<NotificationSyncWorker>(POLL_INTERVAL_MINUTES, TimeUnit.MINUTES)
-            .setConstraints(needsNetwork)
+            .setConstraints(PollConstraints)
             .build()
         workManager.enqueueUniquePeriodicWork(POLL_WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
     override fun cancelPolling() {
         workManager.cancelUniqueWork(POLL_WORK_NAME)
+        workManager.cancelUniqueWork(LEGACY_POLL_WORK_NAME)
     }
 
     override fun cancelActions() {
@@ -105,12 +107,18 @@ class WorkManagerNotificationWork(private val context: Context) : NotificationWo
     }
 
     private companion object {
-        const val POLL_WORK_NAME = "notification-poll"
+        const val POLL_WORK_NAME = "notification-poll-battery"
+        const val LEGACY_POLL_WORK_NAME = "notification-poll"
         const val ACTION_TAG = "notification-action"
         const val POLL_INTERVAL_MINUTES = 15L
         const val BACKOFF_SECONDS = 30L
     }
 }
+
+internal val PollConstraints: Constraints = Constraints.Builder()
+    .setRequiredNetworkType(NetworkType.CONNECTED)
+    .setRequiresBatteryNotLow(true)
+    .build()
 
 private val Context.container get() = (applicationContext as ZenithApplication).container
 

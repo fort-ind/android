@@ -124,6 +124,7 @@ import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.media.NetworkImage
+import com.fortind.zenith.ui.rememberAnimateMedia
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.scrollbar
 import kotlin.math.roundToInt
@@ -352,6 +353,7 @@ internal fun DrivePickerOverlay(
     onClose: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
+    val animateMedia = rememberAnimateMedia(reduceMotion)
     val driveGrid = rememberLazyGridState()
     val pickerArea = remember { LayoutHolder() }
     var menuAnchor by remember { mutableStateOf(Offset.Zero) }
@@ -430,7 +432,7 @@ internal fun DrivePickerOverlay(
                                 file = file,
                                 selected = selected || attached,
                                 enabled = !attached && (selected || picker.selected.size < slots),
-                                animate = !reduceMotion,
+                                animate = animateMedia,
                                 onToggle = { viewModel.toggleDriveFile(file, slots) },
                                 onRangeSelect = { viewModel.selectDriveRange(file, slots, attachedIds) },
                                 onOpenMenu = { tile, point ->

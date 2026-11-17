@@ -43,6 +43,8 @@ interface SystemNotifier {
     fun showReplySent(notificationId: String, text: String)
 
     fun clearAll()
+
+    fun hasShown(): Boolean
 }
 
 class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
@@ -111,10 +113,12 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
     }
 
     override fun clearAll() {
-        systemManager.activeNotifications
-            .filter { it.notification.group == GROUP_KEY }
-            .forEach { manager.cancel(it.id) }
+        shownInGroup().forEach { manager.cancel(it.id) }
     }
+
+    override fun hasShown(): Boolean = shownInGroup().isNotEmpty()
+
+    private fun shownInGroup() = systemManager.activeNotifications.filter { it.notification.group == GROUP_KEY }
 
     private fun createChannels() {
         NotificationCategory.entries.forEach { category ->

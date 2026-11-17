@@ -157,6 +157,7 @@ import com.fortind.zenith.ui.ink.InkOverlay
 import com.fortind.zenith.ui.ink.InkResult
 import com.fortind.zenith.ui.ink.InkViewModel
 import com.fortind.zenith.ui.mfm.MfmContent
+import com.fortind.zenith.ui.rememberAnimateMedia
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.theme.isThemeDark
 import com.fortind.zenith.ui.verticalScrollWithBar
@@ -523,6 +524,7 @@ private fun ComposerContent(
     onOpenPollEnd: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
+    val animateMedia = rememberAnimateMedia(reduceMotion)
     val recipientResults by viewModel.recipientResults.collectAsStateWithLifecycle()
     val pollProblem by remember(viewModel, state) { derivedStateOf { viewModel.pollDraft(state)?.problem(viewModel.now()) } }
     val pollResets by remember(viewModel, state) {
@@ -618,7 +620,7 @@ private fun ComposerContent(
                 ) {
                     AttachmentStrip(
                         attachments = state.attachments,
-                        animate = !reduceMotion,
+                        animate = animateMedia,
                         onOpen = onOpenAttachment,
                         onEditDetails = onEditAttachment,
                         onMarkUp = onMarkUpAttachment,
@@ -631,7 +633,7 @@ private fun ComposerContent(
                 suggestions?.let { open ->
                     SuggestionStrip(
                         state = open,
-                        animate = !reduceMotion,
+                        animate = animateMedia,
                         onPick = viewModel::acceptSuggestion,
                         modifier = Modifier.widthIn(max = ComposerMaxWidth).fillMaxWidth().padding(vertical = 4.dp),
                     )

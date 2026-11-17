@@ -184,12 +184,54 @@ class NotificationSyncerTest {
     fun readingEverythingElsewhereClearsWhatIsPosted() = runTest {
         val f = Fixture()
         f.syncStore.lastSeen = 2_000L
+        f.notifier.posted = true
         f.api.items = listOf(testNotification("2", createdAt = 2_000L))
         f.api.unread = 0
 
         f.syncer.sync()
 
         assertEquals(1, f.notifier.clearCount)
+    }
+
+    @Test
+    fun skipsTheUnreadCountWhenNothingIsNewAndNothingIsPosted() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 2_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 0
+
+        assertEquals(SyncOutcome.Done, f.syncer.sync())
+
+        assertEquals(0, f.api.unreadCalls.get())
+        assertEquals(0, f.notifier.clearCount)
+        assertEquals(2_000L, f.syncStore.lastSeen)
+    }
+
+    @Test
+    fun asksForTheUnreadCountWhileNotificationsArePosted() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 2_000L
+        f.notifier.posted = true
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 1
+
+        f.syncer.sync()
+
+        assertEquals(1, f.api.unreadCalls.get())
+        assertEquals(0, f.notifier.clearCount)
+    }
+
+    @Test
+    fun asksForTheUnreadCountWhenSomethingIsNew() = runTest {
+        val f = Fixture()
+        f.syncStore.lastSeen = 1_000L
+        f.api.items = listOf(testNotification("2", createdAt = 2_000L))
+        f.api.unread = 1
+
+        f.syncer.sync()
+
+        assertEquals(1, f.api.unreadCalls.get())
+        assertEquals(listOf("2"), f.notifier.shown.map { it.id })
     }
 
     @Test

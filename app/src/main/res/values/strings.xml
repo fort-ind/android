@@ -643,7 +643,7 @@
     <string name="privacy_visibility_title">Visibility</string>
     <string name="privacy_visibility_supporting">Who sees your follows, reactions and status</string>
     <string name="privacy_discovery_title">Discovery</string>
-    <string name="privacy_discovery_supporting">Explore, search engines, AI crawlers and RSS</string>
+    <string name="privacy_discovery_supporting">Explore, search engines, AI crawlers and RSS!!</string>
     <string name="privacy_older_title">Older notes</string>
     <string name="privacy_older_supporting">Limit who sees your notes as they age</string>
     <string name="privacy_chat_title">Chat</string>
@@ -981,7 +981,7 @@
     <string name="camera_external">External camera</string>
     <string name="camera_numbered">%1$s %2$d</string>
     <string name="media_output">Choose audio output</string>
-    <string name="offline_banner">You’re offline. What’s already loaded stays readable; posting and refreshing need a connection.</string>
+    <string name="offline_banner">You’re offline :( most features wont work without a interet connection</string>
     <string name="share_open_with_label">Post to fort.social</string>
     <string name="media_drag">Drag to another app</string>
     <string name="ink_draw">Draw</string>
@@ -1035,7 +1035,7 @@
     <string name="composer_attach_draw">Draw</string>
     <string name="attachment_mark_up">Mark up</string>
     <string name="settings_category_pen">Pen &amp; ink</string>
-    <string name="settings_pen_supporting">Drawing with a stylus, mouse or finger</string>
+    <string name="settings_pen_supporting">draw away! change ink settings here</string>
     <string name="settings_ink_drawing_section">Drawing</string>
     <string name="settings_ink_mouse_title">Draw with the mouse</string>
     <string name="settings_ink_mouse_supporting">Use the mouse to draw and mark up pictures</string>

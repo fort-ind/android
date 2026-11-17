@@ -29,6 +29,8 @@ class WidgetUpdater(
     context: Context,
     private val session: UserSessionService,
     private val appIcons: AppIconSwitcher,
+    private val rendered: WidgetRenderStore,
+    private val appVersion: Int,
 ) {
     private val context = context.applicationContext
     private val retryRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -36,7 +38,7 @@ class WidgetUpdater(
     val retries: SharedFlow<Unit> = retryRequests.asSharedFlow()
 
     fun start(scope: CoroutineScope) {
-        scope.launch { renderInputs().collect { refresh() } }
+        scope.launch { renderInputs().collect(::renderIfChanged) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             scope.launch { publishPreview() }
         }
@@ -50,15 +52,22 @@ class WidgetUpdater(
     private fun renderInputs() = combine(
         session.state.filter { it != SessionState.Restoring }.map { it is SessionState.SignedIn }.distinctUntilChanged(),
         appIcons.selected,
-    ) { signedIn, icon -> signedIn to icon }.distinctUntilChanged()
+    ) { signedIn, icon -> WidgetRenderStamp(signedIn, icon, appVersion) }.distinctUntilChanged()
 
-    private suspend fun refresh() {
+    private suspend fun renderIfChanged(stamp: WidgetRenderStamp) {
+        if (!needsRender(rendered.rendered(), stamp)) return
+        if (refresh()) rendered.remember(stamp)
+    }
+
+    private suspend fun refresh(): Boolean {
         try {
             ToolbarWidget().updateAll(context)
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: RuntimeException) {
             Log.w(TAG, "Could not refresh the widget", e)
+            return false
         }
     }
 

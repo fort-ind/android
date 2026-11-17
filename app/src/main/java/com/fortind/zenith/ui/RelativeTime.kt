@@ -4,6 +4,9 @@ import android.text.format.DateUtils
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 private const val CLOCK_TICK_MS = 60_000L
@@ -17,9 +20,15 @@ fun relativeTime(createdAtMillis: Long, now: Long): String =
     ).toString()
 
 @Composable
-fun rememberNow(): State<Long> = produceState(initialValue = System.currentTimeMillis()) {
-    while (true) {
-        delay(CLOCK_TICK_MS)
-        value = System.currentTimeMillis()
+fun rememberNow(): State<Long> {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    return produceState(initialValue = System.currentTimeMillis(), lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            value = System.currentTimeMillis()
+            while (true) {
+                delay(CLOCK_TICK_MS)
+                value = System.currentTimeMillis()
+            }
+        }
     }
 }

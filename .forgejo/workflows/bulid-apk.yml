@@ -81,6 +81,7 @@ jobs:
       - name: Build release APK
         env:
           BUILD_NUMBER: ${{ forgejo.run_number }}
+          ABI_SPLITS: "true"
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --warning-mode all

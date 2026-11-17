@@ -37,11 +37,11 @@ class NotificationSyncer(
         return try {
             val page = api.fetch(token, null, null, SYNC_PAGE_SIZE)
             val newest = page.maxOfOrNull { it.createdAtMillis } ?: return SyncOutcome.Done
-            val unread = api.unreadCount(token)
+            val unread = if (needsUnreadCount(page)) api.unreadCount(token) else null
             val baseline = syncStore.lastSeenMillis()
             syncStore.advanceLastSeenMillis(newest)
             if (unread == 0) notifier.clearAll()
-            if (baseline == 0L || foreground.inForeground) return SyncOutcome.Done
+            if (unread == null || baseline == 0L || foreground.inForeground) return SyncOutcome.Done
             val toShow = page
                 .filter { it.createdAtMillis > baseline }
                 .take(unread)
@@ -56,6 +56,11 @@ class NotificationSyncer(
         } catch (_: IOException) {
             SyncOutcome.Retry
         }
+    }
+
+    private suspend fun needsUnreadCount(page: List<FortNotification>): Boolean {
+        val baseline = syncStore.lastSeenMillis()
+        return page.any { it.createdAtMillis > baseline } || notifier.hasShown()
     }
 
     private suspend fun allowedActions(): Set<QuickAction> = buildSet {

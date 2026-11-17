@@ -41,11 +41,13 @@ import com.fortind.zenith.composer.Attachment
 import com.fortind.zenith.timeline.MediaKind
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.media.NetworkImage
+import com.fortind.zenith.ui.rememberAnimateMedia
 import com.fortind.zenith.ui.rememberReduceMotion
 
 @Composable
 fun MediaPreviewOverlay(attachment: Attachment?, onClose: () -> Unit) {
     val reduceMotion = rememberReduceMotion()
+    val animateMedia = rememberAnimateMedia(reduceMotion)
     val motion = MaterialTheme.motionScheme
     AnimatedVisibility(
         visible = attachment != null,
@@ -60,7 +62,7 @@ fun MediaPreviewOverlay(attachment: Attachment?, onClose: () -> Unit) {
                 else -> NetworkImage(
                     url = current.media.uri,
                     contentDescription = current.altText.ifBlank { null },
-                    animate = !reduceMotion,
+                    animate = animateMedia,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().safeDrawingPadding(),
                 )

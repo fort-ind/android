@@ -88,6 +88,7 @@ import com.fortind.zenith.timeline.StreamingTimelineStream
 import com.fortind.zenith.timeline.TimelineStream
 import com.fortind.zenith.shortcuts.AndroidShortcutStore
 import com.fortind.zenith.shortcuts.LauncherShortcuts
+import com.fortind.zenith.widget.DataStoreWidgetRenderStore
 import com.fortind.zenith.widget.WidgetUpdater
 import java.io.File
 import java.util.Locale
@@ -165,7 +166,13 @@ class AppContainer(application: Application) {
         notifier = systemNotifier,
     )
 
-    val widgetUpdater = WidgetUpdater(application, sessionService, appIconSwitcher)
+    val widgetUpdater = WidgetUpdater(
+        context = application,
+        session = sessionService,
+        appIcons = appIconSwitcher,
+        rendered = DataStoreWidgetRenderStore(application),
+        appVersion = BuildConfig.VERSION_CODE,
+    )
 
     val launcherShortcuts = LauncherShortcuts(
         store = AndroidShortcutStore(application),

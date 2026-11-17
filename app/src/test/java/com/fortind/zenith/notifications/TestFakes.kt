@@ -93,7 +93,10 @@ class FakeNotificationsApi : NotificationsApi {
 
     @Volatile var unreadFailure: IOException? = null
 
+    val unreadCalls = AtomicInteger()
+
     override suspend fun unreadCount(token: String): Int {
+        unreadCalls.incrementAndGet()
         unreadFailure?.let { throw it }
         return unread
     }
@@ -124,6 +127,7 @@ class FakeSystemNotifier : SystemNotifier {
     val repliedTo = CopyOnWriteArrayList<Pair<String, String>>()
     val failed = CopyOnWriteArrayList<Pair<QuickAction, String>>()
     @Volatile var clearCount = 0
+    @Volatile var posted = false
     @Volatile var lastActions: Set<QuickAction> = emptySet()
 
     override suspend fun show(notifications: List<FortNotification>, actions: Set<QuickAction>) {
@@ -146,6 +150,8 @@ class FakeSystemNotifier : SystemNotifier {
     override fun clearAll() {
         clearCount++
     }
+
+    override fun hasShown(): Boolean = posted
 }
 
 class FakeNotificationSyncStore : NotificationSyncStore {
