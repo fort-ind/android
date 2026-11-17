@@ -26,6 +26,7 @@ class UserSessionService(
     private val userApi: UserApi,
     private val scopeStamps: ScopeStampStore = InMemoryScopeStampStore(),
     private val restoreRetryDelaysMs: List<Long> = DEFAULT_RESTORE_RETRY_DELAYS_MS,
+    private val accountIds: AccountIdStore = InMemoryAccountIdStore(),
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -51,6 +52,7 @@ class UserSessionService(
         val token = withContext(Dispatchers.IO) { tokenStore.read() }
         if (token == null) {
             _state.value = SessionState.SignedOut
+            accountIds.clear()
             return
         }
         _state.value = try {
@@ -61,6 +63,7 @@ class UserSessionService(
         } catch (_: IOException) {
             SessionState.SignedIn(user = null)
         }
+        rememberAccount()
         if ((_state.value as? SessionState.SignedIn)?.user == null) retryUntilUserKnown()
     }
 
@@ -79,12 +82,14 @@ class UserSessionService(
         scopeStamps.grant(FortInstance.SCOPES.toSet())
         _credentialsVersion.update { it + 1 }
         _state.value = SessionState.SignedIn(user)
+        rememberAccount()
     }
 
     suspend fun refreshUser(): Boolean {
         val token = token() ?: return false.also { _state.value = SessionState.SignedOut }
         return try {
             _state.value = SessionState.SignedIn(userApi.fetchCurrentUser(token))
+            rememberAccount()
             true
         } catch (_: TokenRejectedException) {
             signOut()
@@ -109,9 +114,24 @@ class UserSessionService(
     suspend fun signOut() {
         withContext(Dispatchers.IO) { tokenStore.clear() }
         _state.value = SessionState.SignedOut
+        accountIds.clear()
     }
 
     suspend fun token(): String? = withContext(Dispatchers.IO) { tokenStore.read() }
+
+    suspend fun accountId(): String? = when (val current = _state.value) {
+        is SessionState.SignedIn -> current.user?.id ?: accountIds.read()
+        SessionState.Restoring -> if (token() != null) accountIds.read() else null
+        SessionState.Guest, SessionState.SignedOut -> null
+    }
+
+    private suspend fun rememberAccount() {
+        when (val current = _state.value) {
+            is SessionState.SignedIn -> current.user?.id?.let { accountIds.write(it) }
+            SessionState.SignedOut -> accountIds.clear()
+            SessionState.Restoring, SessionState.Guest -> Unit
+        }
+    }
 }
 
 private val DEFAULT_RESTORE_RETRY_DELAYS_MS = listOf(5_000L, 15_000L, 45_000L, 120_000L)

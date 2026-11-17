@@ -84,7 +84,8 @@ class HttpDriveApi(
             .setType(MultipartBody.FORM)
             .addFormDataPart("i", token)
             .addFormDataPart("name", media.name)
-            .addFormDataPart("file", media.name, StreamingBody(media, reader, onProgress))
+            .addFormDataPart("force", "true")
+            .addFormDataPart("file",media.name, StreamingBody(media, reader, onProgress))
             .build()
         val request = Request.Builder().url("https://$host/api/drive/files/create").post(body).build()
         val text = withContext(Dispatchers.IO) {

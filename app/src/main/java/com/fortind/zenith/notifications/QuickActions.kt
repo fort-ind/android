@@ -88,7 +88,7 @@ class NotificationQuickActions(
     fun likeGaveUp(noteId: String) = notifier.showActionFailed(QuickAction.Like, noteId)
 
     private suspend fun keepFailedReply(user: CurrentUser?, noteId: String, typed: String) {
-        drafts.save(draftStorageKey(user?.id, failedReplySlot(noteId)), ComposerDraft(text = typed))
+        drafts.save(draftStorageKey(user?.id ?: session.accountId(), failedReplySlot(noteId)), ComposerDraft(text = typed))
     }
 
     private suspend fun currentUser(): CurrentUser? {

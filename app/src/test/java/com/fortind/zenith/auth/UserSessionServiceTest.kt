@@ -65,4 +65,40 @@ class UserSessionServiceTest {
         assertEquals(SessionState.SignedOut, session.state.value)
         assertNull(store.token)
     }
+
+    @Test
+    fun theAccountIsKnownBeforeTheProfileLoads() = runTest {
+        val ids = InMemoryAccountIdStore()
+        UserSessionService(FakeTokenStore("token"), FakeUserApi(), accountIds = ids).restore()
+
+        val offline = UserSessionService(FakeTokenStore("token"), FlakyUserApi(failures = 100), restoreRetryDelaysMs = emptyList(), accountIds = ids)
+        assertEquals("me", offline.accountId())
+        offline.restore()
+
+        assertEquals(SessionState.SignedIn(user = null), offline.state.value)
+        assertEquals("me", offline.accountId())
+    }
+
+    @Test
+    fun signingOutForgetsTheAccount() = runTest {
+        val ids = InMemoryAccountIdStore()
+        val session = UserSessionService(FakeTokenStore("token"), FakeUserApi(), accountIds = ids)
+        session.restore()
+
+        session.signOut()
+
+        assertNull(session.accountId())
+        assertNull(ids.read())
+    }
+
+    @Test
+    fun noTokenMeansNoAccountEvenIfOneWasRemembered() = runTest {
+        val ids = InMemoryAccountIdStore("restored-from-backup")
+        val session = UserSessionService(FakeTokenStore(null), FakeUserApi(), accountIds = ids)
+
+        assertNull(session.accountId())
+        session.restore()
+
+        assertNull(ids.read())
+    }
 }

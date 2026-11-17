@@ -21,7 +21,9 @@ import com.fortind.zenith.autocomplete.Trigger
 import com.fortind.zenith.autocomplete.TriggerKind
 import com.fortind.zenith.composer.AttachmentFailure
 import com.fortind.zenith.composer.AttachmentPhase
+import com.fortind.zenith.auth.InMemoryAccountIdStore
 import com.fortind.zenith.composer.ComposerDraft
+import com.fortind.zenith.composer.DraftAttachment
 import com.fortind.zenith.composer.DraftStore
 import com.fortind.zenith.composer.MAX_ATTACHMENTS
 import com.fortind.zenith.drive.DriveApi
@@ -214,12 +216,17 @@ class ComposerViewModelTest {
         override suspend fun hashtags(token: String?, query: String, limit: Int): List<String> = emptyList()
     }
 
-    private class Fixture(maxText: Int, compress: Boolean, nowMillis: Long, remindAltText: Boolean) {
+    private class Fixture(
+        maxText: Int,
+        compress: Boolean,
+        nowMillis: Long,
+        remindAltText: Boolean,
+        val session: UserSessionService = UserSessionService(FakeTokenStore("token"), FakeUserApi()),
+    ) {
         val handles = HashMap<String, NoteUser>()
         val users = HashMap<String, NoteUser>()
         val suggestionsApi = FakeSuggestionsApi()
         val engine = SuggestionEngine(suggestionsApi, { null }, { emptyList() })
-        val session = UserSessionService(FakeTokenStore("token"), FakeUserApi())
         val api = FakeNotesApi()
         val drafts = FakeDraftStore()
         val drive = FakeDriveApi()
@@ -856,6 +863,35 @@ class ComposerViewModelTest {
         f.viewModel.open(ComposerTarget.NewPost, null)
 
         assertEquals("half a thought", f.viewModel.text.text.toString())
+    }
+
+    @Test
+    fun aDraftOpensBeforeTheProfileHasLoaded() = runTest {
+        val session = UserSessionService(FakeTokenStore("token"), FakeUserApi(), accountIds = InMemoryAccountIdStore("me"))
+        val f = Fixture(3000, compress = false, nowMillis = 1_000L, remindAltText = false, session = session).also { viewModels += it.viewModel }
+        f.drafts.drafts["me/new"] = ComposerDraft(text = "kept before the restart")
+
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.uiState.first { it != null }
+
+        assertEquals("kept before the restart", f.viewModel.text.text.toString())
+        f.viewModel.type("kept before the restart, and more")
+        f.viewModel.close(keepDraft = true)
+        advanceTimeBy(DEBOUNCE_MS * 2)
+        assertEquals("kept before the restart, and more", f.drafts.drafts.getValue("me/new").text)
+        assertNull(f.drafts.drafts["new"])
+    }
+
+    @Test
+    fun aDraftHoldingTheSameFileTwiceOpensWithOneTile() = runTest {
+        val f = fixture()
+        val sticker = DraftAttachment(driveFile("sticker"), "", false)
+        f.drafts.drafts["me/new"] = ComposerDraft(attachments = listOf(sticker, sticker, DraftAttachment(driveFile("other"), "", false)))
+
+        f.viewModel.open(ComposerTarget.NewPost, null)
+
+        val attachments = f.viewModel.uiState.value!!.attachments
+        assertEquals(listOf("sticker", "other"), attachments.map { it.localId })
     }
 
     @Test

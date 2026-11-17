@@ -274,6 +274,7 @@ class ComposerViewModel(
     private var baseline = ComposerDraft()
     private var baselineFiles: List<String> = emptyList()
     private val uploads = HashMap<String, Job>()
+    private var draftOwner: String? = null
 
     private val myUserId: String?
         get() = (session.state.value as? SessionState.SignedIn)?.user?.id
@@ -536,8 +537,9 @@ class ComposerViewModel(
     fun open(target: ComposerTarget, note: Note?, seed: Note? = null, shared: SharedContent? = null) {
         if (seed == null && _uiState.value?.target == target) return
         viewModelScope.launch {
-            myUserId?.let { drafts.adopt(it) }
-            val stored = if (seed == null) target.draftKey?.let { drafts.load(storageKey(it)) } else null
+            draftOwner = session.accountId()
+            draftOwner?.let { drafts.adopt(it) }
+            val stored =if (seed == null) target.draftKey?.let { drafts.load(storageKey(it)) } else null
             baseline = initialDraft(target, note).let { if (shared != null) it.copy(text = shared.text) else it }
             val failedReply = if (seed == null && target is ComposerTarget.Reply && note != null) takeFailedReply(target.noteId) else null
             val draft = when {
@@ -550,7 +552,8 @@ class ComposerViewModel(
                 target is ComposerTarget.Edit -> note?.files.orEmpty()
                 else -> null
             }
-            val attachments = existingFiles?.map(NoteFile::toExistingAttachment) ?: draft.attachments.map(DraftAttachment::toAttachment)
+            val attachments = (existingFiles?.map(NoteFile::toExistingAttachment) ?: draft.attachments.map(DraftAttachment::toAttachment))
+                .distinctBy { it.localId }
             baselineFiles = if (target is ComposerTarget.Edit) attachments.map { it.localId } else emptyList()
             cancelUploads()
             val limits = instance.meta.value
@@ -964,7 +967,7 @@ class ComposerViewModel(
         )
     }
 
-    private fun storageKey(slot: String): String = draftStorageKey(myUserId, slot)
+    private fun storageKey(slot: String): String = draftStorageKey(myUserId ?: draftOwner, slot)
 
     private fun defaultWarning(parentCw: String?): String? {
         val account = (session.state.value as? SessionState.SignedIn)?.user?.settings

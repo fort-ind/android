@@ -21,6 +21,7 @@ import com.fortind.zenith.account.HttpModerationApi
 import com.fortind.zenith.account.ModerationApi
 import com.fortind.zenith.emoji.DEFAULT_LIKE
 import com.fortind.zenith.net.FortHttp
+import com.fortind.zenith.auth.DataStoreAccountIdStore
 import com.fortind.zenith.auth.DataStoreScopeStampStore
 import com.fortind.zenith.auth.HttpMiAuthApi
 import com.fortind.zenith.auth.HttpUserApi
@@ -99,7 +100,12 @@ import okhttp3.OkHttpClient
 class AppContainer(application: Application) {
     private val http = FortHttp()
     val miAuthApi: MiAuthApi = HttpMiAuthApi(http)
-    val sessionService = UserSessionService(KeystoreTokenStore(application), HttpUserApi(http), DataStoreScopeStampStore(application))
+    val sessionService = UserSessionService(
+        KeystoreTokenStore(application),
+        HttpUserApi(http),
+        DataStoreScopeStampStore(application),
+        accountIds = DataStoreAccountIdStore(application),
+    )
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val okHttpClient: OkHttpClient by lazy { OkHttpClient() }
     val networks = defaultNetworkOf(application, scope)
