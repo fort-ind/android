@@ -1,5 +1,7 @@
 package com.fortind.zenith.settings
 
+import com.fortind.zenith.ink.SheetBackground
+import com.fortind.zenith.ink.SheetShape
 import com.fortind.zenith.notifications.NotificationCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,5 +55,21 @@ class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
                 notificationCategories = if (enabled) it.notificationCategories + category else it.notificationCategories - category
             )
         }
+    }
+
+    override suspend fun setInkDrawWithMouse(enabled: Boolean) {
+        state.update { it.copy(inkDrawWithMouse = enabled) }
+    }
+
+    override suspend fun setInkTouchStopsAfterPen(enabled: Boolean) {
+        state.update { it.copy(inkTouchStopsAfterPen = enabled) }
+    }
+
+    override suspend fun setDrawingShape(shape: SheetShape) {
+        state.update { it.copy(drawingShape = shape) }
+    }
+
+    override suspend fun setDrawingBackground(background: SheetBackground) {
+        state.update { it.copy(drawingBackground = background) }
     }
 }

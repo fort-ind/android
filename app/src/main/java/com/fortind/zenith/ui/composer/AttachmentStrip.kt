@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -77,6 +78,7 @@ fun AttachmentStrip(
     animate: Boolean,
     onOpen: (String) -> Unit,
     onEditDetails: (String) -> Unit,
+    onMarkUp: (String) -> Unit,
     onRemove: (String) -> Unit,
     onRetry: (id: String, compress: Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -91,6 +93,7 @@ fun AttachmentStrip(
                 animate = animate,
                 onOpen = { onOpen(attachments[index].localId) },
                 onEditDetails = { onEditDetails(attachments[index].localId) },
+                onMarkUp = { onMarkUp(attachments[index].localId) },
                 onRemove = { onRemove(attachments[index].localId) },
                 onRetry = { compress -> onRetry(attachments[index].localId, compress) },
             )
@@ -106,6 +109,7 @@ private fun AttachmentTile(
     animate: Boolean,
     onOpen: () -> Unit,
     onEditDetails: () -> Unit,
+    onMarkUp: () -> Unit,
     onRemove: () -> Unit,
     onRetry: (compress: Boolean) -> Unit,
 ) {
@@ -156,6 +160,20 @@ private fun AttachmentTile(
             AttachmentPhase.Failed -> FailureCover(attachment, state, onRetry)
             AttachmentPhase.Ready -> ReadyBadges(attachment, onEditDetails)
         }
+        if (attachment.canMarkUp) {
+            Surface(
+                shape = CircleShape,
+                color = Color.Black.copy(alpha = 0.6f),
+                contentColor = Color.White,
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+            ) {
+                LabelTooltip(stringResource(R.string.attachment_mark_up)) {
+                    IconButton(onClick = onMarkUp, modifier = Modifier.size(32.dp).handCursor()) {
+                        Icon(Icons.Default.Draw, contentDescription = stringResource(R.string.attachment_mark_up), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
         Surface(
             shape = CircleShape,
             color = Color.Black.copy(alpha = 0.6f),
@@ -170,6 +188,9 @@ private fun AttachmentTile(
         }
     }
 }
+
+private val Attachment.canMarkUp: Boolean
+    get() = phase == AttachmentPhase.Ready && media.kind == MediaKind.Image && media.mimeType != "image/gif"
 
 @Composable
 private fun AttachmentThumbnail(attachment: Attachment, animate: Boolean) {

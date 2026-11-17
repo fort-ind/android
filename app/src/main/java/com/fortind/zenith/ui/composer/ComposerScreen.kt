@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Public
@@ -98,6 +99,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -151,6 +153,9 @@ import com.fortind.zenith.ui.shouldExplain
 import com.fortind.zenith.ui.feed.NoteEnvironment
 import com.fortind.zenith.ui.feed.NoteHeader
 import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.ink.InkOverlay
+import com.fortind.zenith.ui.ink.InkResult
+import com.fortind.zenith.ui.ink.InkViewModel
 import com.fortind.zenith.ui.mfm.MfmContent
 import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.theme.isThemeDark
@@ -198,13 +203,16 @@ private fun ComposerDialog(
     environment: NoteEnvironment?,
     onGrantPermission: () -> Unit,
     windowed: Boolean,
+    ink: InkViewModel = viewModel(factory = InkViewModel.Factory),
 ) {
+    val inkState by ink.state.collectAsStateWithLifecycle()
+    val inkPolicy by ink.policy.collectAsStateWithLifecycle()
     val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
     val floating = !windowed && windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) &&
         windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
     var confirmClose by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf("") }
-    val overlayOpen = confirmClose || overlay.isNotEmpty() || state.prompt != null || state.drive != null
+    val overlayOpen = confirmClose || overlay.isNotEmpty() || state.prompt != null || state.drive != null || inkState != null
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalResources.current
     val context = LocalContext.current
@@ -213,6 +221,7 @@ private fun ComposerDialog(
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val requestClose: () -> Unit = {
         when {
+            inkState != null -> ink.requestCancel()
             confirmClose -> confirmClose = false
             state.prompt != null -> viewModel.dismissPrompt()
             state.drive?.menuFileId != null -> viewModel.closeDriveMenu()
@@ -254,6 +263,21 @@ private fun ComposerDialog(
                 if (result == SnackbarResult.ActionPerformed) cameraPermission.launch(Manifest.permission.CAMERA)
             }
             else -> cameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(ink) {
+        ink.results.collect { result ->
+            when (result) {
+                is InkResult.Drawn -> viewModel.addMedia(listOf(result.media))
+                is InkResult.MarkedUp -> viewModel.replaceAttachment(result.attachmentId, result.media)
+                InkResult.Failed -> snackbar.showSnackbar(resources.getString(R.string.ink_export_failed))
+            }
+        }
+    }
+    val markUp: (String) -> Unit = { id ->
+        state.attachments.firstOrNull { it.localId == id }?.let { attachment ->
+            ink.openMarkup(id, attachment.media.uri, attachment.media.name, attachment.media.mimeType, attachment.remote?.url)
         }
     }
 
@@ -335,6 +359,7 @@ private fun ComposerDialog(
                             onOpenAttach = { openSheet(OVERLAY_ATTACH) },
                             onOpenAttachment = { overlay = OVERLAY_PREVIEW + it },
                             onEditAttachment = { overlay = OVERLAY_DETAILS + it },
+                            onMarkUpAttachment = markUp,
                             onOpenPollEnd = { openSheet(OVERLAY_POLL_END) },
                         )
                     }
@@ -353,6 +378,7 @@ private fun ComposerDialog(
                         onOpenAttach = { openSheet(OVERLAY_ATTACH) },
                         onOpenAttachment = { overlay = OVERLAY_PREVIEW + it },
                         onEditAttachment = { overlay = OVERLAY_DETAILS + it },
+                        onMarkUpAttachment = markUp,
                         onOpenPollEnd = { openSheet(OVERLAY_POLL_END) },
                     )
                 }
@@ -431,6 +457,10 @@ private fun ComposerDialog(
                         overlay = ""
                         viewModel.openDrive()
                     },
+                    onDraw = {
+                        overlay = ""
+                        ink.openDrawing()
+                    },
                     onDismiss = { overlay = "" },
                 )
                 val detailsId = overlay.removePrefixOrNull(OVERLAY_DETAILS)
@@ -458,6 +488,7 @@ private fun ComposerDialog(
                         onClose = { overlay = "" },
                     )
                 }
+                inkState?.let { InkOverlay(state = it, policy = inkPolicy, viewModel = ink) }
             }
         }
     }
@@ -488,6 +519,7 @@ private fun ComposerContent(
     onOpenAttach: () -> Unit,
     onOpenAttachment: (String) -> Unit,
     onEditAttachment: (String) -> Unit,
+    onMarkUpAttachment: (String) -> Unit,
     onOpenPollEnd: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
@@ -589,6 +621,7 @@ private fun ComposerContent(
                         animate = !reduceMotion,
                         onOpen = onOpenAttachment,
                         onEditDetails = onEditAttachment,
+                        onMarkUp = onMarkUpAttachment,
                         onRemove = viewModel::removeAttachment,
                         onRetry = viewModel::retryAttachment,
                     )
@@ -799,7 +832,14 @@ private fun ComposerToolbar(
 }
 
 @Composable
-fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, onDrive: () -> Unit, onDismiss: () -> Unit) {
+fun AttachSheet(
+    visible: Boolean,
+    onLibrary: () -> Unit,
+    onCamera: () -> Unit,
+    onDrive: () -> Unit,
+    onDraw: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val title = stringResource(R.string.composer_attach)
     BottomSheetOverlay(visible = visible, title = title, onDismiss = onDismiss) {
         val firstFocus = remember { FocusRequester() }
@@ -811,7 +851,7 @@ fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, o
         ) {
             SegmentedListItem(
                 onClick = onLibrary,
-                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
+                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 4),
                 colors = sheetItemColors(),
                 leadingContent = { Icon(Icons.Default.PhotoLibrary, contentDescription = null) },
                 modifier = Modifier.focusRequester(firstFocus),
@@ -820,7 +860,7 @@ fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, o
             }
             SegmentedListItem(
                 onClick = onCamera,
-                shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
+                shapes = ListItemDefaults.segmentedShapes(index = 1, count = 4),
                 colors = sheetItemColors(),
                 leadingContent = { Icon(Icons.Default.PhotoCamera, contentDescription = null) },
             ) {
@@ -828,11 +868,19 @@ fun AttachSheet(visible: Boolean, onLibrary: () -> Unit, onCamera: () -> Unit, o
             }
             SegmentedListItem(
                 onClick = onDrive,
-                shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
+                shapes = ListItemDefaults.segmentedShapes(index = 2, count = 4),
                 colors = sheetItemColors(),
                 leadingContent = { Icon(Icons.Default.Cloud, contentDescription = null) },
             ) {
                 Text(stringResource(R.string.composer_attach_drive))
+            }
+            SegmentedListItem(
+                onClick = onDraw,
+                shapes = ListItemDefaults.segmentedShapes(index = 3, count = 4),
+                colors = sheetItemColors(),
+                leadingContent = { Icon(Icons.Default.Draw, contentDescription = null) },
+            ) {
+                Text(stringResource(R.string.composer_attach_draw))
             }
         }
     }

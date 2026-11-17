@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.handwriting.handwritingDetector
+import androidx.compose.foundation.text.handwriting.handwritingHandler
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material.icons.Icons
@@ -115,6 +117,7 @@ fun rememberSearchInput(
                 searchBarState = state,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .handwritingHandler()
                     .testTag("search:input")
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown || event.key != Key.Escape || state.currentValue != SearchBarValue.Expanded) {
@@ -175,12 +178,14 @@ fun rememberSearchInput(
 fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val label = stringResource(R.string.search_placeholder)
+    val expand = { scope.launch { state.animateToExpanded() } }
     Surface(
-        onClick = { scope.launch { state.animateToExpanded() } },
+        onClick = { expand() },
         color = Color.Transparent,
         shape = SearchBarDefaults.inputFieldShape,
         modifier = modifier
             .fillMaxWidth()
+            .handwritingDetector { expand() }
             .height(SearchBarDefaults.InputFieldHeight)
             .testTag("search:field")
             .semantics { contentDescription = label },

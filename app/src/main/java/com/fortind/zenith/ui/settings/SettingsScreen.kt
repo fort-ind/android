@@ -42,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
@@ -169,6 +170,7 @@ private enum class SettingsPage(
         R.string.settings_notifications_supporting,
         Icons.Default.Notifications,
     ),
+    PEN(R.string.settings_category_pen, R.string.settings_pen_supporting, Icons.Default.Draw),
     ABOUT(R.string.settings_category_about, R.string.settings_about_supporting, Icons.Default.Info),
 }
 
@@ -299,6 +301,13 @@ private enum class SettingsEntry(
         R.string.settings_notifications_delivery_section,
         listOf(R.string.settings_notifications_delivery_title),
     ),
+    INK_MOUSE(SettingsPage.PEN, R.string.settings_ink_mouse_title, listOf(R.string.settings_ink_mouse_supporting)),
+    INK_TOUCH(SettingsPage.PEN, R.string.settings_ink_touch_title, listOf(R.string.settings_ink_touch_supporting)),
+    INK_HANDWRITING(
+        SettingsPage.PEN,
+        R.string.settings_ink_handwriting_title,
+        listOf(R.string.settings_ink_handwriting_section, R.string.settings_ink_handwriting_supporting),
+    ),
     VERSION(SettingsPage.ABOUT, R.string.settings_about_version),
     BUILD(SettingsPage.ABOUT, R.string.settings_about_build),
 }
@@ -387,6 +396,8 @@ fun SettingsScreen(
                             onAppIcon = viewModel::setAppIcon,
                             onShowHomeFavorites = viewModel::setShowHomeFavorites,
                             onCompressUploads = viewModel::setCompressUploads,
+                            onInkDrawWithMouse = viewModel::setInkDrawWithMouse,
+                            onInkTouchStopsAfterPen = viewModel::setInkTouchStopsAfterPen,
                             onSystemNotifications = viewModel::setSystemNotifications,
                             onNotificationCategory = viewModel::setNotificationCategory,
                             editProfileRequested = editProfileRequested,
@@ -608,6 +619,7 @@ private fun IconBadge(page: SettingsPage) {
         SettingsPage.HOME -> colors.secondaryContainer to colors.onSecondaryContainer
         SettingsPage.POSTING -> colors.tertiaryContainer to colors.onTertiaryContainer
         SettingsPage.NOTIFICATIONS -> colors.primaryContainer to colors.onPrimaryContainer
+        SettingsPage.PEN -> colors.secondaryContainer to colors.onSecondaryContainer
         SettingsPage.ABOUT -> colors.tertiaryContainer to colors.onTertiaryContainer
     }
     val polygon = when (page) {
@@ -616,6 +628,7 @@ private fun IconBadge(page: SettingsPage) {
         SettingsPage.HOME -> MaterialShapes.Cookie4Sided
         SettingsPage.POSTING -> MaterialShapes.Cookie12Sided
         SettingsPage.NOTIFICATIONS -> MaterialShapes.Cookie7Sided
+        SettingsPage.PEN -> MaterialShapes.Clover4Leaf
         SettingsPage.ABOUT -> MaterialShapes.Cookie6Sided
     }
     Box(
@@ -639,6 +652,8 @@ private fun SettingsDetail(
     onAppIcon: (AppIcon) -> Unit,
     onShowHomeFavorites: (Boolean) -> Unit,
     onCompressUploads: (Boolean) -> Unit,
+    onInkDrawWithMouse: (Boolean) -> Unit,
+    onInkTouchStopsAfterPen: (Boolean) -> Unit,
     onSystemNotifications: (Boolean) -> Unit,
     onNotificationCategory: (NotificationCategory, Boolean) -> Unit,
     editProfileRequested: Boolean,
@@ -766,6 +781,11 @@ private fun SettingsDetail(
                         )
                         NotificationFilters(accountSettings)
                     }
+                    SettingsPage.PEN -> PenSettings(
+                        settings = settings,
+                        onDrawWithMouse = onInkDrawWithMouse,
+                        onTouchStopsAfterPen = onInkTouchStopsAfterPen,
+                    )
                     SettingsPage.ABOUT -> AboutSettings()
                 }
             }
@@ -816,6 +836,45 @@ private fun PostingSettings(settings: AppSettings, onCompressUploads: (Boolean) 
         titleRes = R.string.settings_compress_title,
         supportingRes = R.string.settings_compress_supporting,
     )
+}
+
+@Composable
+private fun PenSettings(settings: AppSettings, onDrawWithMouse: (Boolean) -> Unit, onTouchStopsAfterPen: (Boolean) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionLabel(R.string.settings_ink_drawing_section)
+        Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            SwitchRow(
+                checked = settings.inkDrawWithMouse,
+                onCheckedChange = onDrawWithMouse,
+                titleRes = R.string.settings_ink_mouse_title,
+                supportingRes = R.string.settings_ink_mouse_supporting,
+                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
+            )
+            SwitchRow(
+                checked = settings.inkTouchStopsAfterPen,
+                onCheckedChange = onTouchStopsAfterPen,
+                titleRes = R.string.settings_ink_touch_title,
+                supportingRes = R.string.settings_ink_touch_supporting,
+                shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
+            )
+        }
+        SectionLabel(R.string.settings_ink_handwriting_section)
+        SettingsRow(
+            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+            headline = { Text(stringResource(R.string.settings_ink_handwriting_title)) },
+            supporting = {
+                Text(
+                    stringResource(
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            R.string.settings_ink_handwriting_supporting
+                        } else {
+                            R.string.settings_ink_handwriting_unsupported
+                        },
+                    ),
+                )
+            },
+        )
+    }
 }
 
 @Composable

@@ -30,6 +30,8 @@ navigationevent = "1.2.0"
 leakcanary = "2.14"
 glance = "1.2.0"
 print = "1.1.0"
+ink = "1.0.0"
+inputMotionPrediction = "1.0.1"
 
 [libraries]
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
@@ -91,6 +93,17 @@ androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidge
 androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 androidx-glance-preview = { group = "androidx.glance", name = "glance-preview", version.ref = "glance" }
 androidx-glance-appwidget-preview = { group = "androidx.glance", name = "glance-appwidget-preview", version.ref = "glance" }
+
+androidx-ink-authoring = { group = "androidx.ink", name = "ink-authoring", version.ref = "ink" }
+androidx-ink-authoring-compose = { group = "androidx.ink", name = "ink-authoring-compose", version.ref = "ink" }
+androidx-ink-brush = { group = "androidx.ink", name = "ink-brush", version.ref = "ink" }
+androidx-ink-brush-compose = { group = "androidx.ink", name = "ink-brush-compose", version.ref = "ink" }
+androidx-ink-geometry = { group = "androidx.ink", name = "ink-geometry", version.ref = "ink" }
+androidx-ink-geometry-compose = { group = "androidx.ink", name = "ink-geometry-compose", version.ref = "ink" }
+androidx-ink-nativeloader = { group = "androidx.ink", name = "ink-nativeloader", version.ref = "ink" }
+androidx-ink-rendering = { group = "androidx.ink", name = "ink-rendering", version.ref = "ink" }
+androidx-ink-strokes = { group = "androidx.ink", name = "ink-strokes", version.ref = "ink" }
+androidx-input-motionprediction = { group = "androidx.input", name = "input-motionprediction", version.ref = "inputMotionPrediction" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -10,6 +10,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.fortind.zenith.ink.SheetBackground
+import com.fortind.zenith.ink.SheetShape
 import com.fortind.zenith.notifications.DefaultNotificationCategories
 import com.fortind.zenith.notifications.NotificationCategory
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +44,10 @@ data class AppSettings(
     val railCollapsed: Boolean = false,
     val composerWindowSize: WindowSizeDp? = null,
     val popOutBounds: Map<String, WindowBounds> = emptyMap(),
+    val inkDrawWithMouse: Boolean = true,
+    val inkTouchStopsAfterPen: Boolean = true,
+    val drawingShape: SheetShape = SheetShape.Landscape,
+    val drawingBackground: SheetBackground = SheetBackground.White,
 )
 
 interface SettingsStore {
@@ -56,6 +62,10 @@ interface SettingsStore {
     suspend fun setRailCollapsed(collapsed: Boolean)
     suspend fun setComposerWindowSize(size: WindowSizeDp)
     suspend fun setPopOutBounds(tab: String, bounds: WindowBounds)
+    suspend fun setInkDrawWithMouse(enabled: Boolean)
+    suspend fun setInkTouchStopsAfterPen(enabled: Boolean)
+    suspend fun setDrawingShape(shape: SheetShape)
+    suspend fun setDrawingBackground(background: SheetBackground)
 }
 
 private val Context.settingsDataStore by preferencesDataStore(
@@ -87,7 +97,31 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
                 val tab = entry.substringBefore('=')
                 WindowBounds.decode(entry.substringAfter('='))?.let { tab to it }
             }.toMap(),
+            inkDrawWithMouse = prefs[InkDrawWithMouseKey] ?: true,
+            inkTouchStopsAfterPen = prefs[InkTouchStopsAfterPenKey] ?: true,
+            drawingShape = prefs[DrawingShapeKey]
+                ?.let { saved -> SheetShape.entries.firstOrNull { it.name == saved } }
+                ?: SheetShape.Landscape,
+            drawingBackground = prefs[DrawingBackgroundKey]
+                ?.let { saved -> SheetBackground.entries.firstOrNull { it.name == saved } }
+                ?: SheetBackground.White,
         )
+    }
+
+    override suspend fun setInkDrawWithMouse(enabled: Boolean) {
+        dataStore.edit { it[InkDrawWithMouseKey] = enabled }
+    }
+
+    override suspend fun setInkTouchStopsAfterPen(enabled: Boolean) {
+        dataStore.edit { it[InkTouchStopsAfterPenKey] = enabled }
+    }
+
+    override suspend fun setDrawingShape(shape: SheetShape) {
+        dataStore.edit { it[DrawingShapeKey] = shape.name }
+    }
+
+    override suspend fun setDrawingBackground(background: SheetBackground) {
+        dataStore.edit { it[DrawingBackgroundKey] = background.name }
     }
 
     override suspend fun setCompressUploads(enabled: Boolean) {
@@ -151,5 +185,9 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         val ComposerWindowWidthKey = intPreferencesKey("composer_window_width_dp")
         val ComposerWindowHeightKey = intPreferencesKey("composer_window_height_dp")
         val PopOutBoundsKey = stringSetPreferencesKey("pop_out_bounds")
+        val InkDrawWithMouseKey = booleanPreferencesKey("ink_draw_with_mouse")
+        val InkTouchStopsAfterPenKey = booleanPreferencesKey("ink_touch_stops_after_pen")
+        val DrawingShapeKey = stringPreferencesKey("drawing_shape")
+        val DrawingBackgroundKey = stringPreferencesKey("drawing_background")
     }
 }

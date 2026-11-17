@@ -47,6 +47,14 @@ class SettingsViewModel(
         viewModelScope.launch { store.setCompressUploads(enabled) }
     }
 
+    fun setInkDrawWithMouse(enabled: Boolean) {
+        viewModelScope.launch { store.setInkDrawWithMouse(enabled) }
+    }
+
+    fun setInkTouchStopsAfterPen(enabled: Boolean) {
+        viewModelScope.launch { store.setInkTouchStopsAfterPen(enabled) }
+    }
+
     fun setSystemNotifications(enabled: Boolean) {
         viewModelScope.launch { store.setSystemNotifications(enabled) }
     }

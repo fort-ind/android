@@ -731,6 +731,27 @@ class ComposerViewModel(
         deleteFromDrive(listOf(attachment))
     }
 
+    fun replaceAttachment(localId: String, media: LocalMedia) {
+        val old = _uiState.value?.attachments?.firstOrNull { it.localId == localId }
+        if (old == null) {
+            addMedia(listOf(media))
+            return
+        }
+        uploads.remove(localId)?.cancel()
+        val replacement = Attachment(
+            localId = UUID.randomUUID().toString(),
+            media = media,
+            phase = AttachmentPhase.Uploading,
+            altText = old.altText,
+            isSensitive = old.isSensitive,
+        )
+        _uiState.update { state ->
+            state?.copy(attachments = state.attachments.map { if (it.localId == localId) replacement else it })
+        }
+        deleteFromDrive(listOf(old))
+        startUpload(replacement.localId, forceCompress = false)
+    }
+
     fun setAttachmentDetails(localId: String, altText: String, isSensitive: Boolean) {
         val limit = _uiState.value?.maxAltLength ?: DEFAULT_MAX_ALT_TEXT_LENGTH
         updateAttachment(localId) { it.copy(altText = altText.take(limit), isSensitive = isSensitive) }
