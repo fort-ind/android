@@ -9,15 +9,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Brush
@@ -32,20 +33,20 @@ import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingToolbarDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.MenuGroupShapes
+import androidx.compose.material3.MenuItemShapes
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.VerticalFloatingToolbar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -77,27 +78,30 @@ import com.fortind.zenith.ui.handCursor
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun InkToolbar(state: InkUiState, viewModel: InkViewModel, vertical: Boolean, modifier: Modifier = Modifier) {
-    val items: @Composable () -> Unit = {
+fun InkToolbar(
+    state: InkUiState,
+    onSelectTool: (InkTool) -> Unit,
+    onOpenStyle: () -> Unit,
+    vertical: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val tools: @Composable () -> Unit = {
         InkTool.entries.forEach { tool ->
             ToolButton(
                 tool = tool,
                 checked = state.tool == tool,
-                onClick = { if (state.tool == tool) viewModel.openPanel(InkPanel.Style) else viewModel.selectTool(tool) },
+                onClick = { if (state.tool == tool) onOpenStyle() else onSelectTool(tool) },
             )
         }
-        if (vertical) {
-            HorizontalDivider(modifier = Modifier.width(32.dp).padding(vertical = 4.dp))
-        } else {
-            VerticalDivider(modifier = Modifier.height(32.dp).padding(horizontal = 4.dp))
-        }
-        StyleButton(state = state, onClick = { viewModel.openPanel(InkPanel.Style) })
+    }
+    val styleButton: @Composable () -> Unit = {
+        StyleButton(state = state, onClick = onOpenStyle)
     }
     val colors = FloatingToolbarDefaults.standardFloatingToolbarColors(toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
     if (vertical) {
-        VerticalFloatingToolbar(expanded = true, colors = colors, modifier = modifier) { items() }
+        VerticalFloatingToolbar(expanded = true, floatingActionButton = styleButton, colors = colors, modifier = modifier) { tools() }
     } else {
-        HorizontalFloatingToolbar(expanded = true, colors = colors, modifier = modifier) { items() }
+        HorizontalFloatingToolbar(expanded = true, floatingActionButton = styleButton, colors = colors, modifier = modifier) { tools() }
     }
 }
 
@@ -105,12 +109,21 @@ fun InkToolbar(state: InkUiState, viewModel: InkViewModel, vertical: Boolean, mo
 @Composable
 private fun ToolButton(tool: InkTool, checked: Boolean, onClick: () -> Unit) {
     val label = stringResource(tool.labelRes())
+    val scheme = MaterialTheme.colorScheme
     LabelTooltip(label) {
         IconToggleButton(
             checked = checked,
             onCheckedChange = { onClick() },
-            shapes = IconButtonDefaults.toggleableShapes(),
-            colors = IconButtonDefaults.iconToggleButtonVibrantColors(),
+            shapes = IconButtonDefaults.toggleableShapes(
+                shape = CircleShape,
+                pressedShape = MaterialTheme.shapes.medium,
+                checkedShape = CircleShape,
+            ),
+            colors = IconButtonDefaults.iconToggleButtonColors(
+                contentColor = scheme.onSurfaceVariant,
+                checkedContainerColor = scheme.primary,
+                checkedContentColor = scheme.onPrimary,
+            ),
             modifier = Modifier.handCursor(),
         ) {
             Icon(tool.icon(), contentDescription = label)
@@ -118,6 +131,7 @@ private fun ToolButton(tool: InkTool, checked: Boolean, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun StyleButton(state: InkUiState, onClick: () -> Unit) {
     val label = stringResource(R.string.ink_style)
@@ -127,8 +141,10 @@ private fun StyleButton(state: InkUiState, onClick: () -> Unit) {
         stringResource(R.string.ink_style_state, stringResource(state.style.color.labelRes()), stringResource(state.style.size.labelRes()))
     }
     LabelTooltip(label) {
-        IconButton(
+        FloatingToolbarDefaults.StandardFloatingActionButton(
             onClick = onClick,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.handCursor().semantics { stateDescription = stateText },
         ) {
             Swatch(color = state.swatchColor(), dot = state.tool == InkTool.Eraser, size = state.style.size, label = label)
@@ -139,33 +155,42 @@ private fun StyleButton(state: InkUiState, onClick: () -> Unit) {
 @Composable
 private fun Swatch(color: Color, dot: Boolean, size: InkSize, label: String) {
     val outline = MaterialTheme.colorScheme.outline
+    val ink = LocalContentColor.current
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(24.dp)
+            .size(28.dp)
             .semantics { contentDescription = label }
-            .border(1.dp, outline, CircleShape)
+            .border(if (dot) 2.dp else 1.dp, if (dot) ink else outline, CircleShape)
             .background(if (dot) Color.Transparent else color, CircleShape),
     ) {
         if (dot) {
             val diameter = when (size) {
                 InkSize.Small -> 6.dp
-                InkSize.Medium -> 11.dp
-                InkSize.Large -> 18.dp
+                InkSize.Medium -> 12.dp
+                InkSize.Large -> 20.dp
             }
-            Box(Modifier.size(diameter).background(MaterialTheme.colorScheme.onSurface, CircleShape))
+            Box(Modifier.size(diameter).background(ink, CircleShape))
         }
     }
 }
 
+class InkPanelActions(
+    val onColor: (InkColor) -> Unit,
+    val onSize: (InkSize) -> Unit,
+    val onBackground: (SheetBackground) -> Unit,
+    val onShape: (SheetShape) -> Unit,
+    val onClearAll: () -> Unit,
+    val onClose: () -> Unit,
+)
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
-fun StylePanel(state: InkUiState, viewModel: InkViewModel) {
+fun StylePanel(state: InkUiState, actions: InkPanelActions) {
     Column {
         val showColors = state.tool != InkTool.Eraser
-        val groups = if (showColors) 2 else 1
         if (showColors) {
-            DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, groups), modifier = Modifier.fillMaxWidth()) {
+            DropdownMenuGroup(shapes = panelGroupShapes(), contentPadding = PanelGroupPadding, modifier = Modifier.fillMaxWidth()) {
                 MenuDefaults.DropdownMenuGroupLabel { Text(stringResource(R.string.ink_color)) }
                 FlowRow(
                     maxItemsInEachRow = SwatchesPerRow,
@@ -176,20 +201,20 @@ fun StylePanel(state: InkUiState, viewModel: InkViewModel) {
                         ColorChoice(
                             color = color,
                             selected = state.style.color == color,
-                            onClick = { viewModel.setColor(color) },
+                            onClick = { actions.onColor(color) },
                         )
                     }
                 }
             }
-            Spacer(Modifier.height(MenuDefaults.GroupSpacing))
+            Spacer(Modifier.height(PanelInset))
         }
-        DropdownMenuGroup(shapes = MenuDefaults.groupShape(groups - 1, groups), modifier = Modifier.fillMaxWidth()) {
+        DropdownMenuGroup(shapes = panelGroupShapes(), contentPadding = PanelGroupPadding, modifier = Modifier.fillMaxWidth()) {
             MenuDefaults.DropdownMenuGroupLabel { Text(stringResource(R.string.ink_size)) }
             SingleChoiceSegmentedButtonRow(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
                 InkSize.entries.forEachIndexed { index, size ->
                     SegmentedButton(
                         selected = state.style.size == size,
-                        onClick = { viewModel.setSize(size) },
+                        onClick = { actions.onSize(size) },
                         shape = SegmentedButtonDefaults.itemShape(index, InkSize.entries.size),
                         modifier = Modifier.handCursor(),
                     ) {
@@ -237,57 +262,55 @@ private fun ColorChoice(color: InkColor, selected: Boolean, onClick: () -> Unit)
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MorePanel(state: InkUiState, viewModel: InkViewModel) {
-    val onDismiss = viewModel::closePanel
+fun MorePanel(state: InkUiState, actions: InkPanelActions) {
+    val onDismiss = actions.onClose
     Column {
-        val groups = if (state.isMarkup) 1 else 3
-        var group = 0
         if (!state.isMarkup) {
-            DropdownMenuGroup(shapes = MenuDefaults.groupShape(group++, groups), modifier = Modifier.fillMaxWidth()) {
+            DropdownMenuGroup(shapes = panelGroupShapes(), contentPadding = PanelGroupPadding, modifier = Modifier.fillMaxWidth()) {
                 MenuDefaults.DropdownMenuGroupLabel { Text(stringResource(R.string.ink_background)) }
                 SheetBackground.entries.forEachIndexed { index, background ->
                     SelectableDropdownMenuItem(
                         selected = state.background == background,
                         onClick = {
-                            viewModel.setBackground(background)
+                            actions.onBackground(background)
                             onDismiss()
                         },
                         text = { Text(stringResource(background.labelRes())) },
-                        shapes = MenuDefaults.itemShape(index, SheetBackground.entries.size),
+                        shapes = panelItemShapes(index, SheetBackground.entries.size),
                         leadingIcon = { BackgroundSwatch(background) },
                         selectedLeadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
                         modifier = Modifier.handCursor(),
                     )
                 }
             }
-            Spacer(Modifier.height(MenuDefaults.GroupSpacing))
-            DropdownMenuGroup(shapes = MenuDefaults.groupShape(group++, groups), modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.height(PanelInset))
+            DropdownMenuGroup(shapes = panelGroupShapes(), contentPadding = PanelGroupPadding, modifier = Modifier.fillMaxWidth()) {
                 MenuDefaults.DropdownMenuGroupLabel { Text(stringResource(R.string.ink_shape)) }
                 SheetShape.entries.forEachIndexed { index, shape ->
                     SelectableDropdownMenuItem(
                         selected = state.shape == shape,
                         onClick = {
-                            viewModel.setShape(shape)
+                            actions.onShape(shape)
                             onDismiss()
                         },
                         text = { Text(stringResource(shape.labelRes())) },
-                        shapes = MenuDefaults.itemShape(index, SheetShape.entries.size),
+                        shapes = panelItemShapes(index, SheetShape.entries.size),
                         leadingIcon = { Icon(shape.icon(), contentDescription = null) },
                         selectedLeadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
                         modifier = Modifier.handCursor(),
                     )
                 }
             }
-            Spacer(Modifier.height(MenuDefaults.GroupSpacing))
+            Spacer(Modifier.height(PanelInset))
         }
-        DropdownMenuGroup(shapes = MenuDefaults.groupShape(group, groups), modifier = Modifier.fillMaxWidth()) {
+        DropdownMenuGroup(shapes = panelGroupShapes(), contentPadding = PanelGroupPadding, modifier = Modifier.fillMaxWidth()) {
             DropdownMenuItem(
                 onClick = {
-                    viewModel.clearAll()
+                    actions.onClearAll()
                     onDismiss()
                 },
                 text = { Text(stringResource(R.string.ink_clear_all)) },
-                shape = MenuDefaults.standaloneItemShape,
+                shape = RoundedCornerShape(PanelGroupCorner - PanelItemInset),
                 leadingIcon = { Icon(Icons.Default.DeleteSweep, contentDescription = null) },
                 enabled = state.hasInk,
                 modifier = Modifier.handCursor(state.hasInk),
@@ -403,3 +426,32 @@ val EraserIcon: ImageVector by lazy {
 }
 
 private const val SwatchesPerRow = 5
+internal val PanelInset = 8.dp
+private val PanelGroupCorner = 20.dp
+private val PanelItemInset = 4.dp
+private val PanelItemInnerCorner = 4.dp
+private val PanelGroupPadding = PaddingValues(vertical = PanelItemInset)
+internal val PanelShape = RoundedCornerShape(PanelGroupCorner + PanelInset)
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun panelGroupShapes(): MenuGroupShapes {
+    val shape = RoundedCornerShape(PanelGroupCorner)
+    return MenuDefaults.groupShapes(shape = shape, inactiveShape = shape)
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun panelItemShapes(index: Int, count: Int): MenuItemShapes {
+    val edge = PanelGroupCorner - PanelItemInset
+    val bottom = if (index == count - 1) edge else PanelItemInnerCorner
+    return MenuDefaults.itemShapes(
+        shape = RoundedCornerShape(
+            topStart = PanelItemInnerCorner,
+            topEnd = PanelItemInnerCorner,
+            bottomEnd = bottom,
+            bottomStart = bottom,
+        ),
+        selectedShape = RoundedCornerShape(edge),
+    )
+}

@@ -32,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,6 +89,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.ink.authoring.compose.InProgressStrokes
@@ -147,7 +149,15 @@ fun InkOverlay(state: InkUiState, policy: InkInputPolicy, viewModel: InkViewMode
             !sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                InkTopBar(state = state, viewModel = viewModel, onAttach = attach)
+                InkTopBar(
+                    state = state,
+                    title = title,
+                    onCancel = viewModel::requestCancel,
+                    onUndo = viewModel::undo,
+                    onRedo = viewModel::redo,
+                    onMore = { viewModel.openPanel(InkPanel.More) },
+                    onAttach = attach,
+                )
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     when (state.phase) {
                         InkPhase.Loading -> CenteredMessage(R.string.ink_loading, busy = true)
@@ -156,7 +166,19 @@ fun InkOverlay(state: InkUiState, policy: InkInputPolicy, viewModel: InkViewMode
                     }
                 }
             }
-            state.panel?.let { panel -> InkPanelLayer(panel, state, viewModel, vertical) }
+            state.panel?.let { panel ->
+                val actions = remember(viewModel) {
+                    InkPanelActions(
+                        onColor = viewModel::setColor,
+                        onSize = viewModel::setSize,
+                        onBackground = viewModel::setBackground,
+                        onShape = viewModel::setShape,
+                        onClearAll = viewModel::clearAll,
+                        onClose = viewModel::closePanel,
+                    )
+                }
+                InkPanelLayer(panel, state, actions, vertical)
+            }
         }
     }
     DiscardInkPrompt(
@@ -179,41 +201,63 @@ private fun CenteredMessage(text: Int, busy: Boolean) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun InkTopBar(state: InkUiState, viewModel: InkViewModel, onAttach: () -> Unit) {
+internal fun InkTopBar(
+    state: InkUiState,
+    title: String,
+    onCancel: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onMore: () -> Unit,
+    onAttach: () -> Unit,
+) {
     val ready = state.phase == InkPhase.Ready
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.fillMaxWidth().height(TopBarHeight).padding(horizontal = 8.dp),
-    ) {
-        TooltipIconButton(label = stringResource(R.string.ink_cancel), icon = Icons.Default.Close, onClick = viewModel::requestCancel)
-        Spacer(Modifier.weight(1f))
-        TooltipIconButton(
-            label = stringResource(R.string.ink_undo),
-            icon = Icons.AutoMirrored.Filled.Undo,
-            onClick = viewModel::undo,
-            enabled = ready && state.canUndo,
-        )
-        TooltipIconButton(
-            label = stringResource(R.string.ink_redo),
-            icon = Icons.AutoMirrored.Filled.Redo,
-            onClick = viewModel::redo,
-            enabled = ready && state.canRedo,
-        )
-        TooltipIconButton(
-            label = stringResource(R.string.ink_more),
-            icon = Icons.Default.MoreVert,
-            onClick = { viewModel.openPanel(InkPanel.More) },
-            enabled = ready,
-        )
-        Spacer(Modifier.width(4.dp))
-        Button(
-            onClick = onAttach,
-            enabled = ready,
-            modifier = Modifier.handCursor(ready),
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(TopBarHeight)) {
+        val showTitle = maxWidth >= TitleMinWidth
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize().padding(end = Gutter),
         ) {
-            Text(stringResource(R.string.ink_attach))
+            TooltipIconButton(label = stringResource(R.string.ink_cancel), icon = Icons.Default.Close, onClick = onCancel)
+            if (showTitle) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+            TooltipIconButton(
+                label = stringResource(R.string.ink_undo),
+                icon = Icons.AutoMirrored.Filled.Undo,
+                onClick = onUndo,
+                enabled = ready && state.canUndo,
+            )
+            TooltipIconButton(
+                label = stringResource(R.string.ink_redo),
+                icon = Icons.AutoMirrored.Filled.Redo,
+                onClick = onRedo,
+                enabled = ready && state.canRedo,
+            )
+            TooltipIconButton(
+                label = stringResource(R.string.ink_more),
+                icon = Icons.Default.MoreVert,
+                onClick = onMore,
+                enabled = ready,
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onAttach,
+                enabled = ready,
+                modifier = Modifier.handCursor(ready),
+            ) {
+                Text(stringResource(R.string.ink_attach))
+            }
         }
     }
 }
@@ -223,7 +267,8 @@ private fun InkWorkspace(state: InkUiState, policy: InkInputPolicy, viewModel: I
     Box(modifier = Modifier.fillMaxSize()) {
         InkToolbar(
             state = state,
-            viewModel = viewModel,
+            onSelectTool = viewModel::selectTool,
+            onOpenStyle = { viewModel.openPanel(InkPanel.Style) },
             vertical = vertical,
             modifier = Modifier
                 .align(if (vertical) Alignment.CenterStart else Alignment.BottomCenter)
@@ -387,14 +432,14 @@ private fun DrawScope.drawSheetBackground(background: SheetBackground, theme: Co
 }
 
 @Composable
-private fun InkPanelLayer(panel: InkPanel, state: InkUiState, viewModel: InkViewModel, vertical: Boolean) {
+internal fun InkPanelLayer(panel: InkPanel, state: InkUiState, actions: InkPanelActions, vertical: Boolean) {
     val focus = remember { FocusRequester() }
     val title = stringResource(if (panel == InkPanel.More) R.string.ink_more else R.string.ink_style)
     LaunchedEffect(panel) { focus.requestFocus() }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) { detectTapGestures { viewModel.closePanel() } },
+            .pointerInput(Unit) { detectTapGestures { actions.onClose() } },
     ) {
         val alignment = when {
             panel == InkPanel.More -> Alignment.TopEnd
@@ -402,11 +447,15 @@ private fun InkPanelLayer(panel: InkPanel, state: InkUiState, viewModel: InkView
             else -> Alignment.BottomCenter
         }
         val placement = when {
-            panel == InkPanel.More -> Modifier.padding(top = TopBarHeight, end = 8.dp)
+            panel == InkPanel.More -> Modifier.padding(top = TopBarHeight, end = Gutter)
             vertical -> Modifier.padding(start = ToolbarClearance, top = TopBarHeight)
             else -> Modifier.padding(bottom = ToolbarClearance, top = TopBarHeight)
         }
-        Column(
+        Surface(
+            color = MenuDefaults.containerColor,
+            shape = PanelShape,
+            tonalElevation = MenuDefaults.TonalElevation,
+            shadowElevation = MenuDefaults.ShadowElevation,
             modifier = Modifier
                 .align(alignment)
                 .then(placement)
@@ -414,12 +463,13 @@ private fun InkPanelLayer(panel: InkPanel, state: InkUiState, viewModel: InkView
                 .pointerInput(Unit) { detectTapGestures { } }
                 .semantics { paneTitle = title }
                 .focusRequester(focus)
-                .focusGroup()
-                .verticalScroll(rememberScrollState()),
+                .focusGroup(),
         ) {
-            when (panel) {
-                InkPanel.Style -> StylePanel(state, viewModel)
-                InkPanel.More -> MorePanel(state, viewModel)
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(PanelInset)) {
+                when (panel) {
+                    InkPanel.Style -> StylePanel(state, actions)
+                    InkPanel.More -> MorePanel(state, actions)
+                }
             }
         }
     }
@@ -443,7 +493,9 @@ private fun DiscardInkPrompt(visible: Boolean, onDiscard: () -> Unit, onKeep: ()
 }
 
 private const val NAME_STAMP = "yyyy-MM-dd HH.mm.ss"
-private val SheetMargin = 16.dp
+private val Gutter = 16.dp
+private val SheetMargin = Gutter
+private val TitleMinWidth = 392.dp
 private val TopBarHeight = 64.dp
 private val PanelMaxWidth = 320.dp
 private val ToolbarClearance = 96.dp
