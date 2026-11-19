@@ -19,7 +19,9 @@ val abiVersionCodeStep = 1_000_000
 android {
     namespace = "com.fortind.zenith"
     compileSdk {
-        version = release(37)
+        version = release(37) {
+            minorApiLevel = 1
+        }
     }
 
     defaultConfig {
