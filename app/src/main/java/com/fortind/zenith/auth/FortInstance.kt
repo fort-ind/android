@@ -4,6 +4,8 @@ object FortInstance {
     const val HOST = "social.fort1nd.com"
     const val APP_NAME = "fort.android"
     const val SETTINGS_URL = "https://$HOST/settings"
+    const val SCOPE_READ_NOTES_SCHEDULE = "read:notes-schedule"
+    const val SCOPE_WRITE_NOTES_SCHEDULE = "write:notes-schedule"
 
     val SCOPES = listOf(
         "read:account",
@@ -24,5 +26,7 @@ object FortInstance {
         "write:report-abuse",
         "read:following",
         "read:drive",
+        SCOPE_READ_NOTES_SCHEDULE,
+        SCOPE_WRITE_NOTES_SCHEDULE,
     )
 }

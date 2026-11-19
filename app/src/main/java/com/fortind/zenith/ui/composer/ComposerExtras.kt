@@ -268,22 +268,48 @@ private class FutureDates(nowMillis: Long) : SelectableDates {
 
 @Composable
 internal fun PollDateSheet(visible: Boolean, nowMillis: Long, onChoose: (Long) -> Unit, onDismiss: () -> Unit) {
-    val title = stringResource(R.string.poll_end_custom)
+    DateTimeSheet(
+        visible = visible,
+        title = stringResource(R.string.poll_end_custom),
+        confirmLabel = stringResource(R.string.poll_end_set),
+        nowMillis = nowMillis,
+        initialDateUtcMillis = nowMillis + ONE_DAY_MILLIS,
+        initialHour = 12,
+        initialMinute = 0,
+        problemFor = { chosen -> if (chosen > nowMillis) null else R.string.poll_problem_past },
+        onChoose = onChoose,
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
+internal fun DateTimeSheet(
+    visible: Boolean,
+    title: String,
+    confirmLabel: String,
+    nowMillis: Long,
+    initialDateUtcMillis: Long,
+    initialHour: Int,
+    initialMinute: Int,
+    problemFor: (Long) -> Int?,
+    onChoose: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
     BottomSheetOverlay(visible = visible, title = title, onDismiss = onDismiss) {
         val selectable = remember(nowMillis) { FutureDates(nowMillis) }
-        val date = rememberDatePickerState(initialSelectedDateMillis = nowMillis + ONE_DAY_MILLIS, selectableDates = selectable)
-        val time = rememberTimePickerState(initialHour = 12, initialMinute = 0)
+        val date = rememberDatePickerState(initialSelectedDateMillis = initialDateUtcMillis, selectableDates = selectable)
+        val time = rememberTimePickerState(initialHour = initialHour, initialMinute = initialMinute)
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             DatePicker(state = date, title = null, headline = null, showModeToggle = false)
             TimeInput(state = time)
             val chosen = date.selectedDateMillis?.let { customPollEnd(it, time.hour, time.minute) }
-            val future = chosen != null && chosen > nowMillis
-            if (chosen != null && !future) {
-                Text(stringResource(R.string.poll_problem_past), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            val problem = chosen?.let(problemFor)
+            if (problem != null) {
+                Text(stringResource(problem), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.note_dialog_cancel)) }
-                Button(onClick = { chosen?.let(onChoose) }, enabled = future) { Text(stringResource(R.string.poll_end_set)) }
+                Button(onClick = { chosen?.let(onChoose) }, enabled = chosen != null && problem == null) { Text(confirmLabel) }
             }
         }
     }

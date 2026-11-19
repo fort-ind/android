@@ -73,6 +73,10 @@ import com.fortind.zenith.ui.composer.ComposerEvent
 import com.fortind.zenith.ui.composer.ComposerHost
 import com.fortind.zenith.ui.composer.ComposerTarget
 import com.fortind.zenith.ui.composer.ComposerViewModel
+import com.fortind.zenith.ui.composer.ReplacedScheduled
+import com.fortind.zenith.ui.scheduled.ScheduledViewModel
+import com.fortind.zenith.ui.absoluteTime
+import android.content.res.Resources
 import com.fortind.zenith.ui.feed.ConfirmBlockDialog
 import com.fortind.zenith.ui.feed.ConfirmDeleteDialog
 import com.fortind.zenith.ui.feed.FeedEvent
@@ -159,8 +163,10 @@ fun SocialHost(
     onOpenHandle: (ProfileHandle) -> Unit,
     onOpenTag: (String) -> Unit,
     onOpenNoteId: (String) -> Unit = {},
+    onOpenScheduled: () -> Unit = {},
     requestedReplyId: String? = null,
     onRequestedReplyHandled: () -> Unit = {},
+    scheduledViewModel: ScheduledViewModel = viewModel(factory = ScheduledViewModel.Factory),
     feedViewModel: FeedViewModel = viewModel(factory = FeedViewModel.Factory),
     collectionsViewModel: CollectionsViewModel = viewModel(factory = CollectionsViewModel.Factory),
     discoveryViewModel: DiscoveryViewModel = viewModel(factory = DiscoveryViewModel.Factory),
@@ -339,8 +345,9 @@ fun SocialHost(
     CollectionsEventsEffect(collectionsViewModel, snackbarHostState)
     FeedEventsEffect(feedViewModel, peopleViewModel, snackbarHostState, listStates, reduceMotion, onRedraft = composerViewModel::redraft)
     PeopleEventsEffect(peopleViewModel, feedViewModel, snackbarHostState)
-    ComposerEventsEffect(composerViewModel, feedViewModel, snackbarHostState)
-    ComposerWindowEventsEffect(composerWindows, snackbarHostState)
+    val openScheduled by rememberUpdatedState(onOpenScheduled)
+    ComposerEventsEffect(composerViewModel, feedViewModel, scheduledViewModel, snackbarHostState) { openScheduled() }
+    ComposerWindowEventsEffect(composerWindows, snackbarHostState) { openScheduled() }
     LaunchedEffect(requestedReplyId) {
         val noteId = requestedReplyId ?: return@LaunchedEffect
         val note = withTimeoutOrNull(REPLY_NOTE_WAIT_MS) {
@@ -804,6 +811,10 @@ private class ComposerWindows(
     val postedHere: Flow<WindowEvent.NotePosted> =
         events.fromOtherWindows.filterIsInstance<WindowEvent.NotePosted>().filter { it.openerWindowId == windowId }
 
+    val scheduledHere: Flow<WindowEvent.ScheduledChanged> = events.fromOtherWindows
+        .filterIsInstance<WindowEvent.ScheduledChanged>()
+        .filter { it.openerWindowId == windowId && it.scheduledAtMillis != null }
+
     fun open(target: ComposerWindowTarget): Boolean {
         val opener = activity ?: return false
         if (!available) return false
@@ -825,33 +836,62 @@ private fun rememberComposerWindows(container: AppContainer): ComposerWindows {
 }
 
 @Composable
-private fun ComposerWindowEventsEffect(windows: ComposerWindows, snackbarHostState: SnackbarHostState) {
+private fun ComposerWindowEventsEffect(windows: ComposerWindows, snackbarHostState: SnackbarHostState, onOpenScheduled: () -> Unit) {
     val resources = LocalResources.current
     LaunchedEffect(windows) {
-        windows.postedHere.collect { event ->
-            val message = if (event.edited) R.string.composer_saved else R.string.composer_posted
-            launch { snackbarHostState.showSnackbar(resources.getString(message)) }
+        launch {
+            windows.postedHere.collect { event ->
+                val message = if (event.edited) R.string.composer_saved else R.string.composer_posted
+                launch { snackbarHostState.showSnackbar(resources.getString(message)) }
+            }
+        }
+        launch {
+            windows.scheduledHere.collect { event ->
+                val atMillis = event.scheduledAtMillis ?: return@collect
+                launch { snackbarHostState.showScheduled(resources, atMillis, event.replacedStillScheduled, onOpenScheduled) }
+            }
         }
     }
+}
+
+private suspend fun SnackbarHostState.showScheduled(
+    resources: Resources,
+    atMillis: Long,
+    replacedStillScheduled: Boolean,
+    onOpenScheduled: () -> Unit,
+) {
+    val message = if (replacedStillScheduled) {
+        resources.getString(R.string.schedule_scheduled_old_remains)
+    } else {
+        resources.getString(R.string.schedule_scheduled, absoluteTime(atMillis))
+    }
+    val result = showSnackbar(message, actionLabel = resources.getString(R.string.schedule_view), duration = SnackbarDuration.Long)
+    if (result == SnackbarResult.ActionPerformed) onOpenScheduled()
 }
 
 @Composable
 private fun ComposerEventsEffect(
     composerViewModel: ComposerViewModel,
     feedViewModel: FeedViewModel,
+    scheduledViewModel: ScheduledViewModel,
     snackbarHostState: SnackbarHostState,
+    onOpenScheduled: () -> Unit,
 ) {
     val resources = LocalResources.current
-    LaunchedEffect(composerViewModel, feedViewModel) {
+    LaunchedEffect(composerViewModel, feedViewModel, scheduledViewModel) {
         composerViewModel.events.collect { event ->
             when (event) {
                 is ComposerEvent.Posted -> {
-                    val message = when (event.target) {
-                        is ComposerTarget.Edit -> {
+                    val message = when {
+                        event.replaced == ReplacedScheduled.StillScheduled -> {
+                            feedViewModel.noteCreated(event.note)
+                            R.string.schedule_posted_old_remains
+                        }
+                        event.target is ComposerTarget.Edit -> {
                             feedViewModel.noteEdited(event.note)
                             R.string.composer_saved
                         }
-                        is ComposerTarget.Reply -> {
+                        event.target is ComposerTarget.Reply -> {
                             feedViewModel.noteCreated(event.note)
                             R.string.composer_reply_sent
                         }
@@ -860,7 +900,19 @@ private fun ComposerEventsEffect(
                             R.string.composer_posted
                         }
                     }
+                    if (event.replaced != ReplacedScheduled.None) scheduledViewModel.changed()
                     launch { snackbarHostState.showSnackbar(resources.getString(message)) }
+                }
+                is ComposerEvent.Scheduled -> {
+                    scheduledViewModel.changed()
+                    launch {
+                        snackbarHostState.showScheduled(
+                            resources,
+                            event.atMillis,
+                            event.replaced == ReplacedScheduled.StillScheduled,
+                            onOpenScheduled,
+                        )
+                    }
                 }
             }
         }

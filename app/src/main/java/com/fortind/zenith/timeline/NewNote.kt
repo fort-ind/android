@@ -46,6 +46,20 @@ fun NewNote.toCreateRequest(token: String): JSONObject = JSONObject().apply {
     reactionAcceptance.apiName?.let { put("reactionAcceptance", it) }
 }
 
+fun NewNote.toScheduleRequest(token: String, scheduledAtMillis: Long): JSONObject = JSONObject().apply {
+    put("i", token)
+    text?.takeIf { it.isNotBlank() }?.let { put("text", it) }
+    cw?.takeIf { it.isNotEmpty() }?.let { put("cw", it) }
+    put("visibility", visibility.apiName)
+    replyId?.let { put("replyId", it) }
+    renoteId?.let { put("renoteId", it) }
+    if (fileIds.isNotEmpty()) put("fileIds", JSONArray(fileIds))
+    if (visibility == Visibility.Specified) put("visibleUserIds", JSONArray(visibleUserIds))
+    poll?.let { put("poll", it.toJson()) }
+    reactionAcceptance.apiName?.let { put("reactionAcceptance", it) }
+    put("scheduleNote", JSONObject().put("scheduledAt", scheduledAtMillis))
+}
+
 fun NewNote.toEditRequest(token: String, noteId: String): JSONObject = JSONObject().apply {
     put("i", token)
     put("editId", noteId)

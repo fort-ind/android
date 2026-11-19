@@ -71,6 +71,8 @@ import com.fortind.zenith.notifications.SystemNotifier
 import com.fortind.zenith.notifications.WorkManagerNotificationWork
 import com.fortind.zenith.account.HttpReportApi
 import com.fortind.zenith.account.ReportApi
+import com.fortind.zenith.schedule.HttpScheduleApi
+import com.fortind.zenith.schedule.ScheduleApi
 import com.fortind.zenith.people.FollowApi
 import com.fortind.zenith.people.HttpFollowApi
 import com.fortind.zenith.people.HttpUsersApi
@@ -118,6 +120,7 @@ class AppContainer(application: Application) {
     val accountApi: AccountApi = HttpAccountApi(http)
     val moderationApi: ModerationApi = HttpModerationApi(http)
     val reportApi: ReportApi = HttpReportApi(http)
+    val scheduleApi: ScheduleApi = HttpScheduleApi(http)
     val usersApi: UsersApi = HttpUsersApi(http)
     val followApi: FollowApi = HttpFollowApi(http)
     val suggestionsApi: SuggestionsApi = HttpSuggestionsApi(http)

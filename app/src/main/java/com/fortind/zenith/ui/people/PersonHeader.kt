@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -84,6 +85,9 @@ private val AvatarRing = 6.dp
 class OwnProfileActions(
     val onEditProfile: () -> Unit,
     val onLogOut: () -> Unit,
+    val onOpenScheduled: () -> Unit,
+    val scheduledCount: Int?,
+    val scheduledMax: Int?,
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -329,15 +333,33 @@ private fun PersonTags(detail: UserDetail) {
 private fun OwnActions(own: OwnProfileActions) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OwnActionButton(Icons.Default.Edit, stringResource(R.string.profile_edit_profile), own.onEditProfile, destructive = false)
+        val count = own.scheduledCount?.takeIf { it > 0 }
+        val max = own.scheduledMax
+        OwnActionButton(
+            icon = Icons.Default.Schedule,
+            label = if (count != null) stringResource(R.string.profile_scheduled_count, count) else stringResource(R.string.profile_scheduled),
+            onClick = own.onOpenScheduled,
+            destructive = false,
+            description = if (count != null && max != null) stringResource(R.string.profile_scheduled_description, count, max) else null,
+            modifier = Modifier.testTag("profile:scheduled"),
+        )
         OwnActionButton(Icons.AutoMirrored.Filled.ExitToApp, stringResource(R.string.profile_log_out), own.onLogOut, destructive = true)
     }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun OwnActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, destructive: Boolean) {
+private fun OwnActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+) {
     FilledTonalButton(
         onClick = onClick,
+        modifier = if (description != null) modifier.semantics { contentDescription = description } else modifier,
         shapes = ButtonDefaults.shapes(),
         colors = if (destructive) {
             ButtonDefaults.filledTonalButtonColors(

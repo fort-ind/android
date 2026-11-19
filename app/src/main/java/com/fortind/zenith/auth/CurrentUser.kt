@@ -6,6 +6,7 @@ import com.fortind.zenith.account.parseAccountSettings
 import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.objects
+import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
 import java.io.IOException
 import org.json.JSONObject
@@ -24,6 +25,7 @@ data class CurrentUser(
     val fields: List<ProfileField> = emptyList(),
     val settings: AccountSettings = AccountSettings(),
     val pinnedNoteIds: List<String> = emptyList(),
+    val scheduleNoteMax: Int? = null,
 ) {
     val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: username
 
@@ -55,6 +57,7 @@ fun parseCurrentUser(json: JSONObject): CurrentUser {
         },
         settings = parseAccountSettings(json),
         pinnedNoteIds = json.optJSONArray("pinnedNoteIds")?.strings().orEmpty(),
+        scheduleNoteMax = json.optJSONObject("policies")?.optIntOrNull("scheduleNoteMax")?.takeIf { it > 0 },
     )
 }
 

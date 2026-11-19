@@ -12,6 +12,12 @@ import kotlinx.coroutines.flow.map
 sealed interface WindowEvent {
     data class NotePosted(val note: Note, val edited: Boolean, val openerWindowId: String? = null) : WindowEvent
 
+    data class ScheduledChanged(
+        val scheduledAtMillis: Long? = null,
+        val openerWindowId: String? = null,
+        val replacedStillScheduled: Boolean = false,
+    ) : WindowEvent
+
     data class NoteDeleted(val noteId: String) : WindowEvent
 
     data class MyReaction(val noteId: String, val reaction: String?) : WindowEvent

@@ -14,7 +14,13 @@ import com.fortind.zenith.account.CW_PRIORITY_DEFAULT
 import com.fortind.zenith.account.CW_PRIORITY_PARENT
 import com.fortind.zenith.account.CW_PRIORITY_PARENT_DEFAULT
 import com.fortind.zenith.auth.CurrentUser
+import com.fortind.zenith.auth.FortInstance
+import com.fortind.zenith.auth.InMemoryScopeStampStore
+import com.fortind.zenith.auth.ScopeStamp
 import com.fortind.zenith.auth.UserSessionService
+import com.fortind.zenith.net.ApiErrorCodes
+import com.fortind.zenith.schedule.FakeScheduleApi
+import com.fortind.zenith.schedule.testScheduled
 import com.fortind.zenith.autocomplete.SuggestionEngine
 import com.fortind.zenith.autocomplete.SuggestionsApi
 import com.fortind.zenith.autocomplete.Trigger
@@ -221,8 +227,14 @@ class ComposerViewModelTest {
         compress: Boolean,
         nowMillis: Long,
         remindAltText: Boolean,
-        val session: UserSessionService = UserSessionService(FakeTokenStore("token"), FakeUserApi()),
+        scopesGranted: Boolean = true,
+        val session: UserSessionService = UserSessionService(
+            FakeTokenStore("token"),
+            FakeUserApi(),
+            InMemoryScopeStampStore(ScopeStamp(granted = if (scopesGranted) FortInstance.SCOPES.toSet() else null)),
+        ),
     ) {
+        val schedule = FakeScheduleApi()
         val handles = HashMap<String, NoteUser>()
         val users = HashMap<String, NoteUser>()
         val suggestionsApi = FakeSuggestionsApi()
@@ -243,11 +255,18 @@ class ComposerViewModelTest {
             remindAltText = remindAltText,
             mentionDebounceMs = 0,
             resolveUsers = { _, ids -> ids.mapNotNull { users[it] } },
+            scheduleApi = schedule,
         )
     }
 
-    private suspend fun fixture(maxText: Int = 3000, compress: Boolean = false, nowMillis: Long = 1_000L, remindAltText: Boolean = false): Fixture {
-        val f = Fixture(maxText, compress, nowMillis, remindAltText).also { viewModels += it.viewModel }
+    private suspend fun fixture(
+        maxText: Int = 3000,
+        compress: Boolean = false,
+        nowMillis: Long = 1_000L,
+        remindAltText: Boolean = false,
+        scopesGranted: Boolean = true,
+    ): Fixture {
+        val f = Fixture(maxText, compress, nowMillis, remindAltText, scopesGranted).also { viewModels += it.viewModel }
         f.session.restore()
         return f
     }
@@ -1446,6 +1465,305 @@ class ComposerViewModelTest {
         val state = f.viewModel.uiState.first { it != null }!!
 
         assertEquals(Visibility.Specified, state.visibility)
+    }
+
+    private val inTwoHours get() = 1_000L + 2 * 3_600_000L
+
+    @Test
+    fun schedulingSendsTheNoteToTheScheduleEndpointAndNotToCreate() = runTest {
+        val f = fixture()
+        val event = async { f.viewModel.events.first() }
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("later")
+
+        f.viewModel.schedule(inTwoHours)
+        val scheduled = event.await() as ComposerEvent.Scheduled
+
+        assertEquals("later", f.schedule.created.single().first.text)
+        assertEquals(inTwoHours, f.schedule.created.single().second)
+        assertTrue(f.api.createCalls.isEmpty())
+        assertEquals(inTwoHours, scheduled.atMillis)
+        assertEquals(ReplacedScheduled.None, scheduled.replaced)
+        assertNull(f.viewModel.uiState.value)
+    }
+
+    @Test
+    fun aScheduledReplyKeepsItsTarget() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.Reply("p1"), parent())
+        f.viewModel.type("@u1 later")
+
+        f.viewModel.schedule(inTwoHours)
+        f.viewModel.awaitSettled()
+
+        assertEquals("p1", f.schedule.created.single().first.replyId)
+    }
+
+    @Test
+    fun schedulingClearsTheSavedDraft() = runTest {
+        val f = fixture()
+        f.drafts.drafts["me/new"] = ComposerDraft(text = "old draft")
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("later")
+
+        f.viewModel.schedule(inTwoHours)
+        f.viewModel.awaitSettled()
+
+        assertFalse(f.drafts.drafts.containsKey("me/new"))
+    }
+
+    @Test
+    fun aTimeLessThanAMinuteAwayIsRefused() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("now-ish")
+
+        f.viewModel.schedule(1_000L + 30_000L)
+
+        assertEquals(ComposerFailure.SchedulePast, f.viewModel.uiState.value?.failure)
+        assertTrue(f.schedule.created.isEmpty())
+    }
+
+    @Test
+    fun dontFederateBlocksScheduling() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("local")
+        f.viewModel.setLocalOnly(true)
+
+        f.viewModel.schedule(inTwoHours)
+
+        assertEquals(ComposerFailure.ScheduleUnavailable, f.viewModel.uiState.value?.failure)
+        assertTrue(f.schedule.created.isEmpty())
+    }
+
+    @Test
+    fun aLongContentWarningBlocksScheduling() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("text")
+        f.viewModel.setCwEnabled(true)
+        f.viewModel.cw.setTextAndPlaceCursorAtEnd("c".repeat(101))
+        Snapshot.sendApplyNotifications()
+
+        f.viewModel.schedule(inTwoHours)
+
+        assertEquals(ComposerFailure.ScheduleUnavailable, f.viewModel.uiState.value?.failure)
+        assertTrue(f.schedule.created.isEmpty())
+    }
+
+    @Test
+    fun aPollEndingBeforeThePostGoesOutBlocksScheduling() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.fillPoll("a", "b")
+        f.viewModel.setPollEndsAt(inTwoHours - 1)
+
+        f.viewModel.schedule(inTwoHours)
+
+        assertEquals(ComposerFailure.ScheduleUnavailable, f.viewModel.uiState.value?.failure)
+        assertTrue(f.schedule.created.isEmpty())
+    }
+
+    @Test
+    fun schedulingNeedsTheScheduleScopeAndSaysSoWithoutAsking() = runTest {
+        val f = fixture(scopesGranted = false)
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("later")
+
+        f.viewModel.schedule(inTwoHours)
+        f.viewModel.uiState.first { it?.failure != null }
+
+        assertEquals(ComposerFailure.MissingPermission, f.viewModel.uiState.value?.failure)
+        assertTrue(f.schedule.created.isEmpty())
+    }
+
+    @Test
+    fun theRoleLimitShowsItsOwnMessage() = runTest {
+        val f = fixture()
+        f.schedule.createFailure = HttpStatusException(400, ApiErrorCodes.SCHEDULE_NOTE_MAX)
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("one too many")
+
+        f.viewModel.schedule(inTwoHours)
+        f.viewModel.awaitSettled()
+
+        assertEquals(ComposerFailure.ScheduleLimit, f.viewModel.uiState.value?.failure)
+    }
+
+    @Test
+    fun theServerRefusingThePastShowsTheSoonMessage() = runTest {
+        val f = fixture()
+        f.schedule.createFailure = HttpStatusException(400, ApiErrorCodes.CANNOT_CREATE_ALREADY_EXPIRED_SCHEDULE)
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.type("clock skew")
+
+        f.viewModel.schedule(inTwoHours)
+        f.viewModel.awaitSettled()
+
+        assertEquals(ComposerFailure.SchedulePast, f.viewModel.uiState.value?.failure)
+    }
+
+    @Test
+    fun theAltTextPromptRemembersThatYouWereScheduling() = runTest {
+        val f = fixture(remindAltText = true)
+        f.drive.driveFiles = listOf(driveFile("f1"))
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.openDrive()
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready }
+        f.viewModel.toggleDriveFile(driveFile("f1"), slots = 16)
+        f.viewModel.attachDriveSelection()
+
+        f.viewModel.schedule(inTwoHours)
+        assertEquals(ComposerPrompt.MissingAltText, f.viewModel.uiState.value?.prompt)
+        assertTrue(f.schedule.created.isEmpty())
+
+        f.viewModel.confirmPrompt()
+        f.viewModel.awaitSettled()
+
+        assertEquals(inTwoHours, f.schedule.created.single().second)
+        assertTrue(f.api.createCalls.isEmpty())
+    }
+
+    @Test
+    fun declinedPromptDoesNotLeaveAScheduleBehindForTheNextPost() = runTest {
+        val f = fixture(remindAltText = true)
+        f.drive.driveFiles = listOf(driveFile("f1"))
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.openDrive()
+        f.viewModel.uiState.first { it?.drive?.status == DriveStatus.Ready }
+        f.viewModel.toggleDriveFile(driveFile("f1"), slots = 16)
+        f.viewModel.attachDriveSelection()
+        f.viewModel.schedule(inTwoHours)
+
+        f.viewModel.dismissPrompt()
+        f.viewModel.submit()
+        f.viewModel.confirmPrompt()
+        f.viewModel.awaitSettled()
+
+        assertEquals(1, f.api.createCalls.size)
+        assertTrue(f.schedule.created.isEmpty())
+    }
+
+    @Test
+    fun editingAScheduledPostSeedsTheComposerWithoutADraftSlot() = runTest {
+        val f = fixture()
+        val note = testNote("s1", user = testUser("me"), text = "from the queue", visibility = Visibility.Followers)
+
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, note))
+        val state = f.viewModel.uiState.first { it != null }!!
+
+        assertEquals("s1", state.replacesScheduledId)
+        assertNull(state.draftKey)
+        assertEquals(Visibility.Followers, state.visibility)
+        assertEquals("from the queue", f.viewModel.text.text.toString())
+    }
+
+    @Test
+    fun editingAScheduledPostNeverTouchesTheNewPostDraft() = runTest {
+        val f = fixture()
+        f.drafts.drafts["me/new"] = ComposerDraft(text = "my real draft")
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, testNote("s1", user = testUser("me"), text = "queued")))
+        f.viewModel.uiState.first { it != null }
+
+        f.viewModel.type("queued and edited")
+        advanceTimeBy(DEBOUNCE_MS * 3)
+        f.viewModel.close(keepDraft = true)
+
+        assertEquals("my real draft", f.drafts.drafts["me/new"]?.text)
+    }
+
+    @Test
+    fun schedulingAnEditedScheduledPostReplacesTheOldOne() = runTest {
+        val f = fixture()
+        val event = async { f.viewModel.events.first() }
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, testNote("s1", user = testUser("me"), text = "queued")))
+        f.viewModel.uiState.first { it != null }
+        f.viewModel.type("queued, edited")
+
+        f.viewModel.schedule(inTwoHours + 3_600_000L)
+        val scheduled = event.await() as ComposerEvent.Scheduled
+
+        assertEquals("queued, edited", f.schedule.created.single().first.text)
+        assertEquals(listOf("s1"), f.schedule.deleted.toList())
+        assertEquals(ReplacedScheduled.Removed, scheduled.replaced)
+    }
+
+    @Test
+    fun postingAnEditedScheduledPostNowAlsoReplacesTheOldOne() = runTest {
+        val f = fixture()
+        val event = async { f.viewModel.events.first() }
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, testNote("s1", user = testUser("me"), text = "queued")))
+        f.viewModel.uiState.first { it != null }
+
+        f.viewModel.submit()
+        val posted = event.await() as ComposerEvent.Posted
+
+        assertEquals(1, f.api.createCalls.size)
+        assertTrue(f.schedule.created.isEmpty())
+        assertEquals(listOf("s1"), f.schedule.deleted.toList())
+        assertEquals(ReplacedScheduled.Removed, posted.replaced)
+    }
+
+    @Test
+    fun theOldScheduledPostIsLeftAloneWhenTheNewOneFails() = runTest {
+        val f = fixture()
+        f.schedule.createFailure = IOException("offline")
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, testNote("s1", user = testUser("me"), text = "queued")))
+        f.viewModel.uiState.first { it != null }
+
+        f.viewModel.schedule(inTwoHours + 3_600_000L)
+        f.viewModel.awaitSettled()
+
+        assertTrue(f.schedule.deleted.isEmpty())
+        assertEquals("s1", f.viewModel.uiState.value?.replacesScheduledId)
+    }
+
+    @Test
+    fun aReplacedPostThatCannotBeRemovedIsReportedNotHidden() = runTest {
+        val f = fixture()
+        f.schedule.deleteFailure = IOException("offline")
+        val event = async { f.viewModel.events.first() }
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, testNote("s1", user = testUser("me"), text = "queued")))
+        f.viewModel.uiState.first { it != null }
+
+        f.viewModel.schedule(inTwoHours + 3_600_000L)
+
+        assertEquals(ReplacedScheduled.StillScheduled, (event.await() as ComposerEvent.Scheduled).replaced)
+    }
+
+    @Test
+    fun aScheduledReplyOpensAsAReplyToItsParent() = runTest {
+        val f = fixture()
+        val reply = testNote("s1", user = testUser("me"), text = "@u1 later", reply = parent())
+
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, reply))
+        val state = f.viewModel.uiState.first { it != null }!!
+
+        assertEquals(ComposerTarget.Reply("p1"), state.target)
+        assertTrue(state.schedulingOffered)
+    }
+
+    @Test
+    fun aScheduledQuoteOpensAsAQuote() = runTest {
+        val f = fixture()
+        val quote = testNote("s1", user = testUser("me"), text = "look", renote = parent())
+
+        f.viewModel.editScheduled(testScheduled("s1", inTwoHours, quote))
+        val state = f.viewModel.uiState.first { it != null }!!
+
+        assertEquals(ComposerTarget.Quote("p1"), state.target)
+    }
+
+    @Test
+    fun editsAndSharesCannotBeScheduled() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.Edit("n1"), testNote("n1", user = testUser("me")))
+        assertFalse(f.viewModel.uiState.value!!.schedulingOffered)
+
+        f.viewModel.schedule(inTwoHours)
+        assertEquals(ComposerFailure.ScheduleUnavailable, f.viewModel.uiState.value?.failure)
+        assertTrue(f.schedule.created.isEmpty())
     }
 
     private companion object {

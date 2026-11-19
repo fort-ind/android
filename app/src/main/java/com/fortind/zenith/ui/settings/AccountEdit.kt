@@ -389,7 +389,10 @@ private fun FieldEditor(row: FieldRow, enabled: Boolean, onRemove: () -> Unit) {
 }
 
 @Composable
-internal fun ReauthorizePrompt() {
+internal fun ReauthorizePrompt(
+    @StringRes title: Int = R.string.account_permission_title,
+    @StringRes body: Int = R.string.account_permission_body,
+) {
     val login: LoginViewModel = viewModel(key = "reauthorize", factory = LoginViewModel.Factory)
     val loginState by login.uiState.collectAsStateWithLifecycle()
     val reduceMotion = rememberReduceMotion()
@@ -397,8 +400,8 @@ internal fun ReauthorizePrompt() {
 
     StatusMessage(
         shape = MaterialShapes.Slanted,
-        title = stringResource(R.string.account_permission_title),
-        body = stringResource(R.string.account_permission_body, FortInstance.HOST),
+        title = stringResource(title),
+        body = stringResource(body, FortInstance.HOST),
     ) {
         loginState.error?.let { ErrorMessage(it) }
         if (loginState.signingIn) {

@@ -35,6 +35,7 @@ fun NotificationType.category(): NotificationCategory = when (this) {
     NotificationType.Login,
     NotificationType.CreateToken,
     NotificationType.ExportCompleted,
+    NotificationType.ScheduledNotePosted,
     NotificationType.ScheduledNoteFailed,
     NotificationType.Test,
     NotificationType.Other -> NotificationCategory.Other

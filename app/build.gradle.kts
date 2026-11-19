@@ -102,6 +102,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.coil.gif)
     implementation(libs.okhttp)
+    implementation(libs.prism4j)
     implementation(libs.apng4android.awebp) { exclude(group = "androidx.appcompat") }
     implementation(libs.apng4android.apng) { exclude(group = "androidx.appcompat") }
     implementation(libs.androidx.vectordrawable.animated)

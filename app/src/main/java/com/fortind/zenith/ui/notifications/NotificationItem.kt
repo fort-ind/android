@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -385,6 +386,7 @@ private fun NotificationType.icon(): ImageVector = when (this) {
     NotificationType.Login -> Icons.AutoMirrored.Filled.Login
     NotificationType.CreateToken -> Icons.Default.Key
     NotificationType.ExportCompleted -> Icons.Default.Download
+    NotificationType.ScheduledNotePosted -> Icons.Default.Schedule
     NotificationType.ScheduledNoteFailed -> Icons.Default.Warning
     NotificationType.Test, NotificationType.App, NotificationType.Other -> Icons.Default.Notifications
 }

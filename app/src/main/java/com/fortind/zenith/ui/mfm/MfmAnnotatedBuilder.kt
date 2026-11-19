@@ -46,6 +46,7 @@ import com.fortind.zenith.mfm.MfmSmall
 import com.fortind.zenith.mfm.MfmStrike
 import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.mfm.MfmUrl
+import com.fortind.zenith.mfm.parseUnixSeconds
 import com.fortind.zenith.mfm.toPlainText
 import com.fortind.zenith.ui.media.rememberAnimatedDrawableStopper
 import com.fortind.zenith.ui.media.rememberImageRequest
@@ -56,6 +57,7 @@ import kotlin.math.abs
 
 private const val EMOJI_SCALE = 1.25f
 private const val BOX_PADDING_SP = 2f
+private const val UNIX_TIME_SLACK_PX = 2f
 
 object EmojiAspects {
     private val ratios = ConcurrentHashMap<String, Float>()
@@ -86,6 +88,7 @@ internal class MfmAnnotatedBuilder(
     private val inline = LinkedHashMap<String, InlineTextContent>()
     private var boxCount = 0
     private var blurCount = 0
+    private var unixTimeCount = 0
     private val baseSize: Float = baseStyle.fontSize.takeIf { it != TextUnit.Unspecified }?.value ?: 16f
 
     fun build(nodes: List<MfmNode>): BuiltText {
@@ -148,7 +151,7 @@ internal class MfmAnnotatedBuilder(
             "bg" -> builder.withStyle(SpanStyle(background = parseColor(fn.args["color"]) ?: Color.Unspecified)) { append(fn.children, scale) }
             "font" -> builder.withStyle(SpanStyle(fontFamily = fontFamily(fn.args.keys))) { append(fn.children, scale) }
             "blur" -> appendSpoiler(fn, scale)
-            "unixtime" -> builder.append(formatUnixTime(fn.children.toPlainText()) ?: fn.children.toPlainText())
+            "unixtime" -> appendUnixTime(fn, scale)
             else -> when {
                 fn.name in AnimatedFunctions && environment.animate && boxDepth == 0 -> appendBox(fn, scale)
                 fn.name == "tada" -> builder.withStyle(SpanStyle(fontSize = (baseSize * scale * 1.5f).sp)) { append(fn.children, scale * 1.5f) }
@@ -157,6 +160,28 @@ internal class MfmAnnotatedBuilder(
                 else -> append(fn.children, scale)
             }
         }
+    }
+
+    private fun appendUnixTime(fn: MfmFn, scale: Float) {
+        val inner = fn.children.toPlainText()
+        val seconds = parseUnixSeconds(inner)
+        if (seconds == null) {
+            builder.append(inner)
+            return
+        }
+        val label = environment.unixTimeLabel(seconds)
+        val key = "u:${unixTimeCount++}"
+        val style = baseStyle.copy(fontSize = (baseSize * scale * UNIX_TIME_FONT_SCALE).sp)
+        val layout = measurer.measure(AnnotatedString(label), style, softWrap = false, maxLines = 1)
+        val density = layout.layoutInput.density
+        val toSp = { px: Float -> px / (density.density * density.fontScale) }
+        val widthSp = toSp(layout.size.width + UnixTimeFixedWidth.value * density.density + UNIX_TIME_SLACK_PX)
+        val contentPx = maxOf(layout.size.height.toFloat(), UnixTimeIcon.value * density.density)
+        val heightSp = toSp(contentPx + (UnixTimeVertical.value + UnixTimeBorder.value) * 2 * density.density)
+        inline[key] = InlineTextContent(
+            Placeholder(widthSp.sp, heightSp.sp, PlaceholderVerticalAlign.TextCenter),
+        ) { UnixTimeChip(label, style) }
+        builder.appendInlineContent(key, label)
     }
 
     private fun appendSpoiler(fn: MfmFn, scale: Float) {
@@ -240,11 +265,6 @@ internal fun parseColor(value: String?): Color? {
     val rgb = expanded.substring(0, 6).toLong(16)
     val alpha = if (expanded.length == 8) expanded.substring(6, 8).toLong(16) else 0xFF
     return Color((alpha shl 24 or rgb).toInt())
-}
-
-internal fun formatUnixTime(seconds: String): String? {
-    val value = seconds.trim().toLongOrNull() ?: return null
-    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(value * 1000))
 }
 
 @Composable

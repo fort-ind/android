@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -65,6 +66,7 @@ class MfmEnvironment(
     val subtleColor: Color,
     val accentColor: Color,
     val spoilerColor: Color,
+    val unixTimeLabel: (Long) -> String,
 ) {
     fun mentionUrl(mention: MfmMention): String = "https://${FortInstance.HOST}/${mention.acct}"
 
@@ -73,13 +75,14 @@ class MfmEnvironment(
     fun searchUrl(query: String): String = "https://${FortInstance.HOST}/search?q=${URLEncoder.encode(query, "UTF-8")}"
 
     fun withEmoji(emojiUrl: (String) -> String) =
-        MfmEnvironment(emojiUrl, animate, linkStyles, codeBackground, subtleColor, accentColor, spoilerColor)
+        MfmEnvironment(emojiUrl, animate, linkStyles, codeBackground, subtleColor, accentColor, spoilerColor, unixTimeLabel)
 }
 
 @Composable
 fun rememberMfmEnvironment(emojiUrl: (String) -> String, animate: Boolean): MfmEnvironment {
     val colors = MaterialTheme.colorScheme
-    return remember(emojiUrl, animate, colors) {
+    val resources = LocalResources.current
+    return remember(emojiUrl, animate, colors, resources) {
         val link = SpanStyle(color = colors.primary)
         MfmEnvironment(
             emojiUrl = emojiUrl,
@@ -94,6 +97,7 @@ fun rememberMfmEnvironment(emojiUrl: (String) -> String, animate: Boolean): MfmE
             subtleColor = colors.onSurfaceVariant,
             accentColor = colors.primary,
             spoilerColor = colors.onSurfaceVariant,
+            unixTimeLabel = { seconds -> unixTimeLabel(resources, seconds, System.currentTimeMillis()) },
         )
     }
 }
@@ -171,7 +175,7 @@ private fun MfmBlockView(node: MfmNode, environment: MfmEnvironment, style: Text
         is MfmCenter -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             MfmParagraph(node.children, environment, style.copy(textAlign = TextAlign.Center), color = color)
         }
-        is MfmBlockCode -> CodeSurface(node.code)
+        is MfmBlockCode -> CodeBlock(node.code, node.lang)
         is MfmMathBlock -> CodeSurface(node.formula)
         is MfmSearch -> SearchRow(node.query, environment)
         else -> Unit

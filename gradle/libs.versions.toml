@@ -32,6 +32,7 @@ glance = "1.2.0"
 print = "1.1.0"
 ink = "1.0.0"
 inputMotionPrediction = "1.0.1"
+prism4j = "2.1.1"
 
 [libraries]
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
@@ -104,6 +105,7 @@ androidx-ink-nativeloader = { group = "androidx.ink", name = "ink-nativeloader",
 androidx-ink-rendering = { group = "androidx.ink", name = "ink-rendering", version.ref = "ink" }
 androidx-ink-strokes = { group = "androidx.ink", name = "ink-strokes", version.ref = "ink" }
 androidx-input-motionprediction = { group = "androidx.input", name = "input-motionprediction", version.ref = "inputMotionPrediction" }
+prism4j = { group = "app.nekogram", name = "prism4j", version.ref = "prism4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

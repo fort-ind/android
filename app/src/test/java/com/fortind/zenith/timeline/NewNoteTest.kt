@@ -124,4 +124,51 @@ class NewNoteTest {
         assertFalse(create.has("text"))
         assertEquals(JSONObject.NULL, edit.get("text"))
     }
+
+    @Test
+    fun aScheduledNoteCarriesItsTimeInMilliseconds() {
+        val json = NewNote(text = "later").toScheduleRequest("tok", 1_800_000_000_123L)
+
+        assertEquals("tok", json.getString("i"))
+        assertEquals("later", json.getString("text"))
+        assertEquals(1_800_000_000_123L, json.getJSONObject("scheduleNote").getLong("scheduledAt"))
+    }
+
+    @Test
+    fun aScheduledNoteNeverSendsLocalOnly() {
+        val json = NewNote(text = "later", localOnly = true).toScheduleRequest("tok", 1L)
+
+        assertFalse(json.has("localOnly"))
+    }
+
+    @Test
+    fun aScheduledNoteLeavesOutAnEmptyContentWarning() {
+        val empty = NewNote(text = "later", cw = "").toScheduleRequest("tok", 1L)
+        val filled = NewNote(text = "later", cw = "spoilers").toScheduleRequest("tok", 1L)
+
+        assertFalse(empty.has("cw"))
+        assertEquals("spoilers", filled.getString("cw"))
+    }
+
+    @Test
+    fun aScheduledNoteKeepsItsTargetsFilesAndRecipients() {
+        val reply = NewNote(text = "re", replyId = "n1", fileIds = listOf("f1")).toScheduleRequest("tok", 1L)
+        val direct = NewNote(text = "psst", visibility = Visibility.Specified, visibleUserIds = listOf("u1")).toScheduleRequest("tok", 1L)
+        val followers = NewNote(text = "psst", visibility = Visibility.Followers, visibleUserIds = listOf("u1")).toScheduleRequest("tok", 1L)
+
+        assertEquals("n1", reply.getString("replyId"))
+        assertEquals(1, reply.getJSONArray("fileIds").length())
+        assertEquals(1, direct.getJSONArray("visibleUserIds").length())
+        assertFalse(followers.has("visibleUserIds"))
+    }
+
+    @Test
+    fun aScheduledPollKeepsAPresetAsRelativeToThePostingTime() {
+        val poll = PollBody(choices = listOf("a", "b"), multiple = false, expiresAtMillis = null, expiredAfterMillis = 3_600_000L)
+
+        val json = NewNote(text = "vote", poll = poll).toScheduleRequest("tok", 1L).getJSONObject("poll")
+
+        assertEquals(3_600_000L, json.getLong("expiredAfter"))
+        assertFalse(json.has("expiresAt"))
+    }
 }

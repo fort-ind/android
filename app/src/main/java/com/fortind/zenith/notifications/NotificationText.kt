@@ -23,6 +23,7 @@ fun FortNotification.titleText(resources: Resources): String {
         NotificationType.Login -> resources.getString(R.string.notifications_login)
         NotificationType.CreateToken -> resources.getString(R.string.notifications_create_token)
         NotificationType.ExportCompleted -> resources.getString(R.string.notifications_export_completed)
+        NotificationType.ScheduledNotePosted -> resources.getString(R.string.notifications_scheduled_posted)
         NotificationType.ScheduledNoteFailed -> resources.getString(R.string.notifications_scheduled_failed)
         NotificationType.Test -> resources.getString(R.string.notifications_test)
         NotificationType.App, NotificationType.Other -> title ?: resources.getString(R.string.notifications_generic)

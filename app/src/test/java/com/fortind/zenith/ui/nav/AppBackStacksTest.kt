@@ -10,7 +10,7 @@ class AppBackStacksTest {
 
     @Test
     fun discoveryRoutesSurviveSaving() {
-        listOf(AppRoute.Tag("日本語"), AppRoute.Search("two: words / more"), AppRoute.Hashtags).forEach { route ->
+        listOf(AppRoute.Tag("日本語"), AppRoute.Search("two: words / more"), AppRoute.Hashtags, AppRoute.Scheduled).forEach { route ->
             assertEquals(route, AppRoute.decode(route.encode()))
         }
         assertEquals(null, AppRoute.decode("tag:"))

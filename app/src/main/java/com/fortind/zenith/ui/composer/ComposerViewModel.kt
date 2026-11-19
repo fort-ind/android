@@ -12,6 +12,9 @@ import com.fortind.zenith.composer.mentionsIn
 import com.fortind.zenith.composer.pollEditResetsVotes
 import com.fortind.zenith.composer.problem
 import com.fortind.zenith.composer.rangeSelection
+import com.fortind.zenith.composer.ScheduleProblem
+import com.fortind.zenith.composer.scheduleProblem
+import com.fortind.zenith.composer.scheduleTimeProblem
 import com.fortind.zenith.composer.replyPrefix
 import com.fortind.zenith.composer.replyText
 import com.fortind.zenith.drive.DRIVE_PAGE_SIZE
@@ -32,6 +35,7 @@ import androidx.compose.ui.text.TextRange
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.account.CW_PRIORITY_PARENT
 import com.fortind.zenith.account.composerContentWarning
+import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
@@ -66,6 +70,8 @@ import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.net.isRateLimited
+import com.fortind.zenith.schedule.ScheduleApi
+import com.fortind.zenith.schedule.ScheduledNote
 import com.fortind.zenith.settings.SettingsStore
 import com.fortind.zenith.timeline.NewNote
 import com.fortind.zenith.timeline.Note
@@ -162,6 +168,9 @@ enum class ComposerFailure {
     UnreadableFile,
     UnsupportedShare,
     PollAlreadyEnded,
+    ScheduleLimit,
+    SchedulePast,
+    ScheduleUnavailable,
 }
 
 data class ComposerUiState(
@@ -188,8 +197,14 @@ data class ComposerUiState(
     val prompt: ComposerPrompt? = null,
     val confirmedPrompts: Set<ComposerPrompt> = emptySet(),
     val drive: DrivePickerState? = null,
+    val replacesScheduledId: String? = null,
 ) {
     val settingsLocked: Boolean get() = target is ComposerTarget.Edit
+
+    val draftKey: String? get() = if (replacesScheduledId != null) null else target.draftKey
+
+    val schedulingOffered: Boolean
+        get() = target is ComposerTarget.NewPost || target is ComposerTarget.Reply || target is ComposerTarget.Quote
 
     val visibilityLocked: Boolean
         get() = settingsLocked || (contextNote?.visibility == Visibility.Specified && target !is ComposerTarget.Quote)
@@ -215,8 +230,12 @@ data class ComposerUiState(
     val canAttachMore: Boolean get() = attachments.size < MAX_ATTACHMENTS
 }
 
+enum class ReplacedScheduled { None, Removed, StillScheduled }
+
 sealed interface ComposerEvent {
-    data class Posted(val note: Note, val target: ComposerTarget) : ComposerEvent
+    data class Posted(val note: Note, val target: ComposerTarget, val replaced: ReplacedScheduled = ReplacedScheduled.None) : ComposerEvent
+
+    data class Scheduled(val atMillis: Long, val target: ComposerTarget, val replaced: ReplacedScheduled = ReplacedScheduled.None) : ComposerEvent
 }
 
 fun codePointLength(text: CharSequence): Int = Character.codePointCount(text, 0, text.length)
@@ -240,6 +259,7 @@ class ComposerViewModel(
     private val mentionDebounceMs: Long = MENTION_DEBOUNCE_MS,
     private val cleanupScope: CoroutineScope? = null,
     private val resolveUsers: suspend (String?, List<String>) -> List<NoteUser> = { _, _ -> emptyList() },
+    private val scheduleApi: ScheduleApi = NoSchedule,
 ) : ViewModel() {
 
     val text = TextFieldState()
@@ -275,6 +295,7 @@ class ComposerViewModel(
     private var baselineFiles: List<String> = emptyList()
     private val uploads = HashMap<String, Job>()
     private var draftOwner: String? = null
+    private var pendingScheduleAt: Long? = null
 
     private val myUserId: String?
         get() = (session.state.value as? SessionState.SignedIn)?.user?.id
@@ -526,15 +547,22 @@ class ComposerViewModel(
     fun confirmPrompt() {
         val prompt = _uiState.value?.prompt ?: return
         _uiState.update { it?.copy(prompt = null, confirmedPrompts = it.confirmedPrompts + prompt) }
-        submit()
+        submitNote(pendingScheduleAt)
     }
 
     fun dismissPrompt() {
+        pendingScheduleAt = null
         _uiState.update { it?.copy(prompt = null) }
     }
 
     @OptIn(ExperimentalFoundationApi::class)
-    fun open(target: ComposerTarget, note: Note?, seed: Note? = null, shared: SharedContent? = null) {
+    fun open(
+        target: ComposerTarget,
+        note: Note?,
+        seed: Note? = null,
+        shared: SharedContent? = null,
+        replacesScheduledId: String? = null,
+    ) {
         if (seed == null && _uiState.value?.target == target) return
         viewModelScope.launch {
             draftOwner = session.accountId()
@@ -585,6 +613,7 @@ class ComposerViewModel(
                 pollEndsAt = draft.poll?.endsAtMillis,
                 reactionAcceptance = draft.reactionAcceptance,
                 recipients = draft.recipients,
+                replacesScheduledId = replacesScheduledId,
             )
             _uiState.value = opened.copy(dropsEndedPoll = opened.pollHasEnded(clock()))
             if (shared?.refusedFiles == true) _uiState.update { it?.copy(failure = ComposerFailure.UnsupportedShare) }
@@ -649,6 +678,17 @@ class ComposerViewModel(
             parent != null -> open(ComposerTarget.Reply(parent.id), parent, seed = deleted)
             quoted != null -> open(ComposerTarget.Quote(quoted.id), quoted, seed = deleted)
             else -> open(ComposerTarget.NewPost, null, seed = deleted)
+        }
+    }
+
+    fun editScheduled(scheduled: ScheduledNote) {
+        val note = scheduled.note
+        val parent = note.reply
+        val quoted = note.renote
+        when {
+            parent != null -> open(ComposerTarget.Reply(parent.id), parent, seed = note, replacesScheduledId = scheduled.id)
+            quoted != null -> open(ComposerTarget.Quote(quoted.id), quoted, seed = note, replacesScheduledId = scheduled.id)
+            else -> open(ComposerTarget.NewPost, null, seed = note, replacesScheduledId = scheduled.id)
         }
     }
 
@@ -772,7 +812,7 @@ class ComposerViewModel(
         _uiState.value = null
         _suggestions.value = null
         cancelUploads()
-        val key = state.target.draftKey?.let(::storageKey)
+        val key = state.draftKey?.let(::storageKey)
         val draft = currentDraft(state).takeUnless { it == baseline } ?: ComposerDraft()
         (cleanupScope ?: viewModelScope).launch {
             if (key != null) {
@@ -782,7 +822,11 @@ class ComposerViewModel(
         }
     }
 
-    fun submit() {
+    fun submit() = submitNote(scheduleAt = null)
+
+    fun schedule(atMillis: Long) = submitNote(scheduleAt = atMillis)
+
+    private fun submitNote(scheduleAt: Long?) {
         val state = _uiState.value ?: return
         if (state.posting) return
         if (!state.dropsEndedPoll && state.pollHasEnded(clock())) {
@@ -791,6 +835,12 @@ class ComposerViewModel(
             return
         }
         if (buildNote(state) == null) return
+        if (scheduleAt != null) {
+            scheduleFailure(state, scheduleAt)?.let { failure ->
+                _uiState.update { it?.copy(failure = failure) }
+                return
+            }
+        }
         val edited = state.contextNote?.takeIf { state.target is ComposerTarget.Edit }
         val prompt = when {
             remindAltText && state.target !is ComposerTarget.Edit && state.attachments.any { it.needsAltText } -> ComposerPrompt.MissingAltText
@@ -798,14 +848,20 @@ class ComposerViewModel(
             else -> null
         }
         if (prompt != null && prompt !in state.confirmedPrompts) {
+            pendingScheduleAt = scheduleAt
             _uiState.update { it?.copy(prompt = prompt) }
             return
         }
+        pendingScheduleAt = null
         _uiState.update { it?.copy(posting = true, failure = null) }
         viewModelScope.launch {
             val token = session.token()
             if (token == null) {
                 fail(ComposerFailure.SignInRequired)
+                return@launch
+            }
+            if (scheduleAt != null && !session.hasScope(FortInstance.SCOPE_WRITE_NOTES_SCHEDULE)) {
+                fail(ComposerFailure.MissingPermission)
                 return@launch
             }
             try {
@@ -814,12 +870,27 @@ class ComposerViewModel(
                 state.attachments.filter { it.needsSync }.forEach { attachment ->
                     attachment.remote?.let { drive.update(token, it.id, attachment.altText, attachment.isSensitive) }
                 }
-                val result = when (val target = state.target) {
-                    is ComposerTarget.Edit -> api.edit(token, target.noteId, note)
+                val result = when {
+                    scheduleAt != null -> {
+                        scheduleApi.create(token, note, scheduleAt)
+                        null
+                    }
+                    state.target is ComposerTarget.Edit -> api.edit(token, state.target.noteId, note)
                     else -> api.create(token, note)
                 }
-                state.target.draftKey?.let { drafts.clear(storageKey(it)) }
-                _events.trySend(ComposerEvent.Posted(result, state.target))
+                state.draftKey?.let { drafts.clear(storageKey(it)) }
+                val replaced = when {
+                    state.replacesScheduledId == null -> ReplacedScheduled.None
+                    removeScheduled(token, state.replacesScheduledId) -> ReplacedScheduled.Removed
+                    else -> ReplacedScheduled.StillScheduled
+                }
+                _events.trySend(
+                    if (scheduleAt != null) {
+                        ComposerEvent.Scheduled(scheduleAt, state.target, replaced)
+                    } else {
+                        ComposerEvent.Posted(requireNotNull(result), state.target, replaced)
+                    },
+                )
                 _uiState.value = null
             } catch (_: TokenRejectedException) {
                 fail(ComposerFailure.SignInRequired)
@@ -828,6 +899,27 @@ class ComposerViewModel(
                 fail(e.toFailure())
             }
         }
+    }
+
+    private fun scheduleFailure(state: ComposerUiState, atMillis: Long): ComposerFailure? {
+        if (!state.schedulingOffered) return ComposerFailure.ScheduleUnavailable
+        val poll = pollDraft(state)
+        val warning = if (state.cwEnabled) cw.text.toString() else null
+        if (scheduleProblem(state.localOnly, warning, poll) != null) return ComposerFailure.ScheduleUnavailable
+        return when (scheduleTimeProblem(atMillis, clock(), poll)) {
+            null -> null
+            ScheduleProblem.TooSoon -> ComposerFailure.SchedulePast
+            else -> ComposerFailure.ScheduleUnavailable
+        }
+    }
+
+    private suspend fun removeScheduled(token: String, scheduleId: String): Boolean = try {
+        scheduleApi.delete(token, scheduleId)
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: IOException) {
+        false
     }
 
     private fun watchSuggestions() {
@@ -1037,7 +1129,7 @@ class ComposerViewModel(
                 .debounce(draftDebounceMs)
                 .collect {
                     val state = _uiState.value ?: return@collect
-                    val key = state.target.draftKey ?: return@collect
+                    val key = state.draftKey ?: return@collect
                     if (!state.posting) drafts.save(storageKey(key), currentDraft(state).takeUnless { it == baseline } ?: ComposerDraft())
                 }
         }
@@ -1053,6 +1145,8 @@ class ComposerViewModel(
             ApiErrorCodes.NO_SUCH_REPLY_TARGET, ApiErrorCodes.NO_SUCH_RENOTE_TARGET, ApiErrorCodes.NO_SUCH_NOTE -> ComposerFailure.TargetGone
             ApiErrorCodes.MAX_LENGTH, ApiErrorCodes.MAX_CW_LENGTH -> ComposerFailure.TooLong
             ApiErrorCodes.CANNOT_CREATE_ALREADY_EXPIRED_POLL -> ComposerFailure.PollAlreadyEnded
+            ApiErrorCodes.SCHEDULE_NOTE_MAX -> ComposerFailure.ScheduleLimit
+            ApiErrorCodes.CANNOT_CREATE_ALREADY_EXPIRED_SCHEDULE -> ComposerFailure.SchedulePast
             else -> ComposerFailure.Generic
         }
         else -> ComposerFailure.Generic
@@ -1081,6 +1175,13 @@ class ComposerViewModel(
 
             override suspend fun hashtags(token: String?, query: String, limit: Int) = emptyList<String>()
         }
+        private val NoSchedule = object : ScheduleApi {
+            override suspend fun create(token: String, note: NewNote, scheduledAtMillis: Long) = Unit
+
+            override suspend fun list(token: String, untilId: String?, limit: Int) = emptyList<ScheduledNote>()
+
+            override suspend fun delete(token: String, scheduleId: String) = Unit
+        }
         private const val PROGRESS_STEP = 0.02f
         private const val HTTP_PAYLOAD_TOO_LARGE = 413
 
@@ -1105,6 +1206,7 @@ class ComposerViewModel(
                     people = app.container.suggestionsApi,
                     resolveHandle = { token, username, host -> app.container.usersApi.showByHandle(token, username, host).user },
                     cleanupScope = app.container.scope,
+                    scheduleApi = app.container.scheduleApi,
                     resolveUsers = { token, ids ->
                         coroutineScope {
                             ids.map { id ->

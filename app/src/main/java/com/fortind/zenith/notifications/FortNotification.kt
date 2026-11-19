@@ -24,6 +24,7 @@ enum class NotificationType(val apiName: String) {
     Login("login"),
     CreateToken("createToken"),
     ExportCompleted("exportCompleted"),
+    ScheduledNotePosted("scheduledNotePosted"),
     ScheduledNoteFailed("scheduledNoteFailed"),
     Test("test"),
     Other("");

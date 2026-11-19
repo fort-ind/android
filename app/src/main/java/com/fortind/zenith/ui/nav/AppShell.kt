@@ -136,6 +136,7 @@ import com.fortind.zenith.ui.people.PersonPage
 import com.fortind.zenith.ui.people.PersonPostsPane
 import com.fortind.zenith.ui.people.rememberPersonLayout
 import com.fortind.zenith.ui.profile.ProfileScreen
+import com.fortind.zenith.ui.scheduled.ScheduledScreen
 import com.fortind.zenith.ui.predictiveBackScale
 import com.fortind.zenith.ui.predictiveBackSeekFraction
 import com.fortind.zenith.ui.rememberReduceMotion
@@ -264,6 +265,7 @@ fun AppShell(
         onOpenHandle = { handle -> stacks.push(AppRoute.PersonHandle(handle.username, handle.host)) },
         onOpenTag = { tag -> stacks.openTag(tag, app.container.launcherShortcuts) },
         onOpenNoteId = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
+        onOpenScheduled = { stacks.openIn(AppDestination.PROFILE, AppRoute.Scheduled) },
     ) { ui ->
         val feedState by ui.feed.uiState.collectAsStateWithLifecycle()
         val feedActive = stacks.tab == AppDestination.HOME || stacks.current.any { it is AppRoute.Thread }
@@ -730,8 +732,12 @@ private fun TabNavDisplay(
                             ui = ui,
                             onEditProfile = stacks::openEditProfile,
                             onOpenList = { userId, kind -> stacks.push(AppRoute.FollowList(userId, kind)) },
+                            onOpenScheduled = { stacks.push(AppRoute.Scheduled) },
                         )
                     }
+                }
+                AppRoute.Scheduled -> NavEntry(route) {
+                    EntryPage(contentPadding, null) { ScheduledScreen(ui = ui, onBack = { stacks.pop() }) }
                 }
                 is AppRoute.Settings -> NavEntry(key = route, contentKey = "settings") {
                     EntryPage(contentPadding, null) {

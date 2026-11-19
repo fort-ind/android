@@ -1076,6 +1076,7 @@ class FeedViewModel(
             }
             is WindowEvent.AuthorHidden -> if (event.renotesOnly) removeRenotesEverywhere(event.userId) else removeAuthorEverywhere(event.userId)
             is WindowEvent.RelationChanged -> Unit
+            is WindowEvent.ScheduledChanged -> Unit
         }
     }
 

@@ -49,6 +49,8 @@ import com.fortind.zenith.ui.StatusMessage
 import com.fortind.zenith.ui.people.OwnProfileActions
 import com.fortind.zenith.ui.people.PersonPage
 import com.fortind.zenith.ui.rememberReduceMotion
+import com.fortind.zenith.ui.scheduled.ScheduledStatus
+import com.fortind.zenith.ui.scheduled.ScheduledViewModel
 import com.fortind.zenith.ui.social.SocialUi
 import com.fortind.zenith.ui.verticalScrollWithBar
 
@@ -57,13 +59,26 @@ fun ProfileScreen(
     ui: SocialUi,
     onEditProfile: () -> Unit,
     onOpenList: (String, FollowListKind) -> Unit,
+    onOpenScheduled: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory),
+    scheduled: ScheduledViewModel = viewModel(factory = ScheduledViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val scheduledState by scheduled.uiState.collectAsStateWithLifecycle()
     var confirmingLogout by rememberSaveable { mutableStateOf(false) }
-    val own = remember(onEditProfile) { OwnProfileActions(onEditProfile = onEditProfile, onLogOut = { confirmingLogout = true }) }
+    val scheduledIdle = scheduledState.status == ScheduledStatus.Idle
+    LaunchedEffect(scheduled, scheduledIdle) { if (scheduledIdle) scheduled.load() }
+    val own = remember(onEditProfile, onOpenScheduled, scheduledState.count, scheduledState.max) {
+        OwnProfileActions(
+            onEditProfile = onEditProfile,
+            onLogOut = { confirmingLogout = true },
+            onOpenScheduled = onOpenScheduled,
+            scheduledCount = scheduledState.count,
+            scheduledMax = scheduledState.max,
+        )
+    }
 
     when (val current = state) {
         is ProfileUiState.Loaded -> {

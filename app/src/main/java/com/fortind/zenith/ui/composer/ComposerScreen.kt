@@ -311,7 +311,7 @@ private fun ComposerDialog(
                 }
             }
         }
-        val draftable = state.target.draftKey != null
+        val draftable = state.draftKey != null
         val keyboard = LocalSoftwareKeyboardController.current
         val openSheet = { sheet: String ->
             keyboard?.hide()
@@ -362,6 +362,8 @@ private fun ComposerDialog(
                             onEditAttachment = { overlay = OVERLAY_DETAILS + it },
                             onMarkUpAttachment = markUp,
                             onOpenPollEnd = { openSheet(OVERLAY_POLL_END) },
+                            scheduleOpen = overlay == OVERLAY_SCHEDULE,
+                            onToggleSchedule = { openSheet(OVERLAY_SCHEDULE) },
                         )
                     }
                 }
@@ -381,6 +383,8 @@ private fun ComposerDialog(
                         onEditAttachment = { overlay = OVERLAY_DETAILS + it },
                         onMarkUpAttachment = markUp,
                         onOpenPollEnd = { openSheet(OVERLAY_POLL_END) },
+                        scheduleOpen = overlay == OVERLAY_SCHEDULE,
+                        onToggleSchedule = { openSheet(OVERLAY_SCHEDULE) },
                     )
                 }
             }
@@ -422,6 +426,23 @@ private fun ComposerDialog(
                     onChoose = {
                         overlay = ""
                         viewModel.setPollEndsAt(it)
+                    },
+                    onDismiss = { overlay = "" },
+                )
+                ScheduleMenuSheet(
+                    visible = overlay == OVERLAY_SCHEDULE,
+                    state = state,
+                    viewModel = viewModel,
+                    onSchedule = { overlay = OVERLAY_SCHEDULE_DATE },
+                    onDismiss = { overlay = "" },
+                )
+                ScheduleDateSheet(
+                    visible = overlay == OVERLAY_SCHEDULE_DATE,
+                    nowMillis = viewModel.now(),
+                    poll = { viewModel.pollDraft(state) },
+                    onChoose = {
+                        overlay = ""
+                        viewModel.schedule(it)
                     },
                     onDismiss = { overlay = "" },
                 )
@@ -499,6 +520,8 @@ private const val OVERLAY_VISIBILITY = "visibility"
 private const val OVERLAY_ATTACH = "attach"
 private const val OVERLAY_POLL_END = "pollEnd"
 private const val OVERLAY_POLL_DATE = "pollDate"
+private const val OVERLAY_SCHEDULE = "schedule"
+private const val OVERLAY_SCHEDULE_DATE = "scheduleDate"
 private const val OVERLAY_CAMERA = "camera"
 private const val OVERLAY_PREVIEW = "preview:"
 private const val OVERLAY_DETAILS = "details:"
@@ -522,6 +545,8 @@ private fun ComposerContent(
     onEditAttachment: (String) -> Unit,
     onMarkUpAttachment: (String) -> Unit,
     onOpenPollEnd: () -> Unit,
+    scheduleOpen: Boolean,
+    onToggleSchedule: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
     val animateMedia = rememberAnimateMedia(reduceMotion)
@@ -565,13 +590,21 @@ private fun ComposerContent(
                     )
                 },
                 actions = {
-                    PostButton(
-                        label = stringResource(if (state.target is ComposerTarget.Edit) R.string.composer_save_edit else R.string.composer_post),
-                        posting = state.posting,
-                        enabled = (hasText || state.attachments.isNotEmpty() || state.pollEnabled || state.isQuote) &&
-                            pollProblem == null && state.attachmentsReady && !overLimit && !state.posting,
-                        onClick = viewModel::submit,
-                    )
+                    val postLabel = stringResource(if (state.target is ComposerTarget.Edit) R.string.composer_save_edit else R.string.composer_post)
+                    val canPost = (hasText || state.attachments.isNotEmpty() || state.pollEnabled || state.isQuote) &&
+                        pollProblem == null && state.attachmentsReady && !overLimit && !state.posting
+                    if (state.schedulingOffered) {
+                        PostSplitButton(
+                            label = postLabel,
+                            posting = state.posting,
+                            enabled = canPost,
+                            scheduleOpen = scheduleOpen,
+                            onPost = viewModel::submit,
+                            onToggleSchedule = onToggleSchedule,
+                        )
+                    } else {
+                        PostButton(label = postLabel, posting = state.posting, enabled = canPost, onClick = viewModel::submit)
+                    }
                     Spacer(Modifier.width(8.dp))
                 },
                 windowInsets = if (floating) WindowInsets(0) else TopAppBarDefaults.windowInsets,
@@ -601,6 +634,7 @@ private fun ComposerContent(
                 val context = state.contextNote
                 if (context != null && environment != null && state.target !is ComposerTarget.Edit) ContextCard(context, environment)
                 if (state.showsRecipients) RecipientEditor(viewModel, state, recipientResults, environment)
+                if (state.replacesScheduledId != null) ScheduledEditNotice()
                 if (state.dropsEndedPoll && !state.pollEnabled) EndedPollWarning()
                 AnimatedVisibility(
                     visible = state.cwEnabled,
@@ -889,10 +923,10 @@ fun AttachSheet(
 }
 
 @Composable
-private fun sheetItemColors() = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+internal fun sheetItemColors() = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
 
 @Composable
-private fun SheetTitle(title: String) {
+internal fun SheetTitle(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleLargeEmphasized,
@@ -1061,14 +1095,14 @@ private fun ComposerPromptOverlay(prompt: ComposerPrompt?, onConfirm: () -> Unit
     }
 }
 
-private fun Visibility.icon(): ImageVector = when (this) {
+internal fun Visibility.icon(): ImageVector = when (this) {
     Visibility.Public -> Icons.Default.Public
     Visibility.Home -> Icons.Default.Home
     Visibility.Followers -> Icons.Default.Lock
     Visibility.Specified -> Icons.Default.Mail
 }
 
-private fun Visibility.labelRes(): Int = when (this) {
+internal fun Visibility.labelRes(): Int = when (this) {
     Visibility.Public -> R.string.composer_visibility_public
     Visibility.Home -> R.string.composer_visibility_home
     Visibility.Followers -> R.string.composer_visibility_followers
@@ -1082,7 +1116,7 @@ private fun Visibility.bodyRes(): Int = when (this) {
     Visibility.Specified -> R.string.composer_visibility_specified_body
 }
 
-private fun ComposerUiState.titleRes(): Int = when (target) {
+private fun ComposerUiState.titleRes(): Int = if (replacesScheduledId != null) R.string.schedule_title_edit else when (target) {
     is ComposerTarget.NewPost, is ComposerTarget.Share -> R.string.composer_title_new
     is ComposerTarget.Reply -> R.string.composer_title_reply
     is ComposerTarget.Quote -> R.string.composer_title_quote
@@ -1103,4 +1137,7 @@ private fun ComposerFailure.messageRes(): Int = when (this) {
     ComposerFailure.PollAlreadyEnded -> R.string.poll_problem_past
     ComposerFailure.UnreadableFile -> R.string.composer_failed_unreadable
     ComposerFailure.UnsupportedShare -> R.string.composer_failed_share_type
+    ComposerFailure.ScheduleLimit -> R.string.schedule_failed_limit
+    ComposerFailure.SchedulePast -> R.string.schedule_problem_soon
+    ComposerFailure.ScheduleUnavailable -> R.string.schedule_failed_unavailable
 }

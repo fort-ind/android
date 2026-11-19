@@ -36,7 +36,7 @@ sealed interface AppRoute {
     fun encode(): String
 
     val isDetailPage: Boolean
-        get() = this is Thread || this is Person || this is PersonHandle || this is FollowList || this is Tag || this is Search || this is Hashtags
+        get() = this is Thread || this is Person || this is PersonHandle || this is FollowList || this is Tag || this is Search || this is Hashtags || this is Scheduled
 
     val isListPane: Boolean
         get() = this is Home || this is Notifications || this is Profile || this is Person || this is PersonHandle || this is Tag || this is Search
@@ -89,6 +89,10 @@ sealed interface AppRoute {
         override fun encode() = "hashtags"
     }
 
+    data object Scheduled : AppRoute {
+        override fun encode() = "scheduled"
+    }
+
     companion object {
         private const val TAG_PREFIX = "tag:"
         private const val SEARCH_PREFIX = "search:"
@@ -109,6 +113,7 @@ sealed interface AppRoute {
             encoded == "settings" -> Settings()
             encoded == "settings:edit" -> Settings(openEditProfile = true)
             encoded == "hashtags" -> Hashtags
+            encoded == "scheduled" -> Scheduled
             encoded.startsWith(TAG_PREFIX) -> encoded.removePrefix(TAG_PREFIX).takeIf(String::isNotEmpty)?.let(::Tag)
             encoded.startsWith(SEARCH_PREFIX) -> encoded.removePrefix(SEARCH_PREFIX).takeIf(String::isNotEmpty)?.let(::Search)
             encoded.startsWith(THREAD_PREFIX) -> encoded.removePrefix(THREAD_PREFIX).takeIf(::isValidNoteId)?.let(::Thread)

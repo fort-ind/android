@@ -44,6 +44,7 @@ import com.fortind.zenith.ui.composer.ComposerEvent
 import com.fortind.zenith.ui.composer.ComposerHost
 import com.fortind.zenith.ui.composer.ComposerTarget
 import com.fortind.zenith.ui.composer.ComposerViewModel
+import com.fortind.zenith.ui.composer.ReplacedScheduled
 import com.fortind.zenith.ui.theme.SettingsTheme
 import com.fortind.zenith.ui.theme.applySystemBarStyle
 import com.fortind.zenith.window.AppWindows
@@ -139,8 +140,18 @@ class ComposerWindowActivity : ComponentActivity() {
         var failed by remember { mutableStateOf(false) }
         LaunchedEffect(composer) {
             composer.events.collect { event ->
-                if (event is ComposerEvent.Posted) {
-                    windows.publish(WindowEvent.NotePosted(event.note, edited = event.target is ComposerTarget.Edit, openerWindowId = openerWindowId))
+                when (event) {
+                    is ComposerEvent.Posted -> {
+                        windows.publish(WindowEvent.NotePosted(event.note, edited = event.target is ComposerTarget.Edit, openerWindowId = openerWindowId))
+                        if (event.replaced != ReplacedScheduled.None) windows.publish(WindowEvent.ScheduledChanged())
+                    }
+                    is ComposerEvent.Scheduled -> windows.publish(
+                        WindowEvent.ScheduledChanged(
+                            scheduledAtMillis = event.atMillis,
+                            openerWindowId = openerWindowId,
+                            replacedStillScheduled = event.replaced == ReplacedScheduled.StillScheduled,
+                        ),
+                    )
                 }
             }
         }
