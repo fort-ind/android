@@ -423,14 +423,20 @@ fun ReauthorizeBanner(onDismiss: () -> Unit, newPermissions: Boolean = false) {
     AuthPageEffects(login)
     Box(modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth()) {
         if (loginState.signingIn) {
+            val colors = MaterialTheme.colorScheme
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.tertiaryContainer,
+                color = colors.tertiaryContainer,
+                contentColor = colors.onTertiaryContainer,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Box(modifier = Modifier.padding(20.dp), contentAlignment = Alignment.Center) {
-                    LoadingIndicator()
-                    TextButton(onClick = login::onCancel, modifier = Modifier.align(Alignment.CenterEnd)) {
+                    LoadingIndicator(color = colors.onTertiaryContainer)
+                    TextButton(
+                        onClick = login::onCancel,
+                        colors = ButtonDefaults.textButtonColors(contentColor = colors.onTertiaryContainer),
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                    ) {
                         Text(stringResource(R.string.login_cancel))
                     }
                 }

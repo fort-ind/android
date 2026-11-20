@@ -43,10 +43,11 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
@@ -320,9 +321,19 @@ fun PermissionBanner(
                 stringResource(if (newPermissions) R.string.feed_new_permissions_body else R.string.feed_permission_body, FortInstance.HOST),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            val colors = MaterialTheme.colorScheme
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.feed_permission_dismiss)) }
-                FilledTonalButton(onClick = onGrant) { Text(stringResource(R.string.feed_permission_grant)) }
+                TextButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(contentColor = colors.onTertiaryContainer),
+                ) { Text(stringResource(R.string.feed_permission_dismiss)) }
+                Button(
+                    onClick = onGrant,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.onTertiaryContainer,
+                        contentColor = colors.tertiaryContainer,
+                    ),
+                ) { Text(stringResource(R.string.feed_permission_grant)) }
             }
         }
     }
