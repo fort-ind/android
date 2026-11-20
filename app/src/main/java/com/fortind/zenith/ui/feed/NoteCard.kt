@@ -108,6 +108,7 @@ fun NoteCard(
     val reveal = NoteReveal(cwShown, { cwShown = !cwShown }, longExpanded, { longExpanded = !longExpanded })
     var menuOpen by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
+    val popupAnchor = remember { PopupAnchor() }
     val selected = environment.selectedNoteId == target.id
     val colors = MaterialTheme.colorScheme
     val container = when {
@@ -135,6 +136,7 @@ fun NoteCard(
             color = container,
             modifier = Modifier
                 .fillMaxWidth()
+                .hostedPopupAnchor(popupAnchor)
                 .testTag("note")
                 .focusRing(MaterialTheme.colorScheme.primary, RectangleShape)
                 .pointerHover { hovered = it }
@@ -171,6 +173,7 @@ fun NoteCard(
             }
         }
         NoteMenu(
+            anchor = popupAnchor,
             note = target,
             expanded = menuOpen,
             offset = menuOffset,
@@ -491,6 +494,7 @@ private fun DeletedStub(messageRes: Int) {
 
 @Composable
 private fun NoteMenu(
+    anchor: PopupAnchor,
     note: Note,
     expanded: Boolean,
     offset: DpOffset,
@@ -498,8 +502,10 @@ private fun NoteMenu(
     environment: NoteEnvironment,
     callbacks: NoteCallbacks,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, offset = offset) {
-        NoteMenuItems(note, environment, callbacks, onDismiss)
+    HostedPopup(anchor, expanded) {
+        DropdownMenu(expanded = true, onDismissRequest = onDismiss, offset = offset) {
+            NoteMenuItems(note, environment, callbacks, onDismiss)
+        }
     }
 }
 

@@ -63,7 +63,6 @@ fun StatusMessage(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val size = ButtonDefaults.MediumContainerHeight

@@ -94,7 +94,6 @@ private val TimelineOptions = listOf(
 private val AllLabelsWidth = 520.dp
 private val IconOnlyButtonWidth = 48.dp
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TimelineSwitcher(
     selected: TimelineKind,

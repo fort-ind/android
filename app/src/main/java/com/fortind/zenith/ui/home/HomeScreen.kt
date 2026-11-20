@@ -1,7 +1,6 @@
 @file:OptIn(
     ExperimentalMaterial3AdaptiveApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
-    ExperimentalMaterial3Api::class,
 )
 
 package com.fortind.zenith.ui.home
@@ -22,7 +21,6 @@ import com.fortind.zenith.ui.discovery.CollectionsEmptyPane
 import com.fortind.zenith.ui.discovery.SearchActions
 import com.fortind.zenith.ui.discovery.SearchOverlay
 import com.fortind.zenith.ui.discovery.rememberSearchInput
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.animation.Crossfade

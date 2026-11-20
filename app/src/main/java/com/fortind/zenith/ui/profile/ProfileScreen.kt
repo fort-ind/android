@@ -156,7 +156,6 @@ private fun ProfileMessage(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LogOutButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val size = ButtonDefaults.MediumContainerHeight
@@ -197,7 +196,7 @@ private fun RetryButton(refreshing: Boolean, onRetry: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogoutConfirmationSheet(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(

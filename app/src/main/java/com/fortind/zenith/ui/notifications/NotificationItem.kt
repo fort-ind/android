@@ -78,7 +78,6 @@ class NotificationActions(
     val reject: (FortNotification) -> Unit,
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun NotificationItem(
     notification: FortNotification,
@@ -240,7 +239,6 @@ private fun ReactionView(reaction: String, emojiUrl: String?) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FollowRequestActions(
     progress: FollowRequestProgress?,

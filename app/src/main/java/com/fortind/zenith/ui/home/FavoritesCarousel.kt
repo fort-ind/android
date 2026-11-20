@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
@@ -49,7 +48,6 @@ import com.fortind.zenith.ui.games.GameActions
 import com.fortind.zenith.ui.icons.GamesIcon
 import com.fortind.zenith.ui.pointerHover
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoritesCarousel(
     favorites: List<Game>,

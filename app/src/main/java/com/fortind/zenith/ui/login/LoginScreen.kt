@@ -279,7 +279,6 @@ internal fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ManualLinkCard(url: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current

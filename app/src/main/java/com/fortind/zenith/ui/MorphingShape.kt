@@ -1,7 +1,6 @@
 package com.fortind.zenith.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,7 +12,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun rememberMorphingShape(
     target: RoundedPolygon,

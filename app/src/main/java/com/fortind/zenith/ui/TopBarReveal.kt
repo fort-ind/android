@@ -2,8 +2,6 @@ package com.fortind.zenith.ui
 
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.snap
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -38,7 +36,6 @@ class TopBarReveal internal constructor(private val canScrollBack: State<() -> B
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun rememberTopBarReveal(
     behavior: TopAppBarScrollBehavior,

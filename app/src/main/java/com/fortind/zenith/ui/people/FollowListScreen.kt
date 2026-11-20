@@ -19,7 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -78,7 +77,6 @@ private const val LOAD_MORE_THRESHOLD = 6
 private val RowMinWidth = 340.dp
 private val ValidHost = Regex("[A-Za-z0-9.-]{1,253}")
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun FollowListScreen(
     userId: String,
@@ -281,7 +279,6 @@ private fun RemoteListNotice(owner: UserDetail, host: String, kind: FollowListKi
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun UserRow(
     detail: UserDetail,
@@ -341,7 +338,6 @@ private fun UserRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun RowFollowButton(detail: UserDetail, myUserId: String?, busy: Boolean, ui: SocialUi) {
     val state = detail.followState(myUserId)

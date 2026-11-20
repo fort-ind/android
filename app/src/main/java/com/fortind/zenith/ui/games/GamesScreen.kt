@@ -39,7 +39,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExpandedDockedSearchBar
 import androidx.compose.material3.ExpandedFullScreenSearchBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -174,7 +173,6 @@ fun GamesScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GamesContent(
     state: GamesUiState,
@@ -330,7 +328,6 @@ fun GamesContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchLeadingIcon(searchBarState: SearchBarState) {
     val scope = rememberCoroutineScope()
@@ -398,7 +395,6 @@ private fun CategoryChip(
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun GameGrid(
     sections: List<GameSection>,
@@ -626,7 +622,6 @@ private fun LoadingState() {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FailedState(onRetry: () -> Unit) {
     Column(

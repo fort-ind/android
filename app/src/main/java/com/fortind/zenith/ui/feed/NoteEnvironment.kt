@@ -85,7 +85,6 @@ class NoteEnvironment(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TooltipIconButton(
     label: String,

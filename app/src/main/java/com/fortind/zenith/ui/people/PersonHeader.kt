@@ -170,7 +170,6 @@ fun PersonTitle(user: NoteUser, environment: NoteEnvironment) {
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun PersonName(user: NoteUser, environment: NoteEnvironment) {
     val nameEnvironment = remember(user, environment.mfm) { environment.mfm.withEmoji(environment.userEmoji(user)) }
@@ -183,7 +182,6 @@ private fun PersonName(user: NoteUser, environment: NoteEnvironment) {
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun PersonActionButton(
     detail: UserDetail?,
@@ -347,7 +345,6 @@ private fun OwnActions(own: OwnProfileActions) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun OwnActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

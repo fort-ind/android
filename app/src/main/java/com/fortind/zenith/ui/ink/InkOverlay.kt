@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Surface
@@ -188,7 +187,6 @@ fun InkOverlay(state: InkUiState, policy: InkInputPolicy, viewModel: InkViewMode
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CenteredMessage(text: Int, busy: Boolean) {
     Column(
@@ -201,7 +199,6 @@ private fun CenteredMessage(text: Int, busy: Boolean) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun InkTopBar(
     state: InkUiState,

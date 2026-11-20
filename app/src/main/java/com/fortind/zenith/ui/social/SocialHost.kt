@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.fortind.zenith.ui.social
 
 import com.fortind.zenith.ZenithApplication
@@ -31,7 +29,6 @@ import android.content.ClipData
 import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -82,7 +79,10 @@ import com.fortind.zenith.ui.feed.ConfirmDeleteDialog
 import com.fortind.zenith.ui.feed.FeedEvent
 import com.fortind.zenith.ui.feed.FeedViewModel
 import com.fortind.zenith.ui.feed.FullscreenVideo
+import com.fortind.zenith.ui.feed.HostedPopups
+import com.fortind.zenith.ui.feed.HostedPopupsLayer
 import com.fortind.zenith.ui.feed.ImageViewer
+import com.fortind.zenith.ui.feed.LocalHostedPopups
 import com.fortind.zenith.ui.motion.LocalSharedTransitionScope
 import com.fortind.zenith.ui.motion.SharedMotion
 import androidx.compose.animation.AnimatedContent
@@ -365,6 +365,7 @@ fun SocialHost(
         enabled = feed.signedIn && !viewerShown && composerState == null,
         onMedia = { uris -> composerViewModel.open(ComposerTarget.NewPost, null, shared = SharedContent("", caretAtStart = false, uris = uris)) },
     )
+    val hostedPopups = remember { HostedPopups() }
     SharedTransitionLayout(modifier = Modifier.fillMaxSize().dropToPost(dropToPost)) {
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             Box(
@@ -374,8 +375,9 @@ fun SocialHost(
                     .focusGroup()
                     .then(if (viewerShown) Modifier.clearAndSetSemantics {} else Modifier),
             ) {
-                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit()) {
+                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit(), LocalHostedPopups provides hostedPopups) {
                     content(ui)
+                    HostedPopupsLayer(hostedPopups)
                 }
                 DropToPostOverlay(dropToPost)
             }

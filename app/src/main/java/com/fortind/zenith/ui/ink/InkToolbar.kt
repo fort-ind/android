@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -76,7 +75,6 @@ import com.fortind.zenith.ui.feed.LabelTooltip
 import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.handCursor
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InkToolbar(
     state: InkUiState,
@@ -105,7 +103,6 @@ fun InkToolbar(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ToolButton(tool: InkTool, checked: Boolean, onClick: () -> Unit) {
     val label = stringResource(tool.labelRes())
@@ -131,7 +128,6 @@ private fun ToolButton(tool: InkTool, checked: Boolean, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun StyleButton(state: InkUiState, onClick: () -> Unit) {
     val label = stringResource(R.string.ink_style)
@@ -184,7 +180,7 @@ class InkPanelActions(
     val onClose: () -> Unit,
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StylePanel(state: InkUiState, actions: InkPanelActions) {
     Column {
@@ -260,7 +256,6 @@ private fun ColorChoice(color: InkColor, selected: Boolean, onClick: () -> Unit)
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MorePanel(state: InkUiState, actions: InkPanelActions) {
     val onDismiss = actions.onClose
@@ -433,14 +428,12 @@ private val PanelItemInnerCorner = 4.dp
 private val PanelGroupPadding = PaddingValues(vertical = PanelItemInset)
 internal val PanelShape = RoundedCornerShape(PanelGroupCorner + PanelInset)
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun panelGroupShapes(): MenuGroupShapes {
     val shape = RoundedCornerShape(PanelGroupCorner)
     return MenuDefaults.groupShapes(shape = shape, inactiveShape = shape)
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun panelItemShapes(index: Int, count: Int): MenuItemShapes {
     val edge = PanelGroupCorner - PanelItemInset

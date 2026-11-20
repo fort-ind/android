@@ -172,7 +172,7 @@ private fun rememberNotificationActions(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ReadyContent(
     state: NotificationsUiState.Ready,
@@ -244,7 +244,6 @@ private fun ReadyContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun Header(
     filter: NotificationFilter,

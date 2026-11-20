@@ -70,6 +70,7 @@ import androidx.compose.ui.node.invalidateMeasurement
 import androidx.compose.ui.node.invalidateSemantics
 import androidx.compose.ui.node.requireLayoutDirection
 import androidx.compose.ui.focus.FocusTargetModifierNode
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -201,7 +202,6 @@ private class BarActions(
     val onTip: (Int, IntRect?) -> Unit,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteActionBar(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks) {
     val kit = LocalNoteActionKit.current ?: rememberNoteActionKit()
@@ -240,6 +240,7 @@ fun NoteActionBar(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
         )
     }
     val density = LocalDensity.current
+    val anchor = remember { PopupAnchor() }
     Box(
         Modifier.fillMaxWidth().then(
             ActionBarElement(
@@ -257,17 +258,21 @@ fun NoteActionBar(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
                 },
                 accent = colors.primary,
             ),
-        ),
+        ).hostedPopupAnchor(anchor),
     ) {
-        val open = overlay ?: return@Box
-        val menuOffset = with(density) { DpOffset(open.rect.left.toDp(), 0.dp) }
-        when {
-            open.tip -> BarTooltip(open, kit.labels, renoted)
-            open.cell == RENOTE -> DropdownMenu(expanded = true, onDismissRequest = { overlay = null }, offset = menuOffset) {
-                RenoteMenuContent(note, environment, callbacks, kit.labels, renoted) { overlay = null }
-            }
-            open.cell == MORE -> DropdownMenu(expanded = true, onDismissRequest = { overlay = null }, offset = menuOffset) {
-                NoteMenuItems(note, environment, callbacks) { overlay = null }
+        val open = overlay
+        HostedPopup(anchor, open != null) {
+            if (open != null) {
+                val menuOffset = with(density) { DpOffset(open.rect.left.toDp(), 0.dp) }
+                when {
+                    open.tip -> BarTooltip(open, kit.labels, renoted)
+                    open.cell == RENOTE -> DropdownMenu(expanded = true, onDismissRequest = { overlay = null }, offset = menuOffset) {
+                        RenoteMenuContent(note, environment, callbacks, kit.labels, renoted) { overlay = null }
+                    }
+                    open.cell == MORE -> DropdownMenu(expanded = true, onDismissRequest = { overlay = null }, offset = menuOffset) {
+                        NoteMenuItems(note, environment, callbacks) { overlay = null }
+                    }
+                }
             }
         }
     }
@@ -368,6 +373,14 @@ private data class ActionBarElement(
     override fun create() = ActionBarNode(this)
 
     override fun update(node: ActionBarNode) = node.update(this)
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "noteActionBar"
+        properties["replies"] = replies
+        properties["renotes"] = renotes
+        properties["renoted"] = renoted
+        properties["renoteEnabled"] = renoteEnabled
+    }
 }
 
 private class ActionBarNode(element: ActionBarElement) : DelegatingNode(), LayoutModifierNode, DrawModifierNode, SemanticsModifierNode, KeyInputModifierNode {

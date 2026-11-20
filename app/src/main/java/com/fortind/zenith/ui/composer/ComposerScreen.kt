@@ -97,6 +97,7 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.computedStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -566,9 +567,9 @@ private fun ComposerContent(
         onDragOver = { dragOver = it },
     )
     val focusRequester = remember { FocusRequester() }
-    val hasText by remember(viewModel) { derivedStateOf { viewModel.text.text.isNotBlank() } }
+    val hasText by remember(viewModel) { computedStateOf { viewModel.text.text.isNotBlank() } }
     val overLimit by remember(viewModel, state.textLimit, state.cwLimit, state.cwEnabled) {
-        derivedStateOf {
+        computedStateOf {
             viewModel.text.text.length > state.textLimit ||
                 (state.cwEnabled && viewModel.cw.text.length > state.cwLimit)
         }
