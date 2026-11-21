@@ -613,6 +613,15 @@
     <string name="camera_failed">Couldn\'t capture that, try again</string>
     <string name="camera_unavailable">No camera is available on this device. or it might be disabled?</string>
     <string name="camera_recording_time">Recording, %1$s</string>
+    <string name="camera_modes">Photo enhancement</string>
+    <string name="camera_mode_off">Off</string>
+    <string name="camera_mode_auto">Auto</string>
+    <string name="camera_mode_hdr">HDR</string>
+    <string name="camera_mode_night">Night</string>
+    <string name="camera_mode_portrait">Portrait</string>
+    <string name="camera_mode_face_retouch">Face retouch</string>
+    <string name="camera_mode_failed">That mode isn\'t working on this camera, so it was turned off</string>
+    <string name="camera_processing">Processing photo, hold still</string>
 
     <string name="settings_category_account">Account</string>
     <string name="settings_account_supporting">Profile, privacy and mutes</string>

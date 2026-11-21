@@ -36,7 +36,9 @@ import com.fortind.zenith.drive.DriveApi
 import com.fortind.zenith.emoji.EmojiIndex
 import com.fortind.zenith.emoji.InstanceInfo
 import com.fortind.zenith.emoji.InstanceMeta
+import com.fortind.zenith.media.CaptureMode
 import com.fortind.zenith.media.LocalMedia
+import com.fortind.zenith.media.LocalMediaCleaner
 import com.fortind.zenith.media.MediaCompressor
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
@@ -212,6 +214,14 @@ class ComposerViewModelTest {
         }
     }
 
+    private class FakeMediaCleaner : LocalMediaCleaner {
+        val released = CopyOnWriteArrayList<String>()
+
+        override suspend fun release(media: LocalMedia) {
+            released += media.uri
+        }
+    }
+
     private class FakeSuggestionsApi : SuggestionsApi {
         var users = emptyList<NoteUser>()
 
@@ -244,6 +254,7 @@ class ComposerViewModelTest {
         val drive = FakeDriveApi()
         val compressor = FakeCompressor()
         val sanitizer = FakeSanitizer()
+        val cleaner = FakeMediaCleaner()
         val settings = FakeSettingsStore(AppSettings(compressUploads = compress))
         var now = nowMillis
         val viewModel = ComposerViewModel(
@@ -256,6 +267,7 @@ class ComposerViewModelTest {
             mentionDebounceMs = 0,
             resolveUsers = { _, ids -> ids.mapNotNull { users[it] } },
             scheduleApi = schedule,
+            mediaCleaner = cleaner,
         )
     }
 
@@ -291,6 +303,10 @@ class ComposerViewModelTest {
 
     private suspend fun FakeDriveApi.awaitDeletion() {
         while (deleted.isEmpty()) yield()
+    }
+
+    private suspend fun FakeMediaCleaner.awaitReleased(count: Int) {
+        while (released.size < count) yield()
     }
 
     private fun parent(
@@ -1053,6 +1069,114 @@ class ComposerViewModelTest {
         assertEquals(1, f.compressor.inputs.size)
         assertEquals(AttachmentPhase.Ready, f.viewModel.uiState.value!!.attachments.single().phase)
         assertFalse(f.settings.current.compressUploads)
+    }
+
+    @Test
+    fun discardingTheComposerReleasesTheLocalCopiesOfItsAttachments() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg"), photo("b.jpg")))
+        f.viewModel.awaitUploads()
+
+        f.viewModel.close(keepDraft = false)
+
+        assertTrue("content://media/a.jpg" in f.cleaner.released)
+        assertTrue("content://media/b.jpg" in f.cleaner.released)
+    }
+
+    @Test
+    fun keepingTheDraftKeepsTheLocalCopies() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg")))
+        f.viewModel.awaitUploads()
+
+        f.viewModel.close(keepDraft = true)
+
+        assertFalse("content://media/a.jpg" in f.cleaner.released)
+    }
+
+    @Test
+    fun removingATileReleasesOnlyItsLocalCopy() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg"), photo("b.jpg")))
+        f.viewModel.awaitUploads()
+        val tileA = f.viewModel.uiState.value!!.attachments.first { it.media.name == "a.jpg" }.localId
+
+        f.viewModel.removeAttachment(tileA)
+
+        assertTrue("content://media/a.jpg" in f.cleaner.released)
+        assertFalse("content://media/b.jpg" in f.cleaner.released)
+    }
+
+    @Test
+    fun aLocalCopyStaysUntilTheLastTileUsingItIsGone() = runTest {
+        val f = fixture()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg"), photo("a.jpg")))
+        f.viewModel.awaitUploads()
+        val tiles = f.viewModel.uiState.value!!.attachments.map { it.localId }
+
+        f.viewModel.removeAttachment(tiles[0])
+        assertFalse("content://media/a.jpg" in f.cleaner.released)
+
+        f.viewModel.removeAttachment(tiles[1])
+        assertTrue("content://media/a.jpg" in f.cleaner.released)
+    }
+
+    @Test
+    fun theCopiesMadeForAnUploadAreReleasedOnceItIsDone() = runTest {
+        val f = fixture(compress = true)
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg")))
+        f.viewModel.awaitUploads()
+        f.cleaner.awaitReleased(2)
+
+        assertEquals(
+            listOf("file:///compressed/a.jpg", "file:///compressed/a.jpg#clean"),
+            f.cleaner.released.toList(),
+        )
+    }
+
+    @Test
+    fun aFailedUploadReleasesItsTemporaryCopyButNotTheOriginalNeededToRetry() = runTest {
+        val f = fixture()
+        f.drive.failures += IOException("offline")
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg")))
+        f.viewModel.awaitUploads()
+        f.cleaner.awaitReleased(1)
+
+        assertEquals(AttachmentPhase.Failed, f.viewModel.uiState.value!!.attachments.single().phase)
+        assertEquals(listOf("content://media/a.jpg#clean"), f.cleaner.released.toList())
+    }
+
+    @Test
+    fun cancellingAnUploadStillReleasesItsTemporaryCopy() = runTest {
+        val f = fixture()
+        f.drive.gate = CompletableDeferred()
+        f.viewModel.open(ComposerTarget.NewPost, null)
+        f.viewModel.addMedia(listOf(photo("a.jpg")))
+        while (f.drive.uploads.isEmpty()) yield()
+        val tile = f.viewModel.uiState.value!!.attachments.single().localId
+
+        f.viewModel.removeAttachment(tile)
+        f.cleaner.awaitReleased(2)
+
+        assertTrue("content://media/a.jpg#clean" in f.cleaner.released)
+        assertTrue("content://media/a.jpg" in f.cleaner.released)
+    }
+
+    @Test
+    fun theCameraModeIsSavedTheMomentItChanges() = runTest {
+        val f = fixture()
+        assertEquals(CaptureMode.Auto, f.viewModel.cameraMode.value)
+
+        f.viewModel.setCameraMode(CaptureMode.Night)
+
+        assertEquals(CaptureMode.Night, f.settings.current.cameraMode)
+        assertEquals(CaptureMode.Night, f.viewModel.cameraMode.value)
     }
 
     @Test

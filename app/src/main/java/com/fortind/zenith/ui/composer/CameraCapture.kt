@@ -11,6 +11,7 @@ import androidx.camera.compose.CameraXViewfinder
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
 import androidx.camera.core.ExperimentalLensFacing
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
@@ -18,6 +19,9 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.core.SurfaceOrientedMeteringPointFactory
 import androidx.camera.core.SurfaceRequest
+import androidx.camera.extensions.ExtensionMode
+import androidx.camera.extensions.ExtensionSessionConfig
+import androidx.camera.extensions.ExtensionsManager
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
 import androidx.camera.video.FallbackStrategy
@@ -34,6 +38,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,9 +50,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
@@ -59,8 +66,11 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Icon
@@ -88,7 +98,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -100,13 +110,18 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fortind.zenith.R
+import com.fortind.zenith.media.CaptureMode
 import com.fortind.zenith.media.LocalMedia
+import com.fortind.zenith.media.effectiveCaptureMode
+import com.fortind.zenith.media.offeredCaptureModes
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.StandaloneMenuGroup
 import com.fortind.zenith.ui.handCursor
@@ -117,10 +132,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 @Composable
 fun CameraCaptureOverlay(
     videoSizeLimitBytes: Long,
+    captureMode: CaptureMode,
+    onCaptureModeChange: (CaptureMode) -> Unit,
     onCaptured: (LocalMedia) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -137,6 +156,12 @@ fun CameraCaptureOverlay(
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordedMillis by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf<Int?>(null) }
+    var notice by remember { mutableStateOf<Int?>(null) }
+    var captureModes by remember { mutableStateOf(emptyList<CaptureMode>()) }
+    var activeMode by remember { mutableStateOf(CaptureMode.Off) }
+    var brokenModes by remember { mutableStateOf(emptySet<Pair<Int, CaptureMode>>()) }
+    var capturing by remember { mutableStateOf(false) }
+    var captureProgress by remember { mutableIntStateOf(NO_PROGRESS) }
     val activity = LocalActivity.current
     var audioGranted by remember { mutableStateOf(hasPermission(context, Manifest.permission.RECORD_AUDIO)) }
     var audioBlocked by rememberSaveable { mutableStateOf(false) }
@@ -168,26 +193,61 @@ fun CameraCaptureOverlay(
         VideoCapture.withOutput(Recorder.Builder().setQualitySelector(quality).build())
     }
 
-    LaunchedEffect(cameraIndex, videoMode) {
+    LaunchedEffect(cameraIndex, videoMode, captureMode, brokenModes) {
         val provider = ProcessCameraProvider.awaitInstance(context)
         cameras = cameraOptions(provider.availableCameraInfos)
         when {
             cameras.isEmpty() -> message = R.string.camera_unavailable
             cameraIndex !in cameras.indices -> cameraIndex = 0
             else -> {
+                val selector = cameras[cameraIndex].selector
+                val extensions = loadExtensions(context, provider)
+                val offered = offeredCaptureModes { mode ->
+                    extensions != null &&
+                        (cameraIndex to mode) !in brokenModes &&
+                        extensions.isExtensionAvailable(selector, mode.extensionMode())
+                }
+                captureModes = offered
+                val mode = if (videoMode) CaptureMode.Off else effectiveCaptureMode(captureMode, offered)
                 provider.unbindAll()
+                activeMode = CaptureMode.Off
                 camera = try {
-                    provider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameras[cameraIndex].selector,
-                        preview,
-                        if (videoMode) videoCapture else imageCapture,
-                    )
+                    if (mode != CaptureMode.Off && extensions != null) {
+                        val session = ExtensionSessionConfig(mode.extensionMode(), extensions, preview, imageCapture)
+                        provider.bindToLifecycle(lifecycleOwner, selector, session).also { activeMode = mode }
+                    } else {
+                        provider.bindToLifecycle(lifecycleOwner, selector, preview, if (videoMode) videoCapture else imageCapture)
+                    }
                 } catch (_: IllegalArgumentException) {
-                    message = R.string.camera_failed
+                    if (mode == CaptureMode.Off) {
+                        message = R.string.camera_failed
+                    } else {
+                        brokenModes = brokenModes + (cameraIndex to mode)
+                        notice = R.string.camera_mode_failed
+                    }
                     null
                 }
             }
+        }
+    }
+    DisposableEffect(camera, activeMode, cameraIndex) {
+        val bound = camera
+        val mode = activeMode
+        if (bound == null || mode == CaptureMode.Off) return@DisposableEffect onDispose { }
+        val observer = Observer<CameraState> { state ->
+            val code = state.error?.code
+            if (code == CameraState.ERROR_STREAM_CONFIG || code == CameraState.ERROR_CAMERA_FATAL_ERROR) {
+                brokenModes = brokenModes + (cameraIndex to mode)
+                notice = R.string.camera_mode_failed
+            }
+        }
+        bound.cameraInfo.cameraState.observe(lifecycleOwner, observer)
+        onDispose { bound.cameraInfo.cameraState.removeObserver(observer) }
+    }
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            delay(NOTICE_MILLIS)
+            notice = null
         }
     }
     LaunchedEffect(flashMode) { imageCapture.flashMode = flashMode }
@@ -200,13 +260,21 @@ fun CameraCaptureOverlay(
         }
     }
 
-    val takePhoto = {
+    val takePhoto: () -> Unit = takePhoto@{
+        if (capturing) return@takePhoto
+        capturing = true
+        captureProgress = NO_PROGRESS
         val file = captureFile(context, "IMG", "jpg")
         imageCapture.takePicture(
             ImageCapture.OutputFileOptions.Builder(file).build(),
             mainExecutor,
             object : ImageCapture.OnImageSavedCallback {
+                override fun onCaptureProcessProgressed(progress: Int) {
+                    captureProgress = progress
+                }
+
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    capturing = false
                     if (closed.get()) {
                         file.delete()
                     } else {
@@ -215,8 +283,9 @@ fun CameraCaptureOverlay(
                 }
 
                 override fun onError(exception: ImageCaptureException) {
+                    capturing = false
                     file.delete()
-                    message = R.string.camera_failed
+                    notice = R.string.camera_failed
                 }
             },
         )
@@ -265,7 +334,7 @@ fun CameraCaptureOverlay(
             .background(Color.Black)
             .focusRequester(focus)
             .focusable()
-            .onPreviewKeyEvent { event ->
+            .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.Spacebar)) {
                     shutter()
                     true
@@ -314,7 +383,7 @@ fun CameraCaptureOverlay(
                     tint = Color.White,
                 )
             }
-            if (cameras.size > 1 && recording == null) {
+            if (cameras.size > 1 && recording == null && !capturing) {
                 Box {
                     TooltipIconButton(
                         label = stringResource(R.string.camera_flip),
@@ -343,7 +412,7 @@ fun CameraCaptureOverlay(
                 }
             }
         }
-        message?.let { res ->
+        (notice ?: message)?.let { res ->
             Surface(
                 shape = MaterialTheme.shapes.large,
                 color = Color.Black.copy(alpha = 0.75f),
@@ -353,9 +422,23 @@ fun CameraCaptureOverlay(
                 Text(stringResource(res), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(16.dp))
             }
         }
+        val showModes = !videoMode && captureModes.size > 1
+        val selectedMode = effectiveCaptureMode(captureMode, captureModes)
         val controls: @Composable () -> Unit = {
             if (videoMode && !audioGranted && recording == null) {
                 MicrophoneNotice(blocked = audioBlocked, onClick = requestMicrophone)
+            }
+            if (capturing && activeMode != CaptureMode.Off) {
+                ProcessingNotice()
+            }
+            if (showModes && !landscape) {
+                CaptureModeChips(
+                    modes = captureModes,
+                    selected = selectedMode,
+                    vertical = false,
+                    enabled = !capturing,
+                    onSelect = onCaptureModeChange,
+                )
             }
             Row(
                 modifier = Modifier.selectableGroup(),
@@ -369,19 +452,35 @@ fun CameraCaptureOverlay(
                             val firstAsk = !audioBlocked && !activity.shouldExplain(Manifest.permission.RECORD_AUDIO)
                             if (video && !audioGranted && firstAsk) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
                         },
-                        enabled = recording == null,
+                        enabled = recording == null && !capturing,
                         shapes = if (index == 0) {
                             ButtonGroupDefaults.connectedLeadingButtonShapes()
                         } else {
                             ButtonGroupDefaults.connectedTrailingButtonShapes()
                         },
-                        modifier = Modifier.handCursor(recording == null).semantics { role = Role.RadioButton },
+                        modifier = Modifier.handCursor(recording == null && !capturing).semantics { role = Role.RadioButton },
                     ) {
                         Text(stringResource(label))
                     }
                 }
             }
-            ShutterButton(video = videoMode, recording = recording != null, onClick = shutter)
+            ShutterButton(
+                video = videoMode,
+                recording = recording != null,
+                busy = capturing,
+                progress = captureProgress,
+                onClick = shutter,
+            )
+        }
+        if (showModes && landscape) {
+            CaptureModeChips(
+                modes = captureModes,
+                selected = selectedMode,
+                vertical = true,
+                enabled = !capturing,
+                onSelect = onCaptureModeChange,
+                modifier = Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(24.dp),
+            )
         }
         if (landscape) {
             Column(
@@ -423,7 +522,73 @@ private fun MicrophoneNotice(blocked: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ShutterButton(video: Boolean, recording: Boolean, onClick: () -> Unit) {
+internal fun CaptureModeChips(
+    modes: List<CaptureMode>,
+    selected: CaptureMode,
+    vertical: Boolean,
+    enabled: Boolean,
+    onSelect: (CaptureMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val groupLabel = stringResource(R.string.camera_modes)
+    val selectedContainer = MaterialTheme.colorScheme.secondaryContainer
+    val selectedContent = MaterialTheme.colorScheme.onSecondaryContainer
+    val colors = FilterChipDefaults.filterChipColors(
+        containerColor = Color.Black.copy(alpha = SCRIM_ALPHA),
+        labelColor = Color.White,
+        disabledContainerColor = Color.Black.copy(alpha = DISABLED_SCRIM_ALPHA),
+        disabledLabelColor = Color.White.copy(alpha = DISABLED_CONTENT_ALPHA),
+        selectedContainerColor = selectedContainer,
+        selectedLabelColor = selectedContent,
+        disabledSelectedContainerColor = selectedContainer.copy(alpha = DISABLED_CONTENT_ALPHA),
+    )
+    val chips: @Composable () -> Unit = {
+        modes.forEach { mode ->
+            FilterChip(
+                selected = mode == selected,
+                onClick = { onSelect(mode) },
+                enabled = enabled,
+                label = { Text(stringResource(mode.labelRes())) },
+                colors = colors,
+                border = null,
+                modifier = Modifier.handCursor(enabled).semantics { role = Role.RadioButton },
+            )
+        }
+    }
+    val group = Modifier.selectableGroup().semantics { contentDescription = groupLabel }
+    if (vertical) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = modifier.then(group).verticalScroll(rememberScrollState()),
+        ) { chips() }
+    } else {
+        Box(modifier = modifier.widthIn(max = 480.dp), contentAlignment = Alignment.Center) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = group.horizontalScroll(rememberScrollState()),
+            ) { chips() }
+        }
+    }
+}
+
+@Composable
+private fun ProcessingNotice() {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = Color.Black.copy(alpha = 0.75f),
+        contentColor = Color.White,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(
+            text = stringResource(R.string.camera_processing),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun ShutterButton(video: Boolean, recording: Boolean, busy: Boolean, progress: Int, onClick: () -> Unit) {
     val label = stringResource(
         when {
             !video -> R.string.camera_take_photo
@@ -431,22 +596,39 @@ private fun ShutterButton(video: Boolean, recording: Boolean, onClick: () -> Uni
             else -> R.string.camera_start_recording
         },
     )
+    val processing = stringResource(R.string.camera_processing)
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(80.dp)
             .clip(CircleShape)
             .border(4.dp, Color.White, CircleShape)
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .clickable(enabled = !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(8.dp)
-            .semantics { contentDescription = label },
+            .semantics {
+                contentDescription = label
+                if (busy) stateDescription = processing
+            },
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(if (recording) RoundedCornerShape(12.dp) else CircleShape)
-                .background(if (video) Color.Red else Color.White),
+                .background((if (video) Color.Red else Color.White).copy(alpha = if (busy) DISABLED_CONTENT_ALPHA else 1f)),
         )
+        if (busy) {
+            val track = Color.White.copy(alpha = 0.3f)
+            if (progress in 0..MAX_PROGRESS) {
+                CircularProgressIndicator(
+                    progress = { progress / MAX_PROGRESS.toFloat() },
+                    color = Color.White,
+                    trackColor = track,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                CircularProgressIndicator(color = Color.White, trackColor = track, modifier = Modifier.fillMaxSize())
+            }
+        }
     }
 }
 
@@ -490,6 +672,39 @@ private fun captureFile(context: Context, prefix: String, extension: String): Fi
 private const val NANOS_PER_MILLI = 1_000_000L
 private const val MILLIS_PER_SECOND = 1000L
 private const val SECONDS_PER_MINUTE = 60L
+private const val NOTICE_MILLIS = 4000L
+private const val NO_PROGRESS = -1
+private const val MAX_PROGRESS = 100
+private const val SCRIM_ALPHA = 0.55f
+private const val DISABLED_SCRIM_ALPHA = 0.35f
+private const val DISABLED_CONTENT_ALPHA = 0.5f
+
+private fun CaptureMode.labelRes(): Int = when (this) {
+    CaptureMode.Off -> R.string.camera_mode_off
+    CaptureMode.Auto -> R.string.camera_mode_auto
+    CaptureMode.Hdr -> R.string.camera_mode_hdr
+    CaptureMode.Night -> R.string.camera_mode_night
+    CaptureMode.Portrait -> R.string.camera_mode_portrait
+    CaptureMode.FaceRetouch -> R.string.camera_mode_face_retouch
+}
+
+private fun CaptureMode.extensionMode(): Int = when (this) {
+    CaptureMode.Off -> ExtensionMode.NONE
+    CaptureMode.Auto -> ExtensionMode.AUTO
+    CaptureMode.Hdr -> ExtensionMode.HDR
+    CaptureMode.Night -> ExtensionMode.NIGHT
+    CaptureMode.Portrait -> ExtensionMode.BOKEH
+    CaptureMode.FaceRetouch -> ExtensionMode.FACE_RETOUCH
+}
+
+private suspend fun loadExtensions(context: Context, provider: ProcessCameraProvider): ExtensionsManager? =
+    try {
+        ExtensionsManager.getInstance(context.applicationContext, provider)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
 
 class CameraOption(val selector: CameraSelector, val facing: CameraFacing)
 

@@ -220,6 +220,7 @@ private fun ComposerDialog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val compressUploads by viewModel.compressUploads.collectAsStateWithLifecycle()
+    val cameraMode by viewModel.cameraMode.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val requestClose: () -> Unit = {
         when {
@@ -504,6 +505,8 @@ private fun ComposerDialog(
                 if (overlay == OVERLAY_CAMERA) {
                     CameraCaptureOverlay(
                         videoSizeLimitBytes = if (compressUploads) COMPRESSED_VIDEO_LIMIT_BYTES else state.maxFileSizeBytes,
+                        captureMode = cameraMode,
+                        onCaptureModeChange = viewModel::setCameraMode,
                         onCaptured = { media ->
                             viewModel.addMedia(listOf(media))
                             overlay = ""

@@ -46,8 +46,10 @@ import com.fortind.zenith.games.FavoritesStore
 import com.fortind.zenith.games.GameCatalog
 import com.fortind.zenith.media.AndroidMediaCompressor
 import com.fortind.zenith.media.AndroidMediaSanitizer
+import com.fortind.zenith.media.CacheMediaCleaner
 import com.fortind.zenith.media.ContentResolverMediaReader
 import com.fortind.zenith.media.LegacyAnimatedDecoder
+import com.fortind.zenith.media.LocalMediaCleaner
 import com.fortind.zenith.media.MediaCompressor
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
@@ -128,6 +130,7 @@ class AppContainer(application: Application) {
     val discoveryApi: DiscoveryApi = HttpDiscoveryApi(http)
     val dismissedAnnouncements: DismissedAnnouncementsStore = DataStoreDismissedAnnouncementsStore(application)
     val mediaReader: MediaReader = ContentResolverMediaReader(application.contentResolver) { File(application.cacheDir, "staged") }
+    val mediaCleaner: LocalMediaCleaner = CacheMediaCleaner { application.cacheDir }
     val driveApi: DriveApi = HttpDriveApi(http, { okHttpClient }, mediaReader)
     val mediaCompressor: MediaCompressor = AndroidMediaCompressor(application)
     val mediaSanitizer: MediaSanitizer = AndroidMediaSanitizer(application, mediaReader)

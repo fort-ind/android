@@ -2,6 +2,7 @@ package com.fortind.zenith.settings
 
 import com.fortind.zenith.ink.SheetBackground
 import com.fortind.zenith.ink.SheetShape
+import com.fortind.zenith.media.CaptureMode
 import com.fortind.zenith.notifications.NotificationCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,10 @@ class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
 
     override suspend fun setCompressUploads(enabled: Boolean) {
         state.update { it.copy(compressUploads = enabled) }
+    }
+
+    override suspend fun setCameraMode(mode: CaptureMode) {
+        state.update { it.copy(cameraMode = mode) }
     }
 
     override suspend fun setRailCollapsed(collapsed: Boolean) {

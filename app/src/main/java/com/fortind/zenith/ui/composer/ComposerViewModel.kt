@@ -61,11 +61,14 @@ import com.fortind.zenith.emoji.DEFAULT_MAX_CW_LENGTH
 import com.fortind.zenith.emoji.DEFAULT_MAX_FILE_SIZE_BYTES
 import com.fortind.zenith.emoji.DEFAULT_MAX_NOTE_TEXT_LENGTH
 import com.fortind.zenith.emoji.InstanceInfo
+import com.fortind.zenith.media.CaptureMode
 import com.fortind.zenith.media.LocalMedia
+import com.fortind.zenith.media.LocalMediaCleaner
 import com.fortind.zenith.media.LocationNotRemovedException
 import com.fortind.zenith.media.MediaCompressor
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
+import com.fortind.zenith.media.NoMediaCleanup
 import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
@@ -260,6 +263,7 @@ class ComposerViewModel(
     private val cleanupScope: CoroutineScope? = null,
     private val resolveUsers: suspend (String?, List<String>) -> List<NoteUser> = { _, _ -> emptyList() },
     private val scheduleApi: ScheduleApi = NoSchedule,
+    private val mediaCleaner: LocalMediaCleaner = NoMediaCleanup,
 ) : ViewModel() {
 
     val text = TextFieldState()
@@ -286,6 +290,14 @@ class ComposerViewModel(
     val compressUploads: StateFlow<Boolean> = settings.settings
         .map { it.compressUploads }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val cameraMode: StateFlow<CaptureMode> = settings.settings
+        .map { it.cameraMode }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, CaptureMode.Auto)
+
+    fun setCameraMode(mode: CaptureMode) {
+        viewModelScope.launch { settings.setCameraMode(mode) }
+    }
 
     private val _suggestions = MutableStateFlow<SuggestionsState?>(null)
     val suggestions: StateFlow<SuggestionsState?> = _suggestions.asStateFlow()
@@ -772,6 +784,7 @@ class ComposerViewModel(
         uploads.remove(localId)?.cancel()
         _uiState.update { state -> state?.copy(attachments = state.attachments.filterNot { it.localId == localId }) }
         deleteFromDrive(listOf(attachment))
+        releaseLocal(listOf(attachment), stillUsedBy = _uiState.value?.attachments.orEmpty())
     }
 
     fun replaceAttachment(localId: String, media: LocalMedia) {
@@ -818,7 +831,10 @@ class ComposerViewModel(
             if (key != null) {
                 if (keepDraft) drafts.save(key, draft) else drafts.clear(key)
             }
-            if (!keepDraft) deleteFromDrive(state.attachments)
+            if (!keepDraft) {
+                deleteFromDrive(state.attachments)
+                releaseLocal(state.attachments)
+            }
         }
     }
 
@@ -954,6 +970,7 @@ class ComposerViewModel(
         uploads[localId] = viewModelScope.launch {
             val attachment = _uiState.value?.attachments?.firstOrNull { it.localId == localId } ?: return@launch
             val maxBytes = _uiState.value?.maxFileSizeBytes ?: DEFAULT_MAX_FILE_SIZE_BYTES
+            val temporaries = mutableListOf<LocalMedia>()
             try {
                 val token = session.token()
                 if (token == null) {
@@ -970,8 +987,10 @@ class ComposerViewModel(
                 if (compress) {
                     updateAttachment(localId) { it.copy(phase = AttachmentPhase.Compressing, progress = 0f, failure = null) }
                     prepared = compressor.compress(prepared) { setProgress(localId, it) }
+                    temporaries.keep(prepared, original = attachment.media)
                 }
                 prepared = sanitizer.stripLocation(prepared)
+                temporaries.keep(prepared, original = attachment.media)
                 if (prepared.sizeBytes > maxBytes) {
                     failAttachment(localId, AttachmentFailure.TooLarge)
                     return@launch
@@ -989,8 +1008,21 @@ class ComposerViewModel(
                 if (e is MissingPermissionException) _uiState.update { it?.copy(failure = ComposerFailure.MissingPermission) }
             } catch (_: SecurityException) {
                 failAttachment(localId, AttachmentFailure.Unreadable)
+            } finally {
+                temporaries.forEach { mediaCleaner.release(it) }
             }
         }
+    }
+
+    private fun MutableList<LocalMedia>.keep(produced: LocalMedia, original: LocalMedia) {
+        if (produced.uri != original.uri && none { it.uri == produced.uri }) add(produced)
+    }
+
+    private fun releaseLocal(removed: List<Attachment>, stillUsedBy: List<Attachment> = emptyList()) {
+        val inUse = stillUsedBy.mapTo(HashSet()) { it.media.uri }
+        val files = removed.map { it.media }.filter { it.uri !in inUse }
+        if (files.isEmpty()) return
+        (cleanupScope ?: viewModelScope).launch { files.forEach { mediaCleaner.release(it) } }
     }
 
     private fun setProgress(localId: String, value: Float) {
@@ -1207,6 +1239,7 @@ class ComposerViewModel(
                     resolveHandle = { token, username, host -> app.container.usersApi.showByHandle(token, username, host).user },
                     cleanupScope = app.container.scope,
                     scheduleApi = app.container.scheduleApi,
+                    mediaCleaner = app.container.mediaCleaner,
                     resolveUsers = { token, ids ->
                         coroutineScope {
                             ids.map { id ->

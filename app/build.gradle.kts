@@ -131,6 +131,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.camera.compose)
+    implementation(libs.androidx.camera.extensions)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.ink.authoring)
     implementation(libs.androidx.ink.authoring.compose)
