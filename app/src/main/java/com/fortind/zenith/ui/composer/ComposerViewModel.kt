@@ -278,6 +278,7 @@ class ComposerViewModel(
     private val mentionLookups = HashMap<String, NoteUser>()
     private val removedRecipients = HashSet<String>()
     private var driveJob: Job? = null
+    private var openJob: Job? = null
     private var driveAnchorId: String? = null
     private var driveLastPath: List<DriveFolder> = emptyList()
 
@@ -576,7 +577,8 @@ class ComposerViewModel(
         replacesScheduledId: String? = null,
     ) {
         if (seed == null && _uiState.value?.target == target) return
-        viewModelScope.launch {
+        openJob?.cancel()
+        openJob = viewModelScope.launch {
             draftOwner = session.accountId()
             draftOwner?.let { drafts.adopt(it) }
             val stored =if (seed == null) target.draftKey?.let { drafts.load(storageKey(it)) } else null
@@ -821,6 +823,7 @@ class ComposerViewModel(
     }
 
     fun close(keepDraft: Boolean) {
+        openJob?.cancel()
         val state = _uiState.value ?: return
         _uiState.value = null
         _suggestions.value = null

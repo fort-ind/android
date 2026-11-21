@@ -131,6 +131,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -256,7 +257,7 @@ fun CameraCaptureOverlay(
         onDispose {
             closed.set(true)
             recording?.stop()
-            ProcessCameraProvider.getInstance(context).let { future -> if (future.isDone) future.get().unbindAll() }
+            unbindIfReady(context)
         }
     }
 
@@ -695,6 +696,16 @@ private fun CaptureMode.extensionMode(): Int = when (this) {
     CaptureMode.Night -> ExtensionMode.NIGHT
     CaptureMode.Portrait -> ExtensionMode.BOKEH
     CaptureMode.FaceRetouch -> ExtensionMode.FACE_RETOUCH
+}
+
+private fun unbindIfReady(context: Context) {
+    val future = ProcessCameraProvider.getInstance(context)
+    if (!future.isDone) return
+    try {
+        future.get().unbindAll()
+    } catch (_: ExecutionException) {
+    } catch (_: CancellationException) {
+    }
 }
 
 private suspend fun loadExtensions(context: Context, provider: ProcessCameraProvider): ExtensionsManager? =

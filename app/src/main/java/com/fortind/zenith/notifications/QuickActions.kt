@@ -51,7 +51,7 @@ class NotificationQuickActions(
     }
 
     suspend fun replyTooLong(noteId: String, typed: String) {
-        keepFailedReply(currentUser(), noteId, typed)
+        drafts.save(draftStorageKey(session.accountId(), failedReplySlot(noteId)), ComposerDraft(text = typed))
         notifier.showActionFailed(QuickAction.Reply, noteId)
     }
 

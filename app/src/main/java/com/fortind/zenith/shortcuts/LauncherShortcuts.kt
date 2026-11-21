@@ -7,8 +7,12 @@ import com.fortind.zenith.games.GameCatalog
 import com.fortind.zenith.settings.AppIcon
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -16,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.xml.sax.SAXException
 
 private const val TAG = "LauncherShortcuts"
@@ -28,10 +33,15 @@ class LauncherShortcuts(
     private val scope: CoroutineScope,
     private val locales: () -> String,
     private val warn: (String, Throwable?) -> Unit = { message, error -> Log.w(TAG, message, error) },
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val mutex = Mutex()
+    private val pinSupport = MutableStateFlow(false)
+
+    val canPin: StateFlow<Boolean> = pinSupport.asStateFlow()
 
     fun start() {
+        checkPinSupport()
         scope.launch {
             combine(signedIn(), appIcon) { signedIn, icon -> signedIn to icon }
                 .distinctUntilChanged()
@@ -47,6 +57,7 @@ class LauncherShortcuts(
     }
 
     suspend fun refresh() {
+        checkPinSupport()
         val state = sessions.value
         if (state != SessionState.Restoring) sync(state is SessionState.SignedIn, appIcon.value)
     }
@@ -55,9 +66,13 @@ class LauncherShortcuts(
         scope.launch { guarded(Unit) { store.reportUsed(id) } }
     }
 
-    fun canPin(): Boolean = guarded(false) { store.canPin() }
+    suspend fun requestPin(target: ShortcutTarget): Boolean = withContext(io) {
+        guarded(false) { store.requestPin(target, stamp(appIcon.value)) }
+    }
 
-    fun requestPin(target: ShortcutTarget): Boolean = guarded(false) { store.requestPin(target, stamp(appIcon.value)) }
+    private fun checkPinSupport() {
+        scope.launch(io) { pinSupport.value = guarded(false) { store.canPin() } }
+    }
 
     private fun signedIn() = sessions
         .filter { it != SessionState.Restoring }

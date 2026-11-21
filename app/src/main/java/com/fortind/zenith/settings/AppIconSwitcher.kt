@@ -3,9 +3,12 @@ package com.fortind.zenith.settings
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 enum class AppIcon(val aliasName: String) {
     DEFAULT("LauncherDefault"),
@@ -21,9 +24,10 @@ interface AppIconSwitcher {
     fun set(icon: AppIcon)
 }
 
-class PackageManagerAppIconSwitcher(context: Context) : AppIconSwitcher {
+class PackageManagerAppIconSwitcher(context: Context, private val scope: CoroutineScope) : AppIconSwitcher {
     private val context = context.applicationContext
     private val packageManager = this.context.packageManager
+    private val writes = Dispatchers.IO.limitedParallelism(1)
     private val _selected = MutableStateFlow(current())
 
     override val selected: StateFlow<AppIcon> = _selected.asStateFlow()
@@ -32,9 +36,12 @@ class PackageManagerAppIconSwitcher(context: Context) : AppIconSwitcher {
         if (stateOf(AppIcon.FALL) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) AppIcon.FALL else AppIcon.DEFAULT
 
     override fun set(icon: AppIcon) {
-        setEnabled(icon, true)
-        AppIcon.entries.filter { it != icon }.forEach { setEnabled(it, false) }
-        _selected.value = current()
+        _selected.value = icon
+        scope.launch(writes) {
+            setEnabled(icon, true)
+            AppIcon.entries.filter { it != icon }.forEach { setEnabled(it, false) }
+            _selected.value = current()
+        }
     }
 
     private fun component(icon: AppIcon) = ComponentName(context.packageName, icon.launcherClassName)

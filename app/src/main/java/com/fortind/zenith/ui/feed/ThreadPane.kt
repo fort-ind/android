@@ -339,9 +339,13 @@ private fun LazyListScope.threadPeople(
             }
             if (!people.endReached) {
                 item(key = "people:more", contentType = "more") {
-                    val load by rememberUpdatedState(onLoad)
-                    LaunchedEffect(people.loadingMore, people.rows.size) { if (!people.loadingMore) load(true) }
-                    FeedLoading()
+                    if (people.loadMoreFailed) {
+                        RepliesLoadFailed(onRetry = { onLoad(true) })
+                    } else {
+                        val load by rememberUpdatedState(onLoad)
+                        LaunchedEffect(people.loadingMore, people.rows.size) { if (!people.loadingMore) load(true) }
+                        FeedLoading()
+                    }
                 }
             }
         }

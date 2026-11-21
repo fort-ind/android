@@ -24,7 +24,7 @@ class InkPicture(
     val jpeg: Boolean,
 )
 
-class InkExporter(private val cacheDir: File, private val clock: () -> Long = System::currentTimeMillis) {
+class InkExporter(private val cacheDir: () -> File, private val clock: () -> Long = System::currentTimeMillis) {
     suspend fun export(picture: InkPicture, displayName: String): LocalMedia = withContext(Dispatchers.Default) {
         val bitmap = createBitmap(picture.pixels.width, picture.pixels.height)
         try {
@@ -67,7 +67,7 @@ class InkExporter(private val cacheDir: File, private val clock: () -> Long = Sy
     }
 
     private fun outputFile(extension: String): File {
-        val directory = File(cacheDir, "captures").also { it.mkdirs() }
+        val directory = File(cacheDir(), "captures").also { it.mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date(clock()))
         return File(directory, "INK_$stamp.$extension")
     }

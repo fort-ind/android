@@ -45,14 +45,20 @@ class AndroidMediaSanitizer(private val context: Context, private val reader: Me
         return when {
             location == ImageLocation.Clean -> media
             location == ImageLocation.Found && media.mimeType in EDITABLE_FORMATS ->
-                editedCopy(media)?.takeIf { imageLocation(it) == ImageLocation.Clean } ?: reencoded(media)
+                editedCopy(media)?.cleanOrDiscarded() ?: reencoded(media)
             else -> reencoded(media)
         }
     }
 
     private suspend fun reencoded(media: LocalMedia): LocalMedia =
-        reencoder.toJpeg(media, null, LOSSLESS_LIKE_QUALITY)?.takeIf { imageLocation(it) == ImageLocation.Clean }
+        reencoder.toJpeg(media, null, LOSSLESS_LIKE_QUALITY)?.cleanOrDiscarded()
             ?: throw LocationNotRemovedException()
+
+    private fun LocalMedia.cleanOrDiscarded(): LocalMedia? {
+        if (imageLocation(this) == ImageLocation.Clean) return this
+        uri.toUri().path?.let(::File)?.delete()
+        return null
+    }
 
     private fun imageLocation(media: LocalMedia): ImageLocation {
         val inXmpPackets = try {
@@ -105,15 +111,16 @@ class AndroidMediaSanitizer(private val context: Context, private val reader: Me
     private fun stripVideoLocation(media: LocalMedia): LocalMedia {
         if (videoLocationReported(media) == false && videoBoxesHaveLocation(media) == false) return media
         val output = sanitizedFile(media.name.substringAfterLast('.', "mp4"))
+        var cleaned: LocalMedia? = null
         try {
             reader.open(media.uri).use { input -> output.outputStream().use { input.copyTo(it) } }
             neutralizeMp4Location(output)
-            val cleaned = LocalMedia(Uri.fromFile(output).toString(), media.name, media.mimeType, output.length())
-            if (videoLocationReported(cleaned) == true || videoBoxesHaveLocation(cleaned) != false) throw LocationNotRemovedException()
-            return cleaned
-        } catch (e: IOException) {
-            output.delete()
-            throw e
+            val copy = LocalMedia(Uri.fromFile(output).toString(), media.name, media.mimeType, output.length())
+            if (videoLocationReported(copy) == true || videoBoxesHaveLocation(copy) != false) throw LocationNotRemovedException()
+            cleaned = copy
+            return copy
+        } finally {
+            if (cleaned == null) output.delete()
         }
     }
 

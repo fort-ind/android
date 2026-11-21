@@ -18,7 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.composer.SharedContent
 import com.fortind.zenith.composer.SharedUri
@@ -34,38 +37,37 @@ private const val SCOPE_WRITE_DRIVE = "write:drive"
 
 class ShareActivity : ComponentActivity() {
     private val composer: ComposerViewModel by viewModels { ComposerViewModel.Factory }
+    private val share: ShareSession by viewModels { viewModelFactory { initializer { ShareSession() } } }
 
     private val container get() = (application as ZenithApplication).container
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState != null && composer.uiState.value == null) {
-            finish()
-            return
-        }
-        val shared = if (savedInstanceState == null) {
-            intent.readShare() ?: run {
+        if (savedInstanceState == null) {
+            share.pending = intent.readShare() ?: run {
                 finish()
                 return
             }
-        } else {
-            null
+            share.started = true
+        } else if (!share.started) {
+            finish()
+            return
         }
         container.emojiRepository.ensureFresh()
         setContent {
             SettingsTheme {
-                ShareRoot(shared)
+                ShareRoot()
             }
         }
     }
 
     @Composable
-    private fun ShareRoot(shared: SharedContent?) {
+    private fun ShareRoot() {
         val session by container.sessionService.state.collectAsStateWithLifecycle()
         when (session) {
             SessionState.Restoring -> Unit
-            is SessionState.SignedIn -> SignedInShare(shared)
+            is SessionState.SignedIn -> SignedInShare()
             SessionState.Guest, SessionState.SignedOut -> ShareBlocked(
                 title = R.string.share_sign_in_title,
                 body = R.string.share_sign_in_body,
@@ -74,7 +76,7 @@ class ShareActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun SignedInShare(shared: SharedContent?) {
+    private fun SignedInShare() {
         var allowed by remember { mutableStateOf<Boolean?>(null) }
         LaunchedEffect(Unit) {
             val sessions = container.sessionService
@@ -85,7 +87,10 @@ class ShareActivity : ComponentActivity() {
             false -> ShareBlocked(title = R.string.share_access_title, body = R.string.share_access_body)
             true -> {
                 LaunchedEffect(composer) {
-                    shared?.let(composer::openShare)
+                    share.pending?.let { pending ->
+                        share.pending = null
+                        composer.openShare(pending)
+                    }
                     composer.uiState.filterNotNull().first()
                     composer.uiState.first { it == null }
                     finish()
@@ -130,4 +135,9 @@ class ShareActivity : ComponentActivity() {
         Intent.ACTION_VIEW -> listOfNotNull(data)
         else -> listOfNotNull(IntentCompat.getParcelableExtra(this, Intent.EXTRA_STREAM, Uri::class.java))
     }
+}
+
+internal class ShareSession : ViewModel() {
+    var pending: SharedContent? = null
+    var started = false
 }

@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import com.fortind.zenith.composer.SharedUri
+import com.fortind.zenith.composer.isAcceptableShareUri
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.RemoteMediaProvider
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +52,7 @@ fun rememberMediaReceiver(
                 val picked = mutableListOf<Uri>()
                 val remaining = transferableContent.consume { item ->
                     val uri = item.uri
-                    if (uri != null && resolver.isMedia(uri)) {
+                    if (uri != null && isMedia(context, resolver, uri)) {
                         picked += uri
                         true
                     } else {
@@ -78,8 +80,14 @@ private fun stageOne(context: Context, reader: MediaReader, uri: Uri): String =
 @OptIn(ExperimentalFoundationApi::class)
 private val VideoMediaType = MediaType("video/*")
 
-private fun ContentResolver.isMedia(uri: Uri): Boolean {
-    val type = getType(uri)
-        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(uri.lastPathSegment.orEmpty().substringAfterLast('.', "").lowercase())
+private fun isMedia(context: Context, resolver: ContentResolver, uri: Uri): Boolean {
+    val readable = RemoteMediaProvider.isRemoteMedia(context, uri) ||
+        isAcceptableShareUri(SharedUri(uri.toString(), uri.scheme, uri.authority), context.packageName)
+    if (!readable) return false
+    val type = try {
+        resolver.getType(uri)
+    } catch (_: SecurityException) {
+        return false
+    } ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(uri.lastPathSegment.orEmpty().substringAfterLast('.', "").lowercase())
     return type != null && (type.startsWith("image/") || type.startsWith("video/"))
 }

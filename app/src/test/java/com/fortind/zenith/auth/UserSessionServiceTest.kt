@@ -101,4 +101,15 @@ class UserSessionServiceTest {
 
         assertNull(ids.read())
     }
+
+    @Test
+    fun signingOutBumpsTheCredentialsVersion() = runTest {
+        val session = UserSessionService(FakeTokenStore("token"), FakeUserApi())
+        session.restore()
+        val before = session.credentialsVersion.value
+
+        session.signOut()
+
+        assertEquals(before + 1, session.credentialsVersion.value)
+    }
 }

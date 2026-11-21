@@ -94,10 +94,10 @@ private fun discardDocument(context: Context, target: Uri) {
     }
 }
 
-suspend fun loadBitmap(context: Context, url: String): Bitmap? {
+suspend fun loadBitmap(context: Context, url: String): Bitmap? = withContext(Dispatchers.Default) {
     val request = ImageRequest.Builder(context).data(url).size(PRINT_MAX_PX, PRINT_MAX_PX).precision(Precision.INEXACT).allowHardware(false).build()
-    val result = SingletonImageLoader.get(context).execute(request) as? SuccessResult ?: return null
-    return result.image.asDrawable(context.resources).toBitmap()
+    val result = SingletonImageLoader.get(context).execute(request) as? SuccessResult ?: return@withContext null
+    result.image.asDrawable(context.resources).toBitmap()
 }
 
 fun canPrint(): Boolean = PrintHelper.systemSupportsPrint()

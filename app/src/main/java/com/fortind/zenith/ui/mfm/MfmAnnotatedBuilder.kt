@@ -56,6 +56,8 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 private const val EMOJI_SCALE = 1.25f
+private const val TADA_FACTOR = 1.5f
+private const val MAX_TEXT_SCALE = 8f
 private const val BOX_PADDING_SP = 2f
 private const val UNIX_TIME_SLACK_PX = 2f
 
@@ -144,8 +146,8 @@ internal class MfmAnnotatedBuilder(
     private fun appendFunction(fn: MfmFn, scale: Float) {
         when (fn.name) {
             "x2", "x3", "x4" -> {
-                val factor = fn.name.substring(1).toFloat()
-                builder.withStyle(SpanStyle(fontSize = (baseSize * scale * factor).sp)) { append(fn.children, scale * factor) }
+                val enlarged = enlarge(scale, fn.name.substring(1).toFloat())
+                builder.withStyle(SpanStyle(fontSize = (baseSize * enlarged).sp)) { append(fn.children, enlarged) }
             }
             "fg" -> builder.withStyle(SpanStyle(color = parseColor(fn.args["color"]) ?: Color.Unspecified)) { append(fn.children, scale) }
             "bg" -> builder.withStyle(SpanStyle(background = parseColor(fn.args["color"]) ?: Color.Unspecified)) { append(fn.children, scale) }
@@ -154,13 +156,18 @@ internal class MfmAnnotatedBuilder(
             "unixtime" -> appendUnixTime(fn, scale)
             else -> when {
                 fn.name in AnimatedFunctions && environment.animate && boxDepth == 0 -> appendBox(fn, scale)
-                fn.name == "tada" -> builder.withStyle(SpanStyle(fontSize = (baseSize * scale * 1.5f).sp)) { append(fn.children, scale * 1.5f) }
+                fn.name == "tada" -> {
+                    val enlarged = enlarge(scale, TADA_FACTOR)
+                    builder.withStyle(SpanStyle(fontSize = (baseSize * enlarged).sp)) { append(fn.children, enlarged) }
+                }
                 fn.name in BoxedFunctions && boxDepth == 0 -> appendBox(fn, scale)
                 fn.name == "ruby" -> appendRubyInline(fn, scale)
                 else -> append(fn.children, scale)
             }
         }
     }
+
+    private fun enlarge(scale: Float, factor: Float): Float = maxOf(scale, (scale * factor).coerceAtMost(MAX_TEXT_SCALE))
 
     private fun appendUnixTime(fn: MfmFn, scale: Float) {
         val inner = fn.children.toPlainText()

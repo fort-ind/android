@@ -114,6 +114,7 @@ class UserSessionService(
     suspend fun signOut() {
         withContext(Dispatchers.IO) { tokenStore.clear() }
         _state.value = SessionState.SignedOut
+        _credentialsVersion.update { it + 1 }
         accountIds.clear()
     }
 

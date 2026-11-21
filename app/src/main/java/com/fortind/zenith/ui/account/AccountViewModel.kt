@@ -85,7 +85,10 @@ class AccountViewModel(
 
     init {
         viewModelScope.launch {
-            session.credentialsVersion.drop(1).collect { _saveState.value = ProfileSaveState() }
+            session.credentialsVersion.drop(1).collect {
+                form = null
+                _saveState.value = ProfileSaveState()
+            }
         }
     }
 

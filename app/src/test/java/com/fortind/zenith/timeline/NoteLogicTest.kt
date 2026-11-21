@@ -150,4 +150,15 @@ class NoteLogicTest {
         assertNull(parseNoteUpdate("n1", "reacted", null))
         assertNull(parseNoteUpdate("n1", "mystery", null))
     }
+
+    @Test
+    fun anEditKeepsTheEmojiItAdds() {
+        val original = testNote("n1").copy(emojis = mapOf("old@r.example" to "https://r/old"))
+        val fresh = testNote("n1", text = "now :new:").copy(emojis = mapOf("new@r.example" to "https://r/new"))
+
+        val edited = original.withEditFrom(fresh, editedAtMillis = 5L)
+
+        assertEquals("https://r/new", edited.emojis["new@r.example"])
+        assertEquals("https://r/old", edited.emojis["old@r.example"])
+    }
 }

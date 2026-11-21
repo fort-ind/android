@@ -168,7 +168,7 @@ private class FullParser(private val src: String, private val nestLimit: Int) {
         if (firstLineEnd >= src.length) return null
         val lang = src.substring(pos + 3, firstLineEnd).trim()
         if ('`' in lang) return null
-        var search = firstLineEnd
+        var search = firstLineEnd + 1
         while (true) {
             val close = src.indexOf("\n```", search)
             if (close < 0) return null

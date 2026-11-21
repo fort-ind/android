@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +44,7 @@ fun PictureInPictureVideo(playback: FeedPlayback) {
     val eligible = playback.videoPlaying
     val aspect = pictureInPictureAspect(playback.videoAspect)
     val sourceRect = playback.videoBounds?.let { Rect(it.left, it.top, it.right, it.bottom) }
-    SideEffect { activity.updatePictureInPictureParams(eligible, aspect, sourceRect) }
+    LaunchedEffect(activity, eligible, aspect, sourceRect) { activity.updatePictureInPictureParams(eligible, aspect, sourceRect) }
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && eligible) {
         DisposableEffect(activity, aspect, sourceRect) {
             val enter = Runnable { activity.enterPictureInPicture(aspect, sourceRect) }

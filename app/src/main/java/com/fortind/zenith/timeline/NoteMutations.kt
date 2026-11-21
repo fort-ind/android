@@ -67,6 +67,7 @@ fun Note.withEditFrom(fresh: Note, editedAtMillis: Long?): Note = copy(
     visibility = fresh.visibility,
     localOnly = fresh.localOnly,
     files = fresh.files,
+    emojis = emojis + fresh.emojis,
     poll = fresh.poll,
     renote = fresh.renote,
     reactionAcceptance = fresh.reactionAcceptance,

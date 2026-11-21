@@ -12,6 +12,8 @@ import coil3.request.allowHardware
 import coil3.size.Precision
 import coil3.size.Scale
 import coil3.toBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 class MarkupPhotoLoader(private val context: Context) {
@@ -33,9 +35,11 @@ class MarkupPhotoLoader(private val context: Context) {
             .precision(Precision.INEXACT)
             .build()
         val result = SingletonImageLoader.get(context).execute(request) as? SuccessResult ?: return@withTimeoutOrNull null
-        val bitmap = result.image.toBitmap()
-        val limited = SheetGeometry.limitPixels(bitmap.width, bitmap.height)
-        if (limited.width == bitmap.width && limited.height == bitmap.height) bitmap else bitmap.scale(limited.width, limited.height)
+        withContext(Dispatchers.Default) {
+            val bitmap = result.image.toBitmap()
+            val limited = SheetGeometry.limitPixels(bitmap.width, bitmap.height)
+            if (limited.width == bitmap.width && limited.height == bitmap.height) bitmap else bitmap.scale(limited.width, limited.height)
+        }
     }
 
     private companion object {

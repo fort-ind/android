@@ -66,9 +66,11 @@ import com.fortind.zenith.timeline.withVotes
 import com.fortind.zenith.timeline.withoutVotes
 import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -136,6 +138,7 @@ class FeedViewModel(
     private val atTop = TimelineKind.entries.associateWith { true }.toMutableMap()
     private val loadJobs = HashMap<TimelineKind, Job>()
     private var threadJob: Job? = null
+    private var threadPages: Job = SupervisorJob(viewModelScope.coroutineContext[Job])
     private val threadCache = object : LinkedHashMap<String, ThreadState>(THREAD_CACHE_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ThreadState>?) = size > THREAD_CACHE_SIZE
     }
@@ -393,24 +396,22 @@ class FeedViewModel(
         val cursor = thread.repliesCursor ?: return
         if (thread.loading || thread.repliesLoadingMore || thread.repliesEnd) return
         updateReplies(thread.noteId) { it.copy(repliesLoadingMore = true, repliesLoadMoreFailed = false) }
-        viewModelScope.launch {
+        launchThreadPage { generation ->
             val page = try {
                 api.children(token, thread.noteId, sinceId = cursor, limit = PAGE_SIZE)
             } catch (e: IOException) {
+                if (authGeneration == generation) updateReplies(thread.noteId) { it.copy(repliesLoadingMore = false, repliesLoadMoreFailed = true) }
                 handleFailure(e) {}
-                null
+                return@launchThreadPage
             }
+            if (authGeneration != generation) return@launchThreadPage
             updateReplies(thread.noteId) { current ->
-                if (page == null) {
-                    current.copy(repliesLoadingMore = false, repliesLoadMoreFailed = true)
-                } else {
-                    current.copy(
-                        replies = mergeChronological(current.replies, page),
-                        repliesLoadingMore = false,
-                        repliesEnd = page.size < PAGE_SIZE,
-                        repliesCursor = page.lastOrNull()?.id ?: cursor,
-                    )
-                }
+                current.copy(
+                    replies = mergeChronological(current.replies, page),
+                    repliesLoadingMore = false,
+                    repliesEnd = page.size < PAGE_SIZE,
+                    repliesCursor = page.lastOrNull()?.id ?: cursor,
+                )
             }
         }
     }
@@ -446,9 +447,10 @@ class FeedViewModel(
         updateBranch(threadId, parentId, persist = false) {
             it.copy(expanded = true, loading = first, loadingMore = !first, failed = false, moreFailed = false)
         }
-        viewModelScope.launch {
+        launchThreadPage { generation ->
             try {
                 val page = api.children(token, parentId, sinceId = sinceId, limit = PAGE_SIZE)
+                if (authGeneration != generation) return@launchThreadPage
                 updateBranch(threadId, parentId) {
                     it.copy(
                         children = mergeChronological(it.children, page),
@@ -459,8 +461,10 @@ class FeedViewModel(
                     )
                 }
             } catch (e: IOException) {
-                updateBranch(threadId, parentId) {
-                    it.copy(loading = false, loadingMore = false, failed = first, moreFailed = !first)
+                if (authGeneration == generation) {
+                    updateBranch(threadId, parentId) {
+                        it.copy(loading = false, loadingMore = false, failed = first, moreFailed = !first)
+                    }
                 }
                 handleFailure(e) {}
             }
@@ -583,13 +587,14 @@ class FeedViewModel(
         if (!canLoadPeople(current, more)) return
         val noteId = thread.noteId
         updateThreadPeople(noteId, null, renotes = true) { it.loadingPage(more) }
-        viewModelScope.launch {
+        launchThreadPage { generation ->
             try {
                 val page = api.renotesOf(token, noteId, current.rows.lastOrNull()?.pagingId.takeIf { more }, THREAD_PEOPLE_PAGE)
+                if (authGeneration != generation) return@launchThreadPage
                 val rows = page.map { ThreadPerson(it.id, it.user) }
                 updateThreadPeople(noteId, null, renotes = true) { it.withPage(rows, more) }
             } catch (e: IOException) {
-                updateThreadPeople(noteId, null, renotes = true) { it.failedPage() }
+                if (authGeneration == generation) updateThreadPeople(noteId, null, renotes = true) { it.failedPage() }
                 handleFailure(e) {}
             }
         }
@@ -601,14 +606,15 @@ class FeedViewModel(
         if (!canLoadPeople(current, more)) return
         val noteId = thread.noteId
         updateThreadPeople(noteId, reaction, renotes = false) { it.loadingPage(more) }
-        viewModelScope.launch {
+        launchThreadPage { generation ->
             try {
                 val type = reaction?.let { key -> Reactions.toApi(key, instance.emojis.value?.names) ?: key }
                 val page = api.reactionsOn(token, noteId, type, current.rows.lastOrNull()?.pagingId.takeIf { more }, THREAD_PEOPLE_PAGE)
+                if (authGeneration != generation) return@launchThreadPage
                 val rows = page.map { ThreadPerson(it.id, it.user, it.reaction) }
                 updateThreadPeople(noteId, reaction, renotes = false) { it.withPage(rows, more) }
             } catch (e: IOException) {
-                updateThreadPeople(noteId, reaction, renotes = false) { it.failedPage() }
+                if (authGeneration == generation) updateThreadPeople(noteId, reaction, renotes = false) { it.failedPage() }
                 handleFailure(e) {}
             }
         }
@@ -620,9 +626,19 @@ class FeedViewModel(
         current.status != TimelineStatus.Loading
     }
 
-    private fun ThreadPeople.loadingPage(more: Boolean) = if (more) copy(loadingMore = true) else copy(status = TimelineStatus.Loading)
+    private fun ThreadPeople.loadingPage(more: Boolean) =
+        if (more) copy(loadingMore = true, loadMoreFailed = false) else copy(status = TimelineStatus.Loading, loadMoreFailed = false)
 
-    private fun ThreadPeople.failedPage() = copy(status = if (rows.isEmpty()) TimelineStatus.Failed else TimelineStatus.Ready, loadingMore = false)
+    private fun ThreadPeople.failedPage() = copy(
+        status = if (rows.isEmpty()) TimelineStatus.Failed else TimelineStatus.Ready,
+        loadingMore = false,
+        loadMoreFailed = rows.isNotEmpty(),
+    )
+
+    private fun launchThreadPage(block: suspend CoroutineScope.(generation: Int) -> Unit) {
+        val generation = authGeneration
+        viewModelScope.launch(threadPages) { block(generation) }
+    }
 
     private fun ThreadPeople.withPage(page: List<ThreadPerson>, more: Boolean): ThreadPeople {
         val known = if (more) rows.mapTo(HashSet()) { it.pagingId } else HashSet()
@@ -1129,6 +1145,8 @@ class FeedViewModel(
         loadJobs.values.forEach { it.cancel() }
         loadJobs.clear()
         threadJob?.cancel()
+        threadPages.cancel()
+        threadPages = SupervisorJob(viewModelScope.coroutineContext[Job])
         threadCache.clear()
         reactionJobs.values.forEach { it.cancel() }
         reactionJobs.clear()

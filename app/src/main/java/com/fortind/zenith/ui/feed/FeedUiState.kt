@@ -35,6 +35,7 @@ data class ThreadPeople(
     val status: TimelineStatus = TimelineStatus.Idle,
     val rows: List<ThreadPerson> = emptyList(),
     val loadingMore: Boolean = false,
+    val loadMoreFailed: Boolean = false,
     val endReached: Boolean = false,
 )
 

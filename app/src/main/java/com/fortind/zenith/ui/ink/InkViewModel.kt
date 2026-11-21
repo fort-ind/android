@@ -297,7 +297,7 @@ class InkViewModel(
                 val app = this[APPLICATION_KEY] as ZenithApplication
                 InkViewModel(
                     settings = app.container.settingsStore,
-                    exporter = InkExporter(app.cacheDir),
+                    exporter = InkExporter({ app.cacheDir }),
                     photos = MarkupPhotoLoader(app),
                 )
             }

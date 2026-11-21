@@ -23,7 +23,7 @@ import org.junit.runner.RunWith
 class InkExporterTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val cacheDir = File(context.cacheDir, "ink-exporter-test")
-    private val exporter = InkExporter(cacheDir)
+    private val exporter = InkExporter({ cacheDir })
     private val sheet = SheetGeometry.drawing(SheetShape.Landscape)
     private val pixels = SheetGeometry.drawingExport(sheet)
 

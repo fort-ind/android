@@ -143,6 +143,7 @@ class PeopleViewModel(
     private var auth: PeopleAuth = PeopleAuth.Pending
     private val personJobs = HashMap<String, Job>()
     private val listJobs = HashMap<FollowListKey, Job>()
+    private val handleJobs = HashMap<String, Job>()
 
     private val token: String? get() = (auth as? PeopleAuth.SignedIn)?.token
 
@@ -183,6 +184,8 @@ class PeopleViewModel(
         personJobs.clear()
         listJobs.values.forEach { it.cancel() }
         listJobs.clear()
+        handleJobs.values.forEach { it.cancel() }
+        handleJobs.clear()
         _uiState.value = PeopleUiState(
             myUserId = (next as? PeopleAuth.SignedIn)?.userId,
             signedIn = next is PeopleAuth.SignedIn,
@@ -233,9 +236,9 @@ class PeopleViewModel(
 
     fun openHandle(username: String, host: String?) {
         val handle = handleKey(username, host)
-        if (handle in _uiState.value.handles) return
+        if (handle in _uiState.value.handles || handleJobs[handle]?.isActive == true) return
         _uiState.update { it.copy(failedHandles = it.failedHandles - handle) }
-        viewModelScope.launch {
+        handleJobs[handle] = viewModelScope.launch {
             try {
                 val detail = users.showByHandle(token, username, host)
                 apply(detail)
@@ -323,8 +326,11 @@ class PeopleViewModel(
 
     fun loadList(key: FollowListKey) {
         val current = _uiState.value.list(key)
-        if (listJobs[key]?.isActive == true) return
-        updateList(key) { it.copy(status = if (current.rows.isEmpty()) UserListStatus.Loading else it.status, loadMoreFailed = false) }
+        if (!canLoad(key) || (listJobs[key]?.isActive == true && !current.loadingMore)) return
+        listJobs[key]?.cancel()
+        updateList(key) {
+            it.copy(status = if (current.rows.isEmpty()) UserListStatus.Loading else it.status, loadingMore = false, loadMoreFailed = false)
+        }
         listJobs[key] = viewModelScope.launch {
             try {
                 val rows = page(key, untilId = null)
@@ -356,7 +362,7 @@ class PeopleViewModel(
     fun loadMore(key: FollowListKey) {
         val state = _uiState.value.list(key)
         val cursor = state.cursor ?: return
-        if (state.status != UserListStatus.Ready || state.loadingMore || state.endReached) return
+        if (!canLoad(key) || state.status != UserListStatus.Ready || state.loadingMore || state.endReached) return
         updateList(key) { it.copy(loadingMore = true, loadMoreFailed = false) }
         listJobs[key] = viewModelScope.launch {
             try {
@@ -377,8 +383,10 @@ class PeopleViewModel(
         }
     }
 
+    private fun canLoad(key: FollowListKey): Boolean = key.kind != FollowListKind.Requests || token != null
+
     private suspend fun page(key: FollowListKey, untilId: String?): List<UserListRow> = when (key.kind) {
-        FollowListKind.Requests -> users.followRequests(requireNotNull(token) { "Requests list needs a token" }, untilId, LIST_PAGE_SIZE)
+        FollowListKind.Requests -> token?.let { users.followRequests(it, untilId, LIST_PAGE_SIZE) }.orEmpty()
         else -> users.follows(token, key.userId, key.kind, untilId, LIST_PAGE_SIZE)
     }
 

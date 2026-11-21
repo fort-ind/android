@@ -78,34 +78,36 @@ private fun Modifier.staticEffect(fn: MfmFn, fontPx: Float): Modifier {
             }
         }
         "rotate" -> {
-            val degrees = args["deg"]?.toFloatOrNull() ?: 90f
+            val degrees = args["deg"].toFiniteFloatOrNull() ?: 90f
             Modifier.graphicsLayer { rotationZ = degrees }
         }
         "scale" -> {
-            val x = (args["x"]?.toFloatOrNull() ?: 1f).coerceIn(-MAX_SCALE, MAX_SCALE)
-            val y = (args["y"]?.toFloatOrNull() ?: 1f).coerceIn(-MAX_SCALE, MAX_SCALE)
+            val x = (args["x"].toFiniteFloatOrNull() ?: 1f).coerceIn(-MAX_SCALE, MAX_SCALE)
+            val y = (args["y"].toFiniteFloatOrNull() ?: 1f).coerceIn(-MAX_SCALE, MAX_SCALE)
             Modifier.graphicsLayer {
                 scaleX = x
                 scaleY = y
             }
         }
         "position" -> {
-            val x = (args["x"]?.toFloatOrNull() ?: 0f).coerceIn(-MAX_POSITION_EM, MAX_POSITION_EM)
-            val y = (args["y"]?.toFloatOrNull() ?: 0f).coerceIn(-MAX_POSITION_EM, MAX_POSITION_EM)
+            val x = (args["x"].toFiniteFloatOrNull() ?: 0f).coerceIn(-MAX_POSITION_EM, MAX_POSITION_EM)
+            val y = (args["y"].toFiniteFloatOrNull() ?: 0f).coerceIn(-MAX_POSITION_EM, MAX_POSITION_EM)
             Modifier.graphicsLayer {
                 translationX = x * fontPx
                 translationY = y * fontPx
             }
         }
         "border" -> {
-            val width = (args["width"]?.toFloatOrNull() ?: 1f).coerceIn(0f, 8f)
-            val radius = (args["radius"]?.toFloatOrNull() ?: 0f).coerceIn(0f, 32f)
+            val width = (args["width"].toFiniteFloatOrNull() ?: 1f).coerceIn(0f, 8f)
+            val radius = (args["radius"].toFiniteFloatOrNull() ?: 0f).coerceIn(0f, 32f)
             val color = parseColor(args["color"]) ?: Color.Gray
             Modifier.border(width.dp, color, RoundedCornerShape(radius.dp))
         }
         else -> Modifier
     }
 }
+
+private fun String?.toFiniteFloatOrNull(): Float? = this?.toFloatOrNull()?.takeIf(Float::isFinite)
 
 private fun parseDurationMs(value: String?, default: Int): Int {
     val text = value?.trim() ?: return default

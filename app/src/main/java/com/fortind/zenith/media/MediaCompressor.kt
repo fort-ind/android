@@ -50,11 +50,13 @@ class AndroidMediaCompressor(private val context: Context) : MediaCompressor {
 
     private val outputDir: File get() = File(context.cacheDir, "compressed").also { it.mkdirs() }
 
-    override suspend fun compress(media: LocalMedia, onProgress: (Float) -> Unit): LocalMedia = when {
-        media.kind == MediaKind.Image && media.mimeType in COMPRESSIBLE_IMAGES && media.sizeBytes > IMAGE_THRESHOLD_BYTES ->
-            compressImage(media)
-        media.kind == MediaKind.Video && media.sizeBytes > VIDEO_THRESHOLD_BYTES -> compressVideo(media, onProgress)
-        else -> media
+    override suspend fun compress(media: LocalMedia, onProgress: (Float) -> Unit): LocalMedia = withContext(Dispatchers.IO) {
+        when {
+            media.kind == MediaKind.Image && media.mimeType in COMPRESSIBLE_IMAGES && media.sizeBytes > IMAGE_THRESHOLD_BYTES ->
+                compressImage(media)
+            media.kind == MediaKind.Video && media.sizeBytes > VIDEO_THRESHOLD_BYTES -> compressVideo(media, onProgress)
+            else -> media
+        }
     }
 
     private suspend fun compressImage(media: LocalMedia): LocalMedia {

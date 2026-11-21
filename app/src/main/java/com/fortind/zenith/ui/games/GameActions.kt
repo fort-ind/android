@@ -10,7 +10,6 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.toArgb
@@ -19,6 +18,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.R
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.games.FavoriteNotice
@@ -47,7 +47,7 @@ fun gameActions(snackbarHostState: SnackbarHostState, onToggleFavorite: (Game) -
     val linkCopiedMessage = stringResource(R.string.games_link_copied)
     val pinFailedMessage = stringResource(R.string.shortcut_pin_failed)
     val shortcuts = (context.applicationContext as ZenithApplication).container.launcherShortcuts
-    val canPin = remember(shortcuts) { shortcuts.canPin() }
+    val canPin by shortcuts.canPin.collectAsStateWithLifecycle()
 
     return GameActions(
         open = { game ->
@@ -74,8 +74,8 @@ fun gameActions(snackbarHostState: SnackbarHostState, onToggleFavorite: (Game) -
         toggleFavorite = onToggleFavorite,
         pinToHome = if (canPin) {
             { game ->
-                if (!shortcuts.requestPin(ShortcutTarget.PinnedGame(game))) {
-                    scope.launch { snackbarHostState.showSnackbar(pinFailedMessage) }
+                scope.launch {
+                    if (!shortcuts.requestPin(ShortcutTarget.PinnedGame(game))) snackbarHostState.showSnackbar(pinFailedMessage)
                 }
             }
         } else {

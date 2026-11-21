@@ -179,4 +179,16 @@ class MfmParserTest {
         assertEquals("hi :wave: :big: @bob", nodes.toPlainText())
         assertEquals(setOf("wave", "big"), nodes.emojiNames())
     }
+
+    @Test
+    fun anEmptyCodeFenceDoesNotCrash() {
+        parse("```\n```")
+        parse("```kt\n```")
+        parse("before\n```\n```\nafter")
+    }
+
+    @Test
+    fun aCodeBlockWithOneBlankLineIsEmpty() {
+        assertEquals(listOf(MfmBlockCode("", "kt")), parse("```kt\n\n```"))
+    }
 }

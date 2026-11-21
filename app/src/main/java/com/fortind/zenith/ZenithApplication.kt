@@ -142,7 +142,7 @@ class AppContainer(application: Application) {
     val gameCatalog: GameCatalog = AssetGameCatalog(application.assets)
     val favoritesStore: FavoritesStore = DataStoreFavoritesStore(application)
     val settingsStore: SettingsStore = DataStoreSettingsStore(application)
-    val appIconSwitcher: AppIconSwitcher = PackageManagerAppIconSwitcher(application)
+    val appIconSwitcher: AppIconSwitcher = PackageManagerAppIconSwitcher(application, scope)
     val foregroundTracker = AppForegroundTracker()
     val windowEvents = WindowEvents()
     private val notificationSyncStore: NotificationSyncStore = DataStoreNotificationSyncStore(application)

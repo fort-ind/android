@@ -77,6 +77,7 @@ class FakeNotesApi : NotesApi {
     val childrenCalls = CopyOnWriteArrayList<Pair<String, String?>>()
     var branchFailure: IOException? = null
     var moreRepliesFailure: IOException? = null
+    var moreRenotesFailure: IOException? = null
     var reactFailure: IOException? = null
     var unreactFailure: IOException? = null
     var renoteFailure: IOException? = null
@@ -214,8 +215,10 @@ class FakeNotesApi : NotesApi {
         return CurrentUser("me", "me", null, null, null)
     }
 
-    override suspend fun renotesOf(token: String?, noteId: String, untilId: String?, limit: Int): List<Note> =
-        if (untilId == null) renoteRows else emptyList()
+    override suspend fun renotesOf(token: String?, noteId: String, untilId: String?, limit: Int): List<Note> {
+        if (untilId != null) moreRenotesFailure?.let { throw it }
+        return if (untilId == null) renoteRows else emptyList()
+    }
 
     override suspend fun reactionsOn(token: String?, noteId: String, type: String?, untilId: String?, limit: Int): List<NoteReactionRow> {
         reactionQueries += type

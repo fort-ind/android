@@ -37,6 +37,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.auth.SessionState
+import com.fortind.zenith.auth.TokenRejectedException
+import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.settings.WindowSizeDp
 import com.fortind.zenith.shortcuts.LauncherShortcut
 import com.fortind.zenith.timeline.Note
@@ -58,6 +60,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 private const val SIZE_SAVE_DEBOUNCE_MS = 500L
 private val MinRememberedWidth = 320.dp
@@ -113,7 +116,9 @@ class ComposerWindowActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        container.foregroundTracker.windowStopped()
+        if (container.foregroundTracker.windowStopped()) {
+            container.scope.launch { container.notificationSyncer.acknowledgeSeen() }
+        }
     }
 
     override fun onDestroy() {
@@ -218,6 +223,12 @@ class ComposerWindowActivity : ComponentActivity() {
 
     private suspend fun loadNote(noteId: String): Note? = try {
         container.notesApi.show(container.sessionService.token(), noteId)
+    } catch (_: TokenRejectedException) {
+        container.sessionService.signOut()
+        null
+    } catch (_: MissingPermissionException) {
+        openMainWindow()
+        null
     } catch (_: IOException) {
         null
     }

@@ -17,6 +17,7 @@ private const val MAX_LOCATION_PAYLOAD = 64L * 1024
 private const val MAX_KEYS_PAYLOAD = 1024L * 1024
 private const val MAX_XMP_PAYLOAD = 4L * 1024 * 1024
 private const val ZERO_CHUNK = 64 * 1024
+private const val MAX_CONTAINER_DEPTH = 32
 private val CONTAINERS = setOf("moov", "trak", "udta")
 private val LOCATION_BOXES = setOf("©xyz", "loci")
 private const val META = "meta"
@@ -67,17 +68,18 @@ private class LocationFinder(private val input: BoxInput) {
 
     fun find(end: Long): List<LocationBox> {
         try {
-            walk(0L, end)
+            walk(0L, end, depth = 0)
         } catch (_: EOFException) {
             return found
         }
         return found
     }
 
-    private fun walk(start: Long, end: Long) {
+    private fun walk(start: Long, end: Long, depth: Int) {
+        if (depth > MAX_CONTAINER_DEPTH) throw IOException("Boxes nested too deeply")
         forEachBox(start, end) { box ->
             when (box.type) {
-                in CONTAINERS -> walk(box.payloadStart, box.end)
+                in CONTAINERS -> walk(box.payloadStart, box.end, depth + 1)
                 META -> walkMeta(box)
                 in LOCATION_BOXES -> {
                     if (box.payloadSize > MAX_LOCATION_PAYLOAD) throw IOException("Location box too large")

@@ -426,6 +426,33 @@ class FeedViewModelTest {
     }
 
     @Test
+    fun aFailedPageOfRenotesWaitsForRetryInsteadOfLooping() = runTest {
+        val f = fixture()
+        f.api.notes["n1"] = testNote("n1")
+        f.api.renoteRows = listOf(testNote("r1", user = testUser("u2")))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        f.viewModel.openThread("n1")
+        awaitTrue { f.viewModel.uiState.value.thread?.loading == false }
+        f.viewModel.loadThreadRenotes()
+        awaitTrue { f.viewModel.uiState.value.thread?.renotes?.status == TimelineStatus.Ready }
+        f.api.moreRenotesFailure = IOException("offline")
+
+        f.viewModel.loadThreadRenotes(more = true)
+
+        awaitTrue { f.viewModel.uiState.value.thread?.renotes?.loadMoreFailed == true }
+        val failed = f.viewModel.uiState.value.thread?.renotes
+        assertEquals(false, failed?.loadingMore)
+        assertEquals(false, failed?.endReached)
+        assertEquals(1, failed?.rows?.size)
+
+        f.api.moreRenotesFailure = null
+        f.viewModel.loadThreadRenotes(more = true)
+
+        awaitTrue { f.viewModel.uiState.value.thread?.renotes?.endReached == true }
+        assertEquals(false, f.viewModel.uiState.value.thread?.renotes?.loadMoreFailed)
+    }
+
+    @Test
     fun renotingForgetsTheLoadedRenoteList() = runTest {
         val f = fixture()
         f.api.notes["n1"] = testNote("n1", user = testUser("other"))

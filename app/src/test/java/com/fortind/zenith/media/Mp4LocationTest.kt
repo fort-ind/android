@@ -10,6 +10,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.IOException
+import org.junit.Assert.assertThrows
 
 class Mp4LocationTest {
 
@@ -166,5 +168,23 @@ class Mp4LocationTest {
     fun dataThatIsNotMp4IsNotFlagged() {
         assertFalse(streamHasMp4Location(byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte(), 1, 2, 3, 4, 5, 6, 7, 8).inputStream()))
         assertFalse(streamHasMp4Location(ByteArray(0).inputStream()))
+    }
+
+    @Test
+    fun deeplyNestedContainersFailInsteadOfOverflowingTheStack() {
+        var nested = box("udta", box("loci", gps))
+        repeat(5_000) { nested = box("udta", nested) }
+
+        assertThrows(IOException::class.java) { streamHasMp4Location(nested.inputStream()) }
+        val file = write(nested)
+        assertThrows(IOException::class.java) { neutralizeMp4Location(file) }
+    }
+
+    @Test
+    fun realisticNestingStillFindsLocation() {
+        var nested = box("loci", gps)
+        repeat(20) { nested = box("udta", nested) }
+
+        assertTrue(streamHasMp4Location(box("moov", box("trak", nested)).inputStream()))
     }
 }

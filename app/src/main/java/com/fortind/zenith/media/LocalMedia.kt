@@ -56,7 +56,11 @@ class ContentResolverMediaReader(
             return null
         }
         val resolvedName = name?.takeIf { it.isNotBlank() } ?: parsed.lastPathSegment ?: return null
-        val mime = resolver.getType(parsed) ?: mimeFromName(resolvedName) ?: return null
+        val mime = try {
+            resolver.getType(parsed)
+        } catch (_: SecurityException) {
+            return null
+        } ?: mimeFromName(resolvedName) ?: return null
         return LocalMedia(uri, resolvedName, mime, if (size >= 0) size else measure(uri))
     }
 
@@ -74,6 +78,8 @@ class ContentResolverMediaReader(
             open(uri).use { input -> target.outputStream().use { input.copyTo(it) } }
             Uri.fromFile(target).toString()
         } catch (_: IOException) {
+            uri
+        } catch (_: SecurityException) {
             uri
         }
     }
@@ -103,6 +109,8 @@ class ContentResolverMediaReader(
             total
         }
     } catch (_: IOException) {
+        UNKNOWN_SIZE
+    } catch (_: SecurityException) {
         UNKNOWN_SIZE
     }
 

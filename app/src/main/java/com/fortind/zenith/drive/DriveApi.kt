@@ -6,6 +6,7 @@ import com.fortind.zenith.net.translatingAuthErrors
 import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.media.LocalMedia
 import com.fortind.zenith.media.MediaReader
+import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.parseApiErrorCode
@@ -14,8 +15,8 @@ import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.timeline.parseNoteFile
 import java.io.IOException
 import java.io.InputStream
+import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -91,7 +92,11 @@ class HttpDriveApi(
         val text = withContext(Dispatchers.IO) {
             uploadClient.newCall(request).await().use { response ->
                 val payload = response.body.string()
-                if (!response.isSuccessful) throw translateAuthError(HttpStatusException(response.code, parseApiErrorCode(payload)))
+                if (!response.isSuccessful) {
+                    val apiCode = parseApiErrorCode(payload)
+                    if (response.code == HttpURLConnection.HTTP_FORBIDDEN && apiCode == ApiErrorCodes.PERMISSION_DENIED) http.onPermissionDenied?.invoke()
+                    throw translateAuthError(HttpStatusException(response.code, apiCode))
+                }
                 payload
             }
         }
@@ -162,7 +167,7 @@ private suspend fun Call.await(): Response = suspendCancellableCoroutine { conti
         }
 
         override fun onResponse(call: Call, response: Response) {
-            continuation.resume(response)
+            continuation.resume(response) { _, unused, _ -> unused.close() }
         }
     })
 }

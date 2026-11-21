@@ -34,7 +34,13 @@ internal class ImageReencoder(private val context: Context) {
             .build()
         val result = SingletonImageLoader.get(context).execute(request) as? SuccessResult ?: return@withContext null
         val output = File(outputDir, "${UUID.randomUUID()}.jpg")
-        output.outputStream().use { result.image.toBitmap().compress(Bitmap.CompressFormat.JPEG, quality, it) }
+        var written = false
+        try {
+            written = output.outputStream().use { result.image.toBitmap().compress(Bitmap.CompressFormat.JPEG, quality, it) }
+        } finally {
+            if (!written) output.delete()
+        }
+        if (!written) return@withContext null
         LocalMedia(Uri.fromFile(output).toString(), media.name.substringBeforeLast('.') + ".jpg", "image/jpeg", output.length())
     }
 }

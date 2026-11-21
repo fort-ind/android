@@ -194,7 +194,7 @@ private fun NoteListPage(
 @Composable
 fun TagPage(tag: String, ui: SocialUi, onBack: () -> Unit) {
     val shortcuts = (LocalContext.current.applicationContext as ZenithApplication).container.launcherShortcuts
-    val canPin = remember(shortcuts) { shortcuts.canPin() }
+    val canPin by shortcuts.canPin.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val pinFailed = stringResource(R.string.shortcut_pin_failed)
     val menuItems = remember(canPin, tag, ui, pinFailed) {
@@ -203,7 +203,9 @@ fun TagPage(tag: String, ui: SocialUi, onBack: () -> Unit) {
         } else {
             listOf(
                 PageMenuItem(R.string.shortcut_add_to_home) {
-                    if (!shortcuts.requestPin(ShortcutTarget.PinnedTag(tag))) scope.launch { ui.snackbar.showSnackbar(pinFailed) }
+                    scope.launch {
+                        if (!shortcuts.requestPin(ShortcutTarget.PinnedTag(tag))) ui.snackbar.showSnackbar(pinFailed)
+                    }
                 },
             )
         }
