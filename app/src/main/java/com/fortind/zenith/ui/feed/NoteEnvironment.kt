@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipAnchorPosition
@@ -95,7 +96,12 @@ fun TooltipIconButton(
     enabled: Boolean = true,
 ) {
     LabelTooltip(label = label, modifier = modifier) {
-        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.handCursor(enabled)) {
+        IconButton(
+            onClick = onClick,
+            shapes = IconButtonDefaults.shapes(),
+            enabled = enabled,
+            modifier = Modifier.handCursor(enabled),
+        ) {
             if (tint == Color.Unspecified) {
                 Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp))
             } else {

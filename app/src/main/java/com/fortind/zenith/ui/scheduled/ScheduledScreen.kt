@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -112,7 +113,7 @@ fun ScheduledScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.scheduled_title)) },
+                title = { Text(stringResource(R.string.scheduled_title), modifier = Modifier.semantics { heading() }) },
                 navigationIcon = {
                     TooltipIconButton(label = stringResource(R.string.person_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },

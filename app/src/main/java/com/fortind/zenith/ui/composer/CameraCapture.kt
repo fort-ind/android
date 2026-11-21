@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -58,15 +59,15 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuPopup
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -97,6 +98,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -106,6 +108,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fortind.zenith.R
 import com.fortind.zenith.media.LocalMedia
 import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.ui.StandaloneMenuGroup
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.openAppDetailsSettings
 import com.fortind.zenith.ui.shouldExplain
 import java.io.File
@@ -318,17 +322,22 @@ fun CameraCaptureOverlay(
                         onClick = { if (cameras.size > 2) cameraMenu = true else cameraIndex = (cameraIndex + 1) % cameras.size },
                         tint = Color.White,
                     )
-                    DropdownMenu(expanded = cameraMenu && cameras.size > 2, onDismissRequest = { cameraMenu = false }) {
-                        cameras.forEachIndexed { index, option ->
-                            DropdownMenuItem(
-                                text = { Text(cameraLabel(cameras, index)) },
-                                leadingIcon = { Icon(option.icon(), contentDescription = null) },
-                                trailingIcon = { if (index == cameraIndex) Icon(Icons.Default.Check, contentDescription = null) },
-                                onClick = {
-                                    cameraMenu = false
-                                    cameraIndex = index
-                                },
-                            )
+                    DropdownMenuPopup(expanded = cameraMenu && cameras.size > 2, onDismissRequest = { cameraMenu = false }) {
+                        StandaloneMenuGroup {
+                            cameras.forEachIndexed { index, option ->
+                                SelectableDropdownMenuItem(
+                                    selected = index == cameraIndex,
+                                    text = { Text(cameraLabel(cameras, index)) },
+                                    shapes = MenuDefaults.itemShape(index, cameras.size),
+                                    leadingIcon = { Icon(option.icon(), contentDescription = null) },
+                                    selectedLeadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
+                                    onClick = {
+                                        cameraMenu = false
+                                        cameraIndex = index
+                                    },
+                                    modifier = Modifier.handCursor(),
+                                )
+                            }
                         }
                     }
                 }
@@ -348,19 +357,28 @@ fun CameraCaptureOverlay(
             if (videoMode && !audioGranted && recording == null) {
                 MicrophoneNotice(blocked = audioBlocked, onClick = requestMicrophone)
             }
-            SingleChoiceSegmentedButtonRow {
+            Row(
+                modifier = Modifier.selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+            ) {
                 listOf(false to R.string.camera_photo, true to R.string.camera_video).forEachIndexed { index, (video, label) ->
-                    SegmentedButton(
-                        selected = videoMode == video,
-                        onClick = {
+                    ToggleButton(
+                        checked = videoMode == video,
+                        onCheckedChange = {
                             videoMode = video
                             val firstAsk = !audioBlocked && !activity.shouldExplain(Manifest.permission.RECORD_AUDIO)
                             if (video && !audioGranted && firstAsk) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
                         },
                         enabled = recording == null,
-                        shape = SegmentedButtonDefaults.itemShape(index, 2),
-                        label = { Text(stringResource(label)) },
-                    )
+                        shapes = if (index == 0) {
+                            ButtonGroupDefaults.connectedLeadingButtonShapes()
+                        } else {
+                            ButtonGroupDefaults.connectedTrailingButtonShapes()
+                        },
+                        modifier = Modifier.handCursor(recording == null).semantics { role = Role.RadioButton },
+                    ) {
+                        Text(stringResource(label))
+                    }
                 }
             }
             ShutterButton(video = videoMode, recording = recording != null, onClick = shutter)

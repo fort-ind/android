@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.CropPortrait
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingToolbarDefaults
@@ -41,11 +44,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.MenuGroupShapes
 import androidx.compose.material3.MenuItemShapes
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SelectableDropdownMenuItem
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.material3.VerticalFloatingToolbar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -62,8 +65,11 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.ink.InkColor
@@ -206,15 +212,26 @@ fun StylePanel(state: InkUiState, actions: InkPanelActions) {
         }
         DropdownMenuGroup(shapes = panelGroupShapes(), contentPadding = PanelGroupPadding, modifier = Modifier.fillMaxWidth()) {
             MenuDefaults.DropdownMenuGroupLabel { Text(stringResource(R.string.ink_size)) }
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = PanelItemInset).selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+            ) {
                 InkSize.entries.forEachIndexed { index, size ->
-                    SegmentedButton(
-                        selected = state.style.size == size,
-                        onClick = { actions.onSize(size) },
-                        shape = SegmentedButtonDefaults.itemShape(index, InkSize.entries.size),
-                        modifier = Modifier.handCursor(),
+                    ToggleButton(
+                        checked = state.style.size == size,
+                        onCheckedChange = { actions.onSize(size) },
+                        shapes = panelConnectedShapes(index, InkSize.entries.size),
+                        colors = ToggleButtonDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = PanelRowHeight)
+                            .handCursor()
+                            .semantics { role = Role.RadioButton },
                     ) {
-                        Text(stringResource(size.labelRes()))
+                        Text(stringResource(size.labelRes()), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -427,6 +444,26 @@ private val PanelItemInset = 4.dp
 private val PanelItemInnerCorner = 4.dp
 private val PanelGroupPadding = PaddingValues(vertical = PanelItemInset)
 internal val PanelShape = RoundedCornerShape(PanelGroupCorner + PanelInset)
+private val PanelRowHeight = 48.dp
+private val ConnectedInnerCorner = 8.dp
+private val ConnectedPressedInnerCorner = 4.dp
+
+private fun panelConnectedShapes(index: Int, count: Int): ToggleButtonShapes {
+    val edge = PanelGroupCorner - PanelItemInset
+    val first = index == 0
+    val last = index == count - 1
+    fun connected(inner: Dp) = RoundedCornerShape(
+        topStart = if (first) edge else inner,
+        bottomStart = if (first) edge else inner,
+        topEnd = if (last) edge else inner,
+        bottomEnd = if (last) edge else inner,
+    )
+    return ToggleButtonShapes(
+        shape = connected(ConnectedInnerCorner),
+        pressedShape = connected(ConnectedPressedInnerCorner),
+        checkedShape = RoundedCornerShape(edge),
+    )
+}
 
 @Composable
 private fun panelGroupShapes(): MenuGroupShapes {

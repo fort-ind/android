@@ -30,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
@@ -300,7 +301,12 @@ private fun TooltipIconButton(
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.handCursor(enabled)) {
+        IconButton(
+            onClick = onClick,
+            shapes = IconButtonDefaults.shapes(),
+            enabled = enabled,
+            modifier = Modifier.handCursor(enabled),
+        ) {
             Icon(imageVector = icon, contentDescription = label)
         }
     }

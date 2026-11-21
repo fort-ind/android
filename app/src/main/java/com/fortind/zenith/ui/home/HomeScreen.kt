@@ -325,7 +325,7 @@ private fun FeedPane(
         },
         floatingActionButton = {
             if (showComposeButton) {
-                val expanded = atTopOfSelected && !reduceMotion
+                val expanded = atTopOfSelected || reduceMotion
                 val label = stringResource(R.string.feed_compose)
                 ExtendedFloatingActionButton(
                     onClick = onCompose,

@@ -13,13 +13,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -46,6 +47,8 @@ import com.fortind.zenith.R
 import com.fortind.zenith.account.AccountFlag
 import com.fortind.zenith.account.SettingsEditorCheck
 import com.fortind.zenith.ui.account.AccountSettingsEvent
+import com.fortind.zenith.ui.StandaloneMenuGroup
+import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.account.AccountSettingsUiState
 import com.fortind.zenith.ui.account.AccountSettingsViewModel
 import com.fortind.zenith.ui.account.SettingSaveFailure
@@ -110,21 +113,22 @@ internal fun AccountChoiceRow(
             },
             trailing = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
         )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    enabled = option.selectable,
-                    trailingIcon = if (option.value == selected) {
-                        { Icon(Icons.Default.Check, contentDescription = stringResource(R.string.settings_choice_selected)) }
-                    } else {
-                        null
-                    },
-                    onClick = {
-                        open = false
-                        if (option.value != selected) onSelect(option.value)
-                    },
-                )
+        DropdownMenuPopup(expanded = open, onDismissRequest = { open = false }) {
+            StandaloneMenuGroup {
+                options.forEachIndexed { index, option ->
+                    SelectableDropdownMenuItem(
+                        selected = option.value == selected,
+                        text = { Text(option.label) },
+                        shapes = MenuDefaults.itemShape(index, options.size),
+                        enabled = option.selectable,
+                        selectedLeadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
+                        onClick = {
+                            open = false
+                            if (option.value != selected) onSelect(option.value)
+                        },
+                        modifier = Modifier.handCursor(option.selectable),
+                    )
+                }
             }
         }
     }

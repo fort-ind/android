@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -131,7 +132,11 @@ fun FollowListScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { owner?.user?.let { PersonTitle(it, environment) } },
+                title = {
+                    owner?.user?.let { user ->
+                        Box(Modifier.semantics(mergeDescendants = true) { heading() }) { PersonTitle(user, environment) }
+                    }
+                },
                 navigationIcon = {
                     TooltipIconButton(label = stringResource(R.string.person_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },

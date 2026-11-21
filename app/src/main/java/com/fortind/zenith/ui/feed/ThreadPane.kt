@@ -58,6 +58,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -95,7 +97,14 @@ fun ThreadPane(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.thread_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Text(
+                        stringResource(R.string.thread_title),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                },
                 navigationIcon = {
                     TooltipIconButton(
                         label = stringResource(if (twoPane) R.string.thread_close else R.string.thread_back),
