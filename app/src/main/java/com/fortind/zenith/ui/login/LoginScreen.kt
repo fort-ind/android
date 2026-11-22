@@ -1,8 +1,14 @@
 package com.fortind.zenith.ui.login
 
+import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import android.os.PersistableBundle
+import android.view.WindowManager
 import androidx.compose.foundation.background
 import com.fortind.zenith.ui.theme.isThemeDark
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,20 +93,24 @@ fun AuthPageEffects(viewModel: LoginViewModel) {
     val darkTheme = isThemeDark()
     val toolbarColor = MaterialTheme.colorScheme.surface.toArgb()
     val clipLabel = stringResource(R.string.login_manual_clip_label)
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is LoginEvent.OpenAuthPage -> {
-                    if (launchCustomTab(context, event.url, darkTheme, toolbarColor)) {
+                    if (launchCustomTab(context, event.url, darkTheme, toolbarColor, pinBrowser = true)) {
                         viewModel.onAuthPageLaunched()
                     } else {
-                        copyLink(context, clipLabel, event.url)
                         viewModel.onAuthPageLaunchFailed()
                     }
                 }
             }
         }
+    }
+
+    LaunchedEffect(state.signingIn) {
+        if (!state.signingIn) clearCopiedLink(context, clipLabel)
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onReturnedToApp() }
@@ -280,9 +291,10 @@ internal fun ErrorMessage(error: LoginError, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ManualLinkCard(url: String, modifier: Modifier = Modifier) {
+internal fun ManualLinkCard(url: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.login_manual_clip_label)
+    SecureWindowWhileShown()
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -319,9 +331,45 @@ private fun ManualLinkCard(url: String, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun SecureWindowWhileShown() {
+    val window = LocalContext.current.findActivity()?.window
+    DisposableEffect(window) {
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    }
+}
+
+internal fun sensitiveClip(label: String, text: String): ClipData = ClipData.newPlainText(label, text).apply {
+    description.extras = PersistableBundle().apply { putBoolean(SENSITIVE_CLIP_EXTRA, true) }
+}
+
 private fun copyLink(context: Context, label: String, url: String) {
-    context.getSystemService(ClipboardManager::class.java)
-        ?.setPrimaryClip(ClipData.newPlainText(label, url))
+    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(sensitiveClip(label, url))
+}
+
+private fun clearCopiedLink(context: Context, label: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    val copied = try {
+        clipboard.primaryClipDescription?.label?.toString() == label
+    } catch (_: SecurityException) {
+        false
+    }
+    if (!copied) return
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        clipboard.clearPrimaryClip()
+    } else {
+        clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+    }
+}
+
+private val SENSITIVE_CLIP_EXTRA: String =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) ClipDescription.EXTRA_IS_SENSITIVE else "android.content.extra.IS_SENSITIVE"
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private enum class LogoShape { Idle, SigningIn, Error }

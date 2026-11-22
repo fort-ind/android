@@ -19,7 +19,7 @@
     <string name="login_error_network">Couldn\'t reach %1$s. Check your connection and try again.</string>
     <string name="login_error_rejected">%1$s didn\'t accept the sign-in.</string>
     <string name="login_error_no_browser">No browser is available to open the sign-in page.</string>
-    <string name="login_manual_body">we can\'t open your browser :( (might not support webview?) so the sign-in link was copied. Paste it into any browser, approve, then come back :p </string>
+    <string name="login_manual_body">we can\'t open your browser :( (might not support webview?) so copy the sign-in link below, paste it into any browser, approve, then come back :p Keep it to yourself until you\'re signed in.</string>
     <string name="login_manual_copy">Copy link</string>
     <string name="login_manual_clip_label">Sign-in link</string>
 
@@ -298,6 +298,9 @@
     <string name="note_redraft_body">The post is deleted and its text and media open in a new post so you can fix and repost it. Reactions and renotes on it are DEAD however.</string>
     <string name="note_redraft_confirm">Delete &amp; redraft</string>
     <string name="note_dialog_cancel">Cancel</string>
+    <string name="link_check_title">Check this link</string>
+    <string name="link_check_body">This post shows %1$s, but the link goes to %2$s.</string>
+    <string name="link_check_open">Open anyway</string>
     <string name="feed_bookmarked">Bookmarked!</string>
     <string name="feed_bookmark_removed">Bookmark removed</string>
     <string name="feed_bookmark_failed">Couldn\'t update the bookmark, try again</string>

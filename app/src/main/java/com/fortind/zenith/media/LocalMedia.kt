@@ -10,6 +10,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 
 data class LocalMedia(
@@ -75,12 +76,37 @@ class ContentResolverMediaReader(
             val dir = stagingDir()
             dir.mkdirs()
             val target = File(dir, "${UUID.randomUUID()}-${media.stageName()}")
-            open(uri).use { input -> target.outputStream().use { input.copyTo(it) } }
-            Uri.fromFile(target).toString()
+            val copied = try {
+                open(uri).use { input -> target.outputStream().use { copyAtMost(input, it, STAGE_LIMIT_BYTES) } }
+            } catch (e: IOException) {
+                target.delete()
+                throw e
+            } catch (e: SecurityException) {
+                target.delete()
+                throw e
+            }
+            if (copied) {
+                Uri.fromFile(target).toString()
+            } else {
+                target.delete()
+                uri
+            }
         } catch (_: IOException) {
             uri
         } catch (_: SecurityException) {
             uri
+        }
+    }
+
+    private fun copyAtMost(input: InputStream, output: OutputStream, limit: Long): Boolean {
+        val buffer = ByteArray(BUFFER_BYTES)
+        var total = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) return true
+            total += read
+            if (total > limit) return false
+            output.write(buffer, 0, read)
         }
     }
 
@@ -105,6 +131,7 @@ class ContentResolverMediaReader(
                 val read = input.read(buffer)
                 if (read < 0) break
                 total += read
+                if (total > MEASURE_LIMIT_BYTES) break
             }
             total
         }
@@ -120,6 +147,7 @@ class ContentResolverMediaReader(
     private companion object {
         const val UNKNOWN_SIZE = -1L
         const val STAGE_LIMIT_BYTES = 16L * 1024 * 1024
+        const val MEASURE_LIMIT_BYTES = 512L * 1024 * 1024
         const val BUFFER_BYTES = 64 * 1024
     }
 }

@@ -27,6 +27,7 @@ import com.fortind.zenith.auth.HttpMiAuthApi
 import com.fortind.zenith.auth.HttpUserApi
 import com.fortind.zenith.auth.KeystoreTokenStore
 import com.fortind.zenith.auth.MiAuthApi
+import com.fortind.zenith.auth.SignOutWipe
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.autocomplete.HttpSuggestionsApi
 import com.fortind.zenith.autocomplete.SuggestionsApi
@@ -210,6 +211,14 @@ class ZenithApplication : Application(), SingletonImageLoader.Factory, Configura
         container.notificationSyncCoordinator.start(container.scope)
         container.widgetUpdater.start(container.scope)
         container.launcherShortcuts.start()
+        SignOutWipe(cacheDir = { cacheDir }, clearImageCaches = ::clearImageCaches)
+            .start(container.scope, container.sessionService.state)
+    }
+
+    private fun clearImageCaches() {
+        val loader = SingletonImageLoader.get(this)
+        loader.memoryCache?.clear()
+        loader.diskCache?.clear()
     }
 
     override val workManagerConfiguration: Configuration

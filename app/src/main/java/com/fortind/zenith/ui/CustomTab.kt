@@ -6,15 +6,17 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import androidx.browser.customtabs.CustomTabColorSchemeParams
+import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.net.toUri
 
 internal fun isWebLink(url: String): Boolean =
     (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)) && url.substringAfter("://").isNotEmpty()
 
-fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarColor: Int): Boolean {
+fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarColor: Int, pinBrowser: Boolean = false): Boolean {
     if (!isWebLink(url)) return false
-    if (context.findActivity()?.isInMultiWindowMode == true && launchBrowserView(context, url, adjacent = true)) return true
+    val browser = if (pinBrowser) preferredBrowser(context) else null
+    if (context.findActivity()?.isInMultiWindowMode == true && launchBrowserView(context, url, browser, adjacent = true)) return true
     val tab = CustomTabsIntent.Builder()
         .setShowTitle(true)
         .setColorScheme(
@@ -23,18 +25,26 @@ fun launchCustomTab(context: Context, url: String, darkTheme: Boolean, toolbarCo
         .setDefaultColorSchemeParams(CustomTabColorSchemeParams.Builder().setToolbarColor(toolbarColor).build())
         .build()
     tab.intent.addCategory(Intent.CATEGORY_BROWSABLE)
+    browser?.let(tab.intent::setPackage)
     return try {
         tab.launchUrl(context, url.toUri())
         true
     } catch (_: ActivityNotFoundException) {
-        launchBrowserView(context, url)
+        launchBrowserView(context, url, browser)
     } catch (_: SecurityException) {
-        launchBrowserView(context, url)
+        launchBrowserView(context, url, browser)
     }
 }
 
-private fun launchBrowserView(context: Context, url: String, adjacent: Boolean = false): Boolean {
+private fun preferredBrowser(context: Context): String? = try {
+    CustomTabsClient.getPackageName(context, null)
+} catch (_: SecurityException) {
+    null
+}
+
+private fun launchBrowserView(context: Context, url: String, browser: String?, adjacent: Boolean = false): Boolean {
     val view = Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+    browser?.let(view::setPackage)
     if (adjacent) view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
     return try {
         context.startActivity(view)

@@ -21,6 +21,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
+import java.io.OutputStream
+import java.io.InputStream
 
 data class SaveTarget(val fileName: String, val mimeType: String)
 
@@ -61,6 +63,8 @@ private val KnownExtensions = mapOf(
 )
 
 private const val PRINT_MAX_PX = 3_508
+private const val MAX_DOWNLOAD_BYTES = 1024L * 1024 * 1024
+private const val DOWNLOAD_BUFFER_BYTES = 64 * 1024
 
 private val UnsafeFileNameChars =Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
 
@@ -71,6 +75,8 @@ suspend fun downloadToDocument(context: Context, client: OkHttpClient, url: Stri
         false
     } catch (_: SecurityException) {
         false
+    } catch (_: IllegalArgumentException) {
+        false
     }
     if (!saved) discardDocument(context, target)
     saved
@@ -79,10 +85,22 @@ suspend fun downloadToDocument(context: Context, client: OkHttpClient, url: Stri
 private fun copyInto(context: Context, client: OkHttpClient, url: String, target: Uri): Boolean =
     client.newCall(Request.Builder().url(url).build()).execute().use { response ->
         if (!response.isSuccessful) return false
+        if (response.body.contentLength() > MAX_DOWNLOAD_BYTES) return false
         val output = context.contentResolver.openOutputStream(target, "wt") ?: return false
-        output.use { response.body.byteStream().copyTo(it) }
-        true
+        output.use { sink -> copyAtMost(response.body.byteStream(), sink) }
     }
+
+private fun copyAtMost(input: InputStream, output: OutputStream): Boolean {
+    val buffer = ByteArray(DOWNLOAD_BUFFER_BYTES)
+    var total = 0L
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) return true
+        total += read
+        if (total > MAX_DOWNLOAD_BYTES) return false
+        output.write(buffer, 0, read)
+    }
+}
 
 private fun discardDocument(context: Context, target: Uri) {
     try {

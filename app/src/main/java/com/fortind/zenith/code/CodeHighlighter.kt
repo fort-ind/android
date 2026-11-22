@@ -118,6 +118,7 @@ class CodeHighlighter(
     private val cacheSize: Int = CACHE_SIZE,
     private val tokenizerFactory: () -> CodeTokenizer = { PrismTokenizer() },
     private val coldBudgetMillis: Long = budgetMillis * COLD_FACTOR,
+    private val maxAbandonedWorkers: Int = MAX_ABANDONED_WORKERS,
 ) {
     private val cache = object : LinkedHashMap<String, CodeHighlight>(cacheSize, LOAD_FACTOR, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CodeHighlight>): Boolean = size > cacheSize
@@ -147,6 +148,7 @@ class CodeHighlighter(
 
     @Synchronized
     private fun tokenize(grammar: String, text: String): List<CodeToken>? {
+        if (abandoned >= maxAbandonedWorkers) return null
         val executor = worker ?: newWorker().also { worker = it }
         val engine = tokenizer ?: tokenizerFactory().also { tokenizer = it }
         val task = executor.submit(Callable { engine.tokenize(grammar, text) })
@@ -180,6 +182,7 @@ class CodeHighlighter(
         const val MAX_CODE_LENGTH = 2_500
         const val CACHE_SIZE = 48
         const val COLD_FACTOR = 4
+        const val MAX_ABANDONED_WORKERS = 2
         private const val LOAD_FACTOR = 0.75f
         private const val KEY_SEPARATOR = '\u0000'
     }

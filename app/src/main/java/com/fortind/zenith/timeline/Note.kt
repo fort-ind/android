@@ -7,8 +7,9 @@ import com.fortind.zenith.net.intMap
 import com.fortind.zenith.net.objects
 import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
+import com.fortind.zenith.net.webUrlMap
 import com.fortind.zenith.net.parseTimestamp
-import com.fortind.zenith.net.stringMap
 import com.fortind.zenith.net.strings
 import org.json.JSONArray
 import org.json.JSONObject
@@ -154,9 +155,9 @@ fun parseNote(json: JSONObject, depth: Int = 0): Note? {
         reply = if (nested) json.optJSONObject("reply")?.let { parseNote(it, depth + 1) } else null,
         files = json.optJSONArray("files")?.objects()?.mapNotNull(::parseNoteFile).orEmpty(),
         poll = json.optJSONObject("poll")?.let(::parsePoll),
-        emojis = json.optJSONObject("emojis")?.stringMap().orEmpty(),
+        emojis = json.optJSONObject("emojis")?.webUrlMap().orEmpty(),
         reactions = json.optJSONObject("reactions")?.intMap()?.filterValues { it > 0 }.orEmpty(),
-        reactionEmojis = json.optJSONObject("reactionEmojis")?.stringMap().orEmpty(),
+        reactionEmojis = json.optJSONObject("reactionEmojis")?.webUrlMap().orEmpty(),
         renoteCount = json.optInt("renoteCount"),
         repliesCount = json.optInt("repliesCount"),
         myReaction = json.optStringOrNull("myReaction"),
@@ -177,15 +178,15 @@ fun parseNoteUser(json: JSONObject): NoteUser? {
         host = json.optStringOrNull("host"),
         name = name,
         nameMfm = name?.let(MfmParser::parseSimple).orEmpty(),
-        avatarUrl = json.optStringOrNull("avatarUrl"),
+        avatarUrl = json.optWebUrlOrNull("avatarUrl"),
         avatarBlurhash = json.optStringOrNull("avatarBlurhash"),
-        emojis = json.optJSONObject("emojis")?.stringMap().orEmpty(),
+        emojis = json.optJSONObject("emojis")?.webUrlMap().orEmpty(),
         isBot = json.optBoolean("isBot"),
         isCat = json.optBoolean("isCat"),
         instance = json.optJSONObject("instance")?.let {
             InstanceTicker(
                 name = it.optStringOrNull("name"),
-                iconUrl = it.optStringOrNull("faviconUrl") ?: it.optStringOrNull("iconUrl"),
+                iconUrl = it.optWebUrlOrNull("faviconUrl") ?: it.optWebUrlOrNull("iconUrl"),
                 themeColor = it.optStringOrNull("themeColor"),
             )
         },
@@ -194,14 +195,14 @@ fun parseNoteUser(json: JSONObject): NoteUser? {
 
 fun parseNoteFile(json: JSONObject): NoteFile? {
     val id = json.optStringOrNull("id") ?: return null
-    val url = json.optStringOrNull("url") ?: return null
+    val url = json.optWebUrlOrNull("url") ?: return null
     val properties = json.optJSONObject("properties")
     return NoteFile(
         id = id,
         name = json.optStringOrNull("name"),
         mimeType = json.optStringOrNull("type") ?: "application/octet-stream",
         url = url,
-        thumbnailUrl = json.optStringOrNull("thumbnailUrl"),
+        thumbnailUrl = json.optWebUrlOrNull("thumbnailUrl"),
         blurhash = json.optStringOrNull("blurhash"),
         isSensitive = json.optBoolean("isSensitive"),
         altText = json.optStringOrNull("comment")?.takeIf { it.isNotBlank() },

@@ -11,11 +11,32 @@ private const val PNG_IMAGE_DATA = "IDAT"
 private const val WEBP_FLAGS_OFFSET = 20
 private const val WEBP_ANIMATION_FLAG = 0x02
 private const val PNG_CHUNK_OVERHEAD = 12
+private const val WEBP_CANVAS_OFFSET = 24
+private const val PNG_WIDTH_OFFSET = 16
+private const val PNG_HEIGHT_OFFSET = 20
 
 fun detectAnimatedFormat(header: ByteArray): AnimatedFormat? = when {
     isAnimatedWebP(header) -> AnimatedFormat.WebP
     isAnimatedPng(header) -> AnimatedFormat.Png
     else -> null
+}
+
+data class CanvasSize(val width: Long, val height: Long) {
+    fun fitsWithin(maxPixels: Long): Boolean =
+        width in 1..maxPixels && height in 1..maxPixels && width * height <= maxPixels
+}
+
+fun animatedCanvasSize(header: ByteArray, format: AnimatedFormat): CanvasSize? = when (format) {
+    AnimatedFormat.WebP -> if (header.size < WEBP_CANVAS_OFFSET + 6) {
+        null
+    } else {
+        CanvasSize(header.readUInt24LE(WEBP_CANVAS_OFFSET) + 1L, header.readUInt24LE(WEBP_CANVAS_OFFSET + 3) + 1L)
+    }
+    AnimatedFormat.Png -> if (header.size < PNG_HEIGHT_OFFSET + 4) {
+        null
+    } else {
+        CanvasSize(header.readInt(PNG_WIDTH_OFFSET).toUInt().toLong(), header.readInt(PNG_HEIGHT_OFFSET).toUInt().toLong())
+    }
 }
 
 private fun isAnimatedWebP(bytes: ByteArray): Boolean =
@@ -48,3 +69,8 @@ private fun ByteArray.readInt(at: Int): Int =
         (this[at + 1].toInt() and 0xFF shl 16) or
         (this[at + 2].toInt() and 0xFF shl 8) or
         (this[at + 3].toInt() and 0xFF)
+
+private fun ByteArray.readUInt24LE(at: Int): Int =
+    (this[at].toInt() and 0xFF) or
+        (this[at + 1].toInt() and 0xFF shl 8) or
+        (this[at + 2].toInt() and 0xFF shl 16)

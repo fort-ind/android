@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -141,10 +142,10 @@ fun MfmContent(
     val blocks = remember(nodes) { groupBlocks(nodes) }
     val single = blocks.singleOrNull()
     if (single is MfmBlock.Paragraph) {
-        MfmParagraph(single.nodes, environment, style, modifier, color, maxLines)
+        MfmParagraph(single.nodes, environment, style, modifier.clipToBounds(), color, maxLines)
         return
     }
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier.clipToBounds(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
                 is MfmBlock.Paragraph -> MfmParagraph(block.nodes, environment, style, color = color)
@@ -240,7 +241,8 @@ fun MfmParagraph(
     val measurer = rememberTextMeasurer()
     var revealed by remember(nodes) { mutableStateOf(emptySet<Int>()) }
     val aspectVersion = EmojiAspects.version
-    val built = remember(nodes, environment, style, revealed, boxDepth, aspectVersion) {
+    val onDeceptiveLink = LocalDeceptiveLinks.current
+    val built = remember(nodes, environment, style, revealed, boxDepth, aspectVersion, onDeceptiveLink) {
         MfmAnnotatedBuilder(
             environment = environment,
             baseStyle = style,
@@ -248,6 +250,7 @@ fun MfmParagraph(
             revealed = revealed,
             onReveal = { revealed = revealed + it },
             boxDepth = boxDepth,
+            onDeceptiveLink = onDeceptiveLink,
         ).build(nodes)
     }
     Text(

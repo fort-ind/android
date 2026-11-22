@@ -8,6 +8,14 @@ import org.json.JSONObject
 fun JSONObject.optStringOrNull(name: String): String? =
     if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }
 
+fun JSONObject.optWebUrlOrNull(name: String): String? = optStringOrNull(name)?.takeIf(::isWebUrl)
+
+fun isWebUrl(value: String): Boolean =
+    (value.startsWith("https://", ignoreCase = true) || value.startsWith("http://", ignoreCase = true)) &&
+        value.length > value.indexOf("://") + 3
+
+fun JSONObject.webUrlMap(): Map<String, String> = stringMap().filterValues(::isWebUrl)
+
 fun JSONObject.optIntOrNull(name: String): Int? =
     if (isNull(name) || !has(name)) null else optInt(name)
 

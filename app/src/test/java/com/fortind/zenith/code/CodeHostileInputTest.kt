@@ -47,7 +47,7 @@ class CodeHostileInputTest {
         val offenders = ArrayList<Triple<String, String, String>>()
         var worstMillis = 0L
         tags.forEach { tag ->
-            val highlighter = CodeHighlighter(budgetMillis = BUDGET_MILLIS, coldBudgetMillis = BUDGET_MILLIS, cacheSize = 1)
+            val highlighter = CodeHighlighter(budgetMillis = BUDGET_MILLIS, coldBudgetMillis = BUDGET_MILLIS, cacheSize = 1, maxAbandonedWorkers = Int.MAX_VALUE)
             highlighter.highlight("a", tag)
             inputs.forEach { (name, input) ->
                 val abandonedBefore = highlighter.abandonedWorkers
@@ -63,7 +63,7 @@ class CodeHostileInputTest {
             }
         }
         val confirmed = offenders.filter { (tag, _, input) ->
-            val retry = CodeHighlighter(budgetMillis = BUDGET_MILLIS, coldBudgetMillis = BUDGET_MILLIS, cacheSize = 1)
+            val retry = CodeHighlighter(budgetMillis = BUDGET_MILLIS, coldBudgetMillis = BUDGET_MILLIS, cacheSize = 1, maxAbandonedWorkers = Int.MAX_VALUE)
             retry.highlight("a", tag)
             retry.highlight(input, tag)
             retry.abandonedWorkers > 0

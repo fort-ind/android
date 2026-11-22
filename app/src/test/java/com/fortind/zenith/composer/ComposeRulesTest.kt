@@ -156,7 +156,7 @@ class ComposeRulesTest {
 
     @Test
     fun aDraftOfDrivePicksRemembersTheyAreNotOurs() {
-        val file = com.fortind.zenith.timeline.NoteFile("f", "n", "image/png", "u", null, null, false, null, null, null)
+        val file = com.fortind.zenith.timeline.NoteFile("f", "n", "image/png", "https://social.fort1nd.com/files/u", null, null, false, null, null, null)
         val draft = ComposerDraft(attachments = listOf(DraftAttachment(file, "", false, owned = false)))
 
         val decoded = decodeDrafts(encodeDrafts(mapOf("k" to StoredDraft(draft, 1L))))["k"]!!.draft.attachments.single()

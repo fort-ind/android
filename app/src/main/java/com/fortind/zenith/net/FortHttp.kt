@@ -1,7 +1,9 @@
 package com.fortind.zenith.net
 
 import com.fortind.zenith.auth.FortInstance
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -59,6 +61,7 @@ class FortHttp(
             val connection = URL("https://$host$target").openConnection() as HttpURLConnection
             try {
                 val timeout = timeoutFor(path)
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = if (body == null) "GET" else "POST"
                 connection.connectTimeout = timeout
                 connection.readTimeout = timeout
@@ -78,7 +81,7 @@ class FortHttp(
                     if (code == HttpURLConnection.HTTP_FORBIDDEN && apiCode == ApiErrorCodes.PERMISSION_DENIED) onPermissionDenied?.invoke()
                     throw HttpStatusException(code, apiCode)
                 }
-                if (code == HttpURLConnection.HTTP_NO_CONTENT) "" else connection.inputStream.bufferedReader().use { it.readText() }
+                if (code == HttpURLConnection.HTTP_NO_CONTENT) "" else connection.inputStream.use(::readCapped)
             } finally {
                 connection.disconnect()
             }
@@ -99,6 +102,18 @@ class FortHttp(
         null
     }
 
+    private fun readCapped(input: InputStream): String {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(READ_BUFFER_BYTES)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            if (output.size() + read > MAX_RESPONSE_BYTES) throw IOException("Response too large")
+            output.write(buffer, 0, read)
+        }
+        return output.toString(Charsets.UTF_8.name())
+    }
+
     private fun timeoutFor(path: String): Int =
         if (path == PATH_ME || path.startsWith(PATH_MIAUTH)) SESSION_TIMEOUT_MS else TIMEOUT_MS
 
@@ -108,5 +123,7 @@ class FortHttp(
         const val PATH_ME = "/api/i"
         const val PATH_MIAUTH = "/api/miauth/"
         const val MAX_ERROR_BODY_CHARS = 4_096
+        const val MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+        const val READ_BUFFER_BYTES = 16 * 1024
     }
 }

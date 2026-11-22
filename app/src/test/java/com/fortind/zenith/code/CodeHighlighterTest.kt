@@ -181,6 +181,30 @@ class CodeHighlighterTest {
     }
 
     @Test
+    fun afterTooManyStuckWorkersEveryBlockIsShownPlainWithoutANewThread() {
+        var made = 0
+        val highlighter = CodeHighlighter(budgetMillis = 100, coldBudgetMillis = 100, maxAbandonedWorkers = 2, tokenizerFactory = {
+            made++
+            CodeTokenizer { _, _ ->
+                Thread.sleep(30_000)
+                emptyList()
+            }
+        })
+
+        highlighter.highlight("aaaa", "kotlin")
+        highlighter.highlight("bbbb", "kotlin")
+        val started = System.nanoTime()
+        val third = highlighter.highlight("cccc", "kotlin")
+        val tookMillis = (System.nanoTime() - started) / 1_000_000
+
+        assertFalse(third.isColored)
+        assertEquals("cccc", third.text)
+        assertEquals(2, highlighter.abandonedWorkers)
+        assertEquals(2, made)
+        assertTrue("took ${tookMillis}ms", tookMillis < 100)
+    }
+
+    @Test
     fun aTokenizerThatFailsLeavesThePlainBlockAndKeepsWorking() {
         val highlighter = CodeHighlighter(
             budgetMillis = PATIENT_MS,

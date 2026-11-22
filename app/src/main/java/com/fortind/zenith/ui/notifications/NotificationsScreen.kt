@@ -1,5 +1,6 @@
 package com.fortind.zenith.ui.notifications
 
+import com.fortind.zenith.ui.login.ManualLinkCard
 import android.content.ClipData
 import android.os.Build
 import androidx.annotation.StringRes
@@ -525,6 +526,7 @@ private fun PermissionState() {
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            if (loginState.signingIn) loginState.manualUrl?.let { ManualLinkCard(url = it) }
         }
     }
 }

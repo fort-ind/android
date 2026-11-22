@@ -103,7 +103,7 @@ class RemoteMediaProvider : ContentProvider() {
     }
 
     companion object {
-        private const val CACHE_DIR = "remote-media"
+        internal const val CACHE_DIR = "remote-media"
         private const val MEDIA_PATH = "media"
         private const val PATH_SEGMENTS = 5
         private const val URL_SAFE_FLAGS = Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING

@@ -61,6 +61,8 @@ class HttpDriveApi(
         baseClient().newBuilder()
             .writeTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
     }
 
@@ -91,7 +93,11 @@ class HttpDriveApi(
         val request = Request.Builder().url("https://$host/api/drive/files/create").post(body).build()
         val text = withContext(Dispatchers.IO) {
             uploadClient.newCall(request).await().use { response ->
-                val payload = response.body.string()
+                if (response.body.contentLength() > MAX_RESPONSE_BYTES) throw IOException("Upload response too large")
+                val payload = response.body.source().use { source ->
+                    if (source.request(MAX_RESPONSE_BYTES + 1)) throw IOException("Upload response too large")
+                    source.buffer.readUtf8()
+                }
                 if (!response.isSuccessful) {
                     val apiCode = parseApiErrorCode(payload)
                     if (response.code == HttpURLConnection.HTTP_FORBIDDEN && apiCode == ApiErrorCodes.PERMISSION_DENIED) http.onPermissionDenied?.invoke()
@@ -127,6 +133,7 @@ class HttpDriveApi(
 
     private companion object {
         const val UPLOAD_TIMEOUT_SECONDS = 120L
+        const val MAX_RESPONSE_BYTES = 1024L * 1024
     }
 }
 

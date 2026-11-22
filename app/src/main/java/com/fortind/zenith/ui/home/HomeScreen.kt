@@ -5,6 +5,7 @@
 
 package com.fortind.zenith.ui.home
 
+import com.fortind.zenith.ui.login.ManualLinkCard
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.SearchBar
@@ -422,7 +423,7 @@ fun ReauthorizeBanner(onDismiss: () -> Unit, newPermissions: Boolean = false) {
     val loginState by login.uiState.collectAsStateWithLifecycle()
     AuthPageEffects(login)
     Box(modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth()) {
-        if (loginState.signingIn) {
+        if (loginState.signingIn) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val colors = MaterialTheme.colorScheme
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
@@ -441,6 +442,7 @@ fun ReauthorizeBanner(onDismiss: () -> Unit, newPermissions: Boolean = false) {
                     }
                 }
             }
+            loginState.manualUrl?.let { ManualLinkCard(url = it) }
         } else {
             PermissionBanner(onGrant = login::onSignInClick, onDismiss = onDismiss, newPermissions = newPermissions)
         }

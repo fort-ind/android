@@ -4,6 +4,7 @@ import com.fortind.zenith.mfm.MfmNode
 import com.fortind.zenith.mfm.MfmParser
 import com.fortind.zenith.net.objects
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import com.fortind.zenith.net.parseTimestamp
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.timeline.NoteUser
@@ -78,7 +79,7 @@ fun parseUserDetail(json: JSONObject): UserDetail? {
     val user = parseNoteUser(json) ?: return null
     return UserDetail(
         user = user,
-        bannerUrl = json.optStringOrNull("bannerUrl"),
+        bannerUrl = json.optWebUrlOrNull("bannerUrl"),
         bioMfm = json.optStringOrNull("description")?.let { MfmParser.parse(it) }.orEmpty(),
         location = json.optStringOrNull("location"),
         birthday = json.optStringOrNull("birthday"),
@@ -116,7 +117,7 @@ private fun parseRole(json: JSONObject): UserRole? {
     return UserRole(
         name = name,
         color = json.optStringOrNull("color"),
-        iconUrl = json.optStringOrNull("iconUrl"),
+        iconUrl = json.optWebUrlOrNull("iconUrl"),
         description = json.optStringOrNull("description"),
     )
 }

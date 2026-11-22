@@ -76,6 +76,9 @@ import com.fortind.zenith.ui.absoluteTime
 import android.content.res.Resources
 import com.fortind.zenith.ui.feed.ConfirmBlockDialog
 import com.fortind.zenith.ui.feed.ConfirmDeleteDialog
+import com.fortind.zenith.ui.feed.DeceptiveLinkDialog
+import com.fortind.zenith.ui.mfm.DeceptiveLink
+import com.fortind.zenith.ui.mfm.LocalDeceptiveLinks
 import com.fortind.zenith.ui.feed.FeedEvent
 import com.fortind.zenith.ui.feed.FeedViewModel
 import com.fortind.zenith.ui.feed.FullscreenVideo
@@ -201,6 +204,8 @@ fun SocialHost(
     var reportUserTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var reportNoteTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var addToListTarget by remember { mutableStateOf<NoteUser?>(null) }
+    var deceptiveLink by remember { mutableStateOf<DeceptiveLink?>(null) }
+    val onDeceptiveLink = remember { { link: DeceptiveLink -> deceptiveLink = link } }
     val people by peopleViewModel.uiState.collectAsStateWithLifecycle()
     val pageKeys = remember { PageKeys() }
     val browser = LocalUriHandler.current
@@ -375,7 +380,7 @@ fun SocialHost(
                     .focusGroup()
                     .then(if (viewerShown) Modifier.clearAndSetSemantics {} else Modifier),
             ) {
-                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit(), LocalHostedPopups provides hostedPopups) {
+                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, LocalDeceptiveLinks provides onDeceptiveLink, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit(), LocalHostedPopups provides hostedPopups) {
                     content(ui)
                     HostedPopupsLayer(hostedPopups)
                 }
@@ -443,6 +448,16 @@ fun SocialHost(
         }
     }
 
+    deceptiveLink?.let { link ->
+        DeceptiveLinkDialog(
+            link = link,
+            onOpen = {
+                deceptiveLink = null
+                linkRouter.openUri(link.url)
+            },
+            onDismiss = { deceptiveLink = null },
+        )
+    }
     deleteTarget?.let { id ->
         ConfirmDeleteDialog(
             redraft = false,

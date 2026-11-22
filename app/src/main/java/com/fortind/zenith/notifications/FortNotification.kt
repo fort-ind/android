@@ -2,6 +2,7 @@ package com.fortind.zenith.notifications
 
 import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import com.fortind.zenith.net.parseTimestamp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -105,7 +106,7 @@ private fun parseActor(json: JSONObject): NotificationActor? {
         username = username,
         host = json.optStringOrNull("host"),
         name = json.optStringOrNull("name"),
-        avatarUrl = json.optStringOrNull("avatarUrl"),
+        avatarUrl = json.optWebUrlOrNull("avatarUrl"),
     )
 }
 

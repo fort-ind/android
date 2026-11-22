@@ -2,6 +2,7 @@
 
 package com.fortind.zenith.ui.settings
 
+import com.fortind.zenith.ui.login.ManualLinkCard
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
@@ -410,6 +411,7 @@ internal fun ReauthorizePrompt(
                 Text(stringResource(R.string.login_signing_in), style = MaterialTheme.typography.titleMedium)
             }
             TextButton(onClick = login::onCancel) { Text(stringResource(R.string.login_cancel)) }
+            loginState.manualUrl?.let { ManualLinkCard(url = it) }
         } else {
             Button(onClick = login::onSignInClick, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.account_permission_grant))

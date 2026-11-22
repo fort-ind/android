@@ -8,6 +8,7 @@ import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.objects
 import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import java.io.IOException
 import org.json.JSONObject
 
@@ -46,8 +47,8 @@ fun parseCurrentUser(json: JSONObject): CurrentUser {
         id = id,
         username = username,
         name = json.optStringOrNull("name"),
-        avatarUrl = json.optStringOrNull("avatarUrl"),
-        bannerUrl = json.optStringOrNull("bannerUrl"),
+        avatarUrl = json.optWebUrlOrNull("avatarUrl"),
+        bannerUrl = json.optWebUrlOrNull("bannerUrl"),
         description = json.optStringOrNull("description"),
         location = json.optStringOrNull("location"),
         birthday = json.optStringOrNull("birthday"),

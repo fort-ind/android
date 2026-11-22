@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onProvideAssistContent(outContent: AssistContent) {
         super.onProvideAssistContent(outContent)
-        webUrlFor(topRoute)?.let { outContent.webUri = it.toUri() }
+        webUrlFor(topRoute.takeUnless { it is AppRoute.Search })?.let { outContent.webUri = it.toUri() }
     }
 
     override fun onNewIntent(intent: Intent) {

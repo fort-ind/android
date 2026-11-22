@@ -5,6 +5,7 @@ import com.fortind.zenith.net.MisskeyStreaming
 import com.fortind.zenith.net.StreamFrame
 import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -50,7 +51,7 @@ fun parseNoteUpdate(noteId: String, type: String, body: JSONObject?): NoteUpdate
         NoteUpdate.Reacted(
             noteId = noteId,
             reaction = reaction,
-            emojiUrl = body.optJSONObject("emoji")?.optStringOrNull("url"),
+            emojiUrl = body.optJSONObject("emoji")?.optWebUrlOrNull("url"),
             userId = body.optStringOrNull("userId"),
         )
     }

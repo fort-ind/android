@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.fortind.zenith.net.objects
 import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import com.fortind.zenith.timeline.NoteFile
 import com.fortind.zenith.timeline.Visibility
 import kotlinx.coroutines.flow.first
@@ -133,13 +134,13 @@ private fun encodeAttachment(attachment: DraftAttachment): JSONObject {
 
 private fun decodeAttachment(json: JSONObject): DraftAttachment? {
     val id = json.optStringOrNull("id") ?: return null
-    val url = json.optStringOrNull("url") ?: return null
+    val url = json.optWebUrlOrNull("url") ?: return null
     val file = NoteFile(
         id = id,
         name = json.optStringOrNull("name"),
         mimeType = json.optStringOrNull("type") ?: "application/octet-stream",
         url = url,
-        thumbnailUrl = json.optStringOrNull("thumbnailUrl"),
+        thumbnailUrl = json.optWebUrlOrNull("thumbnailUrl"),
         blurhash = json.optStringOrNull("blurhash"),
         isSensitive = json.optBoolean("serverSensitive"),
         altText = json.optStringOrNull("serverAlt"),

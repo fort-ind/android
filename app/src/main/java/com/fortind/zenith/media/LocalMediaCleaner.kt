@@ -23,7 +23,7 @@ class CacheMediaCleaner(private val cacheDir: () -> File) : LocalMediaCleaner {
     }
 }
 
-private val OwnedFolders = listOf("captures", "staged", "compressed", "sanitized")
+internal val OwnedFolders = listOf("captures", "staged", "compressed", "sanitized")
 
 fun ownedCacheFile(uri: String, cacheDir: File): File? {
     val path = try {

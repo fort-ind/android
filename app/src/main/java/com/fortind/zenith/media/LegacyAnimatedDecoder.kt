@@ -36,11 +36,16 @@ class LegacyAnimatedDecoder(
             val header = peek.buffer.let { it.copy().readByteArray(minOf(it.size, HEADER_BYTES)) }
             val format = detectAnimatedFormat(header) ?: return null
             if (format == AnimatedFormat.WebP && sdkInt >= Build.VERSION_CODES.P) return null
+            val canvas = animatedCanvasSize(header, format) ?: return null
+            if (!canvas.fitsWithin(MAX_CANVAS_PIXELS)) return null
+            if (peek.request(MAX_BYTES + 1)) return null
             return LegacyAnimatedDecoder(result, format)
         }
     }
 
     private companion object {
         const val HEADER_BYTES = 65_536L
+        const val MAX_BYTES = 16L * 1024 * 1024
+        const val MAX_CANVAS_PIXELS = 2_048L * 2_048
     }
 }

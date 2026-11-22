@@ -5,6 +5,7 @@ import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.net.objects
 import com.fortind.zenith.net.optIntOrNull
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import com.fortind.zenith.net.strings
 import java.io.File
 import java.io.IOException
@@ -84,7 +85,7 @@ class HttpInstanceApi(private val http: FortHttp) : InstanceApi {
 fun parseEmojiIndex(json: JSONObject): EmojiIndex = EmojiIndex(
     json.optJSONArray("emojis")?.objects()?.mapNotNull { emoji ->
         val name = emoji.optStringOrNull("name") ?: return@mapNotNull null
-        val url = emoji.optStringOrNull("url") ?: return@mapNotNull null
+        val url = emoji.optWebUrlOrNull("url") ?: return@mapNotNull null
         CustomEmoji(
             name = name,
             aliases = emoji.optJSONArray("aliases")?.strings().orEmpty().filter { it.isNotBlank() },

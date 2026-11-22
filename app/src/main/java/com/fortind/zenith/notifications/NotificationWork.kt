@@ -1,8 +1,10 @@
 package com.fortind.zenith.notifications
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.RemoteInput
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -228,6 +230,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val notificationId = intent.getStringExtra(EXTRA_NOTIFICATION_ID)
         val userId = intent.getStringExtra(EXTRA_USER_ID)
         val noteId = intent.getStringExtra(EXTRA_NOTE_ID)
+        if (lockScreenUngated(Build.VERSION.SDK_INT) && deviceLocked(context)) {
+            holdUntilUnlocked(context, intent, notificationId, noteId)
+            return
+        }
         when (intent.action) {
             ACTION_ACCEPT -> if (notificationId != null && userId != null) {
                 work.enqueueFollowRequestResponse(notificationId, userId, accept = true)
@@ -240,6 +246,33 @@ class NotificationActionReceiver : BroadcastReceiver() {
             ACTION_LIKE -> if (notificationId != null && noteId != null) {
                 context.container.systemNotifier.cancel(notificationId)
                 work.enqueueQuickLike(noteId)
+            }
+        }
+    }
+
+    private fun deviceLocked(context: Context): Boolean =
+        context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked == true
+
+    private fun holdUntilUnlocked(context: Context, intent: Intent, notificationId: String?, noteId: String?) {
+        if (notificationId == null || noteId == null) return
+        val container = context.container
+        when (intent.action) {
+            ACTION_REPLY -> {
+                val typed = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(KEY_REPLY_TEXT)?.toString()?.trim()
+                container.systemNotifier.cancel(notificationId)
+                if (typed.isNullOrEmpty()) return
+                val pending = goAsync()
+                container.scope.launch {
+                    try {
+                        container.quickActions.keepReplyAsDraft(noteId, typed)
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+            ACTION_LIKE -> {
+                container.systemNotifier.cancel(notificationId)
+                container.systemNotifier.showActionFailed(QuickAction.Like, noteId)
             }
         }
     }
@@ -260,7 +293,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val pending = goAsync()
         container.scope.launch {
             try {
-                container.quickActions.replyTooLong(noteId, typed)
+                container.quickActions.keepReplyAsDraft(noteId, typed)
             } finally {
                 pending.finish()
             }
@@ -280,3 +313,5 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val EXTRA_USER_ID = "user_id"
     }
 }
+
+fun lockScreenUngated(sdkInt: Int): Boolean = sdkInt < Build.VERSION_CODES.S

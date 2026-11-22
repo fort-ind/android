@@ -31,12 +31,25 @@ class AndroidMediaSanitizer(private val context: Context, private val reader: Me
 
     override suspend fun stripLocation(media: LocalMedia): LocalMedia {
         return withContext(Dispatchers.IO) {
-            when (media.kind) {
-                MediaKind.Video -> stripVideoLocation(media)
-                MediaKind.Image -> stripImageLocation(media)
+            val checked = withContentType(media)
+            when (checked.kind) {
+                MediaKind.Video -> stripVideoLocation(checked)
+                MediaKind.Image -> stripImageLocation(checked)
                 else -> media
             }
         }
+    }
+
+    private fun withContentType(media: LocalMedia): LocalMedia {
+        val header = try {
+            reader.open(media.uri).use { it.readHeader() }
+        } catch (_: IOException) {
+            return media
+        } catch (_: SecurityException) {
+            return media
+        }
+        val type = sanitizerType(media.mimeType, sniffMediaType(header))
+        return if (type == media.mimeType) media else media.copy(mimeType = type)
     }
 
     private suspend fun stripImageLocation(media: LocalMedia): LocalMedia {

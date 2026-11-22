@@ -157,7 +157,7 @@ class QuickActionsTest {
     fun aReplyTooLongToQueueGoesStraightBackToTheComposer() = runTest {
         val f = fixture()
 
-        f.actions.replyTooLong("n1", "x".repeat(4_000))
+        f.actions.keepReplyAsDraft("n1", "x".repeat(4_000))
 
         assertTrue(f.notes.createCalls.isEmpty())
         assertEquals(4_000, f.drafts.saved.values.single().text.length)

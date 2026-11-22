@@ -6,6 +6,7 @@ import com.fortind.zenith.net.FortHttp
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.objects
 import com.fortind.zenith.net.optStringOrNull
+import com.fortind.zenith.net.optWebUrlOrNull
 import com.fortind.zenith.net.parseTimestamp
 import com.fortind.zenith.net.translateAuthError
 import org.json.JSONObject
@@ -48,7 +49,7 @@ fun parseModerationEntry(kind: ModerationKind, json: JSONObject): ModerationEntr
             username = username,
             host = user.optStringOrNull("host"),
             name = user.optStringOrNull("name"),
-            avatarUrl = user.optStringOrNull("avatarUrl"),
+            avatarUrl = user.optWebUrlOrNull("avatarUrl"),
         ),
         expiresAtMillis = json.optStringOrNull("expiresAt")?.let(::parseTimestamp)?.takeIf { it > 0L },
     )

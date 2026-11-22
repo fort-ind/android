@@ -5,4 +5,8 @@
 <full-backup-content>
 
 <exclude domain="sharedpref" path="fort_session.xml" />
+<exclude domain="file" path="datastore/drafts.preferences_pb" />
+<exclude domain="file" path="datastore/account_id.preferences_pb" />
+<exclude domain="file" path="datastore/scope_stamp.preferences_pb" />
+<exclude domain="file" path="datastore/notification_sync.preferences_pb" />
 </full-backup-content>

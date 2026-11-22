@@ -85,6 +85,7 @@ internal class MfmAnnotatedBuilder(
     private val revealed: Set<Int>,
     private val onReveal: (Int) -> Unit,
     private val boxDepth: Int,
+    private val onDeceptiveLink: ((DeceptiveLink) -> Unit)? = null,
 ) {
     private val builder = AnnotatedString.Builder()
     private val inline = LinkedHashMap<String, InlineTextContent>()
@@ -92,6 +93,12 @@ internal class MfmAnnotatedBuilder(
     private var blurCount = 0
     private var unixTimeCount = 0
     private val baseSize: Float = baseStyle.fontSize.takeIf { it != TextUnit.Unspecified }?.value ?: 16f
+
+    private fun guardedLink(node: MfmLink): LinkAnnotation {
+        val handler = onDeceptiveLink ?: return linkAnnotation(node.url, environment)
+        val deceptive = deceptiveLink(node.children.toPlainText(), node.url) ?: return linkAnnotation(node.url, environment)
+        return LinkAnnotation.Clickable(node.url, environment.linkStyles) { handler(deceptive) }
+    }
 
     fun build(nodes: List<MfmNode>): BuiltText {
         append(nodes, 1f)
@@ -117,7 +124,7 @@ internal class MfmAnnotatedBuilder(
             is MfmMention -> builder.withLink(linkAnnotation(environment.mentionUrl(node), environment)) { append(node.acct) }
             is MfmHashtag -> builder.withLink(linkAnnotation(environment.hashtagUrl(node.tag), environment)) { append("#${node.tag}") }
             is MfmUrl -> builder.withLink(linkAnnotation(node.url, environment)) { append(displayUrl(node.url)) }
-            is MfmLink -> builder.withLink(linkAnnotation(node.url, environment)) { append(node.children, scale) }
+            is MfmLink -> builder.withLink(guardedLink(node)) { append(node.children, scale) }
             is MfmFn -> appendFunction(node, scale)
             is MfmContainer -> append(node.children, scale)
             else -> builder.append(listOf(node).toPlainText())
