@@ -42,6 +42,7 @@ import com.fortind.zenith.media.LocalMediaCleaner
 import com.fortind.zenith.media.MediaCompressor
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
+import com.fortind.zenith.media.VideoOptions
 import com.fortind.zenith.mfm.MfmParser
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
@@ -1177,6 +1178,17 @@ class ComposerViewModelTest {
 
         assertEquals(CaptureMode.Night, f.settings.current.cameraMode)
         assertEquals(CaptureMode.Night, f.viewModel.cameraMode.value)
+    }
+
+    @Test
+    fun theCameraVideoOptionsAreSavedTheMomentTheyChange() = runTest {
+        val f = fixture()
+        assertEquals(VideoOptions(), f.viewModel.cameraVideoOptions.value)
+
+        f.viewModel.setCameraVideoOptions(VideoOptions(fps60 = true, stabilize = true))
+
+        assertEquals(VideoOptions(fps60 = true, stabilize = true), f.settings.current.cameraVideoOptions)
+        assertEquals(VideoOptions(fps60 = true, stabilize = true), f.viewModel.cameraVideoOptions.value)
     }
 
     @Test

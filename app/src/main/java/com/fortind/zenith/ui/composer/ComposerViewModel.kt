@@ -69,6 +69,7 @@ import com.fortind.zenith.media.MediaCompressor
 import com.fortind.zenith.media.MediaReader
 import com.fortind.zenith.media.MediaSanitizer
 import com.fortind.zenith.media.NoMediaCleanup
+import com.fortind.zenith.media.VideoOptions
 import com.fortind.zenith.net.ApiErrorCodes
 import com.fortind.zenith.net.HttpStatusException
 import com.fortind.zenith.net.MissingPermissionException
@@ -298,6 +299,14 @@ class ComposerViewModel(
 
     fun setCameraMode(mode: CaptureMode) {
         viewModelScope.launch { settings.setCameraMode(mode) }
+    }
+
+    val cameraVideoOptions: StateFlow<VideoOptions> = settings.settings
+        .map { it.cameraVideoOptions }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, VideoOptions())
+
+    fun setCameraVideoOptions(options: VideoOptions) {
+        viewModelScope.launch { settings.setCameraVideoOptions(options) }
     }
 
     private val _suggestions = MutableStateFlow<SuggestionsState?>(null)

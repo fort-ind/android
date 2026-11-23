@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.fortind.zenith.ink.SheetBackground
 import com.fortind.zenith.ink.SheetShape
 import com.fortind.zenith.media.CaptureMode
+import com.fortind.zenith.media.VideoOptions
 import com.fortind.zenith.notifications.DefaultNotificationCategories
 import com.fortind.zenith.notifications.NotificationCategory
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +44,7 @@ data class AppSettings(
     val notificationCategories: Set<NotificationCategory> = DefaultNotificationCategories,
     val compressUploads: Boolean = false,
     val cameraMode: CaptureMode = CaptureMode.Auto,
+    val cameraVideoOptions: VideoOptions = VideoOptions(),
     val railCollapsed: Boolean = false,
     val composerWindowSize: WindowSizeDp? = null,
     val popOutBounds: Map<String, WindowBounds> = emptyMap(),
@@ -62,6 +64,7 @@ interface SettingsStore {
     suspend fun setNotificationCategory(category: NotificationCategory, enabled: Boolean)
     suspend fun setCompressUploads(enabled: Boolean)
     suspend fun setCameraMode(mode: CaptureMode)
+    suspend fun setCameraVideoOptions(options: VideoOptions)
     suspend fun setRailCollapsed(collapsed: Boolean)
     suspend fun setComposerWindowSize(size: WindowSizeDp)
     suspend fun setPopOutBounds(tab: String, bounds: WindowBounds)
@@ -95,6 +98,11 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
             cameraMode = prefs[CameraModeKey]
                 ?.let { saved -> CaptureMode.entries.firstOrNull { it.name == saved } }
                 ?: CaptureMode.Auto,
+            cameraVideoOptions = VideoOptions(
+                fps60 = prefs[CameraFps60Key] ?: false,
+                stabilize = prefs[CameraStabilizeKey] ?: false,
+                lowLight = prefs[CameraLowLightKey] ?: false,
+            ),
             railCollapsed = prefs[RailCollapsedKey] ?: false,
             composerWindowSize = prefs[ComposerWindowWidthKey]?.let { width ->
                 prefs[ComposerWindowHeightKey]?.let { height -> WindowSizeDp(width, height) }
@@ -136,6 +144,14 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
 
     override suspend fun setCameraMode(mode: CaptureMode) {
         dataStore.edit { it[CameraModeKey] = mode.name }
+    }
+
+    override suspend fun setCameraVideoOptions(options: VideoOptions) {
+        dataStore.edit {
+            it[CameraFps60Key] = options.fps60
+            it[CameraStabilizeKey] = options.stabilize
+            it[CameraLowLightKey] = options.lowLight
+        }
     }
 
     override suspend fun setRailCollapsed(collapsed: Boolean) {
@@ -192,6 +208,9 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         val NotificationCategoriesKey = stringSetPreferencesKey("notification_categories")
         val CompressUploadsKey = booleanPreferencesKey("compress_uploads")
         val CameraModeKey = stringPreferencesKey("camera_mode")
+        val CameraFps60Key = booleanPreferencesKey("camera_fps60")
+        val CameraStabilizeKey = booleanPreferencesKey("camera_stabilize")
+        val CameraLowLightKey = booleanPreferencesKey("camera_low_light")
         val RailCollapsedKey = booleanPreferencesKey("rail_collapsed")
         val ComposerWindowWidthKey = intPreferencesKey("composer_window_width_dp")
         val ComposerWindowHeightKey = intPreferencesKey("composer_window_height_dp")

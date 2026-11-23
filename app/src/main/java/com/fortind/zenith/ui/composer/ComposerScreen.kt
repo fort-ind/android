@@ -223,6 +223,11 @@ private fun ComposerDialog(
     val scope = rememberCoroutineScope()
     val compressUploads by viewModel.compressUploads.collectAsStateWithLifecycle()
     val cameraMode by viewModel.cameraMode.collectAsStateWithLifecycle()
+    val cameraVideoOptions by viewModel.cameraVideoOptions.collectAsStateWithLifecycle()
+    var cameraSettings by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(overlay) {
+        if (overlay != OVERLAY_CAMERA) cameraSettings = false
+    }
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val requestClose: () -> Unit = {
         when {
@@ -231,6 +236,7 @@ private fun ComposerDialog(
             state.prompt != null -> viewModel.dismissPrompt()
             state.drive?.menuFileId != null -> viewModel.closeDriveMenu()
             state.drive != null -> viewModel.closeDrive()
+            overlay == OVERLAY_CAMERA && cameraSettings -> cameraSettings = false
             overlay.isNotEmpty() -> overlay = ""
             viewModel.hasUnsavedChanges() -> confirmClose = true
             else -> viewModel.close(keepDraft = false)
@@ -509,6 +515,10 @@ private fun ComposerDialog(
                         videoSizeLimitBytes = if (compressUploads) COMPRESSED_VIDEO_LIMIT_BYTES else state.maxFileSizeBytes,
                         captureMode = cameraMode,
                         onCaptureModeChange = viewModel::setCameraMode,
+                        videoOptions = cameraVideoOptions,
+                        onVideoOptionsChange = viewModel::setCameraVideoOptions,
+                        settingsOpen = cameraSettings,
+                        onSettingsOpenChange = { cameraSettings = it },
                         onCaptured = { media ->
                             viewModel.addMedia(listOf(media))
                             overlay = ""

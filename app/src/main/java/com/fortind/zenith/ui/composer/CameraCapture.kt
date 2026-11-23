@@ -3,6 +3,7 @@ package com.fortind.zenith.ui.composer
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,40 +17,57 @@ import androidx.camera.core.ExperimentalLensFacing
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.Preview
+import androidx.camera.core.NightModeIndicator
 import androidx.camera.core.SurfaceOrientedMeteringPointFactory
 import androidx.camera.core.SurfaceRequest
-import androidx.camera.extensions.ExtensionMode
-import androidx.camera.extensions.ExtensionSessionConfig
+import androidx.camera.core.TorchState
 import androidx.camera.extensions.ExtensionsManager
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
-import androidx.camera.video.FallbackStrategy
 import androidx.camera.video.FileOutputOptions
-import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.viewfinder.compose.MutableCoordinateTransformer
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -60,48 +78,73 @@ import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Exposure
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.FlashlightOff
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.FlipCameraAndroid
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuPopup
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -119,13 +162,25 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fortind.zenith.R
 import com.fortind.zenith.media.CaptureMode
+import com.fortind.zenith.media.CaptureTimer
+import com.fortind.zenith.media.FlashChoice
 import com.fortind.zenith.media.LocalMedia
+import com.fortind.zenith.media.VideoOptions
+import com.fortind.zenith.media.VideoSupport
 import com.fortind.zenith.media.effectiveCaptureMode
+import com.fortind.zenith.media.effectiveFlash
+import com.fortind.zenith.media.exposureValue
+import com.fortind.zenith.media.flashChoices
+import com.fortind.zenith.media.keyZoom
+import com.fortind.zenith.media.nextFlash
 import com.fortind.zenith.media.offeredCaptureModes
-import com.fortind.zenith.ui.feed.TooltipIconButton
+import com.fortind.zenith.media.wheelZoom
+import com.fortind.zenith.media.zoomStops
 import com.fortind.zenith.ui.StandaloneMenuGroup
+import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.handCursor
 import com.fortind.zenith.ui.openAppDetailsSettings
+import com.fortind.zenith.ui.rememberReduceMotion
 import com.fortind.zenith.ui.shouldExplain
 import java.io.File
 import java.text.SimpleDateFormat
@@ -134,35 +189,73 @@ import java.util.Locale
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun CameraCaptureOverlay(
     videoSizeLimitBytes: Long,
     captureMode: CaptureMode,
     onCaptureModeChange: (CaptureMode) -> Unit,
+    videoOptions: VideoOptions,
+    onVideoOptionsChange: (VideoOptions) -> Unit,
+    settingsOpen: Boolean,
+    onSettingsOpenChange: (Boolean) -> Unit,
     onCaptured: (LocalMedia) -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
+    val scope = rememberCoroutineScope()
+    val reduceMotion = rememberReduceMotion()
+    val motion = MaterialTheme.motionScheme
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val inputModes = LocalInputModeManager.current
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
+    val useCases = remember { CameraUseCases { request -> surfaceRequest = request } }
     var cameraIndex by rememberSaveable { mutableIntStateOf(0) }
     var cameraMenu by remember { mutableStateOf(false) }
     var videoMode by rememberSaveable { mutableStateOf(false) }
-    var flashMode by rememberSaveable { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
+    var flashChoice by rememberSaveable { mutableStateOf(FlashChoice.Off) }
+    var timer by rememberSaveable { mutableStateOf(CaptureTimer.Off) }
+    var countdown by remember { mutableStateOf<Int?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var extensionsManager by remember { mutableStateOf<ExtensionsManager?>(null) }
     var cameras by remember { mutableStateOf(emptyList<CameraOption>()) }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordedMillis by remember { mutableLongStateOf(0L) }
+    var paused by remember { mutableStateOf(false) }
+    var muted by rememberSaveable { mutableStateOf(false) }
     var message by remember { mutableStateOf<Int?>(null) }
     var notice by remember { mutableStateOf<Int?>(null) }
     var captureModes by remember { mutableStateOf(emptyList<CaptureMode>()) }
     var activeMode by remember { mutableStateOf(CaptureMode.Off) }
     var brokenModes by remember { mutableStateOf(emptySet<Pair<Int, CaptureMode>>()) }
+    var featureSession by remember { mutableStateOf(false) }
+    var brokenVideo by remember { mutableStateOf(emptySet<Int>()) }
+    val videoSupports = remember { mutableMapOf<Int, VideoSupport>() }
+    var videoSupport by remember { mutableStateOf(VideoSupport()) }
     var capturing by remember { mutableStateOf(false) }
     var captureProgress by remember { mutableIntStateOf(NO_PROGRESS) }
+    var postview by remember { mutableStateOf<ImageBitmap?>(null) }
+    var screenFlash by remember { mutableStateOf<ImageCapture.ScreenFlash?>(null) }
+    var focusSpot by remember { mutableStateOf<FocusSpot?>(null) }
+    var focusSerial by remember { mutableIntStateOf(0) }
+    var exposureOpen by remember { mutableStateOf(false) }
+    var exposurePinned by remember { mutableStateOf(false) }
+    var exposureTouches by remember { mutableIntStateOf(0) }
+    var exposureIndex by remember { mutableIntStateOf(0) }
+    val exposureInteraction = remember { MutableInteractionSource() }
+    var nightHint by remember { mutableStateOf(false) }
+    var zoomJob by remember { mutableStateOf<Job?>(null) }
+    var rootTop by remember { mutableFloatStateOf(0f) }
+    var rootHeight by remember { mutableIntStateOf(0) }
+    var panelWasOpen by remember { mutableStateOf(false) }
     val activity = LocalActivity.current
     var audioGranted by remember { mutableStateOf(hasPermission(context, Manifest.permission.RECORD_AUDIO)) }
     var audioBlocked by rememberSaveable { mutableStateOf(false) }
@@ -179,71 +272,170 @@ fun CameraCaptureOverlay(
     }
     val closed = remember { AtomicBoolean(false) }
     val focus = remember { FocusRequester() }
+    val panelFocus = remember { FocusRequester() }
     val transformer = remember { MutableCoordinateTransformer() }
     val landscape = LocalWindowInfo.current.containerSize.let { it.width > it.height }
-
-    val preview = remember { Preview.Builder().build().also { it.setSurfaceProvider { request -> surfaceRequest = request } } }
-    val imageCapture = remember {
-        ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY).build()
-    }
-    val videoCapture = remember {
-        val quality = QualitySelector.fromOrderedList(
-            listOf(Quality.FHD, Quality.HD, Quality.SD),
-            FallbackStrategy.lowerQualityOrHigherThan(Quality.SD),
-        )
-        VideoCapture.withOutput(Recorder.Builder().setQualitySelector(quality).build())
+    val posture = currentWindowAdaptiveInfoV2().windowPosture
+    val hinge = posture.hingeList.firstOrNull { !it.isVertical && it.isSeparating }?.takeIf { posture.isTabletop }
+    val split = hinge?.bounds?.let { bounds ->
+        val top = bounds.top - rootTop
+        val bottom = bounds.bottom - rootTop
+        (top to bottom).takeIf { top > 0f && bottom < rootHeight }
     }
 
-    LaunchedEffect(cameraIndex, videoMode, captureMode, brokenModes) {
+    val sessionVideo = videoOptions.copy(lowLight = false)
+    LaunchedEffect(cameraIndex, videoMode, captureMode, brokenModes, sessionVideo, brokenVideo) {
         val provider = ProcessCameraProvider.awaitInstance(context)
         cameras = cameraOptions(provider.availableCameraInfos)
         when {
             cameras.isEmpty() -> message = R.string.camera_unavailable
             cameraIndex !in cameras.indices -> cameraIndex = 0
             else -> {
-                val selector = cameras[cameraIndex].selector
+                val index = cameraIndex
+                val selector = cameras[index].selector
                 val extensions = loadExtensions(context, provider)
+                extensionsManager = extensions
                 val offered = offeredCaptureModes { mode ->
                     extensions != null &&
-                        (cameraIndex to mode) !in brokenModes &&
+                        (index to mode) !in brokenModes &&
                         extensions.isExtensionAvailable(selector, mode.extensionMode())
                 }
                 captureModes = offered
                 val mode = if (videoMode) CaptureMode.Off else effectiveCaptureMode(captureMode, offered)
                 provider.unbindAll()
                 activeMode = CaptureMode.Off
-                camera = try {
-                    if (mode != CaptureMode.Off && extensions != null) {
-                        val session = ExtensionSessionConfig(mode.extensionMode(), extensions, preview, imageCapture)
-                        provider.bindToLifecycle(lifecycleOwner, selector, session).also { activeMode = mode }
-                    } else {
-                        provider.bindToLifecycle(lifecycleOwner, selector, preview, if (videoMode) videoCapture else imageCapture)
+                featureSession = false
+                val result = if (videoMode) {
+                    val support = videoSupports.getOrPut(index) { queryVideoSupport(provider, selector, useCases) }
+                    videoSupport = support
+                    val wanted = if (index in brokenVideo) VideoOptions() else videoOptions.effectiveFor(support)
+                    bindVideo(provider, lifecycleOwner, selector, useCases, wanted, support)
+                } else {
+                    bindPhoto(provider, lifecycleOwner, selector, useCases.preview, mode, extensions)
+                }
+                when (result) {
+                    is BindResult.Bound -> {
+                        camera = result.camera
+                        imageCapture = result.imageCapture
+                        videoCapture = result.videoCapture
+                        activeMode = result.mode
+                        featureSession = result.videoCapture === useCases.featureVideo
                     }
-                } catch (_: IllegalArgumentException) {
-                    if (mode == CaptureMode.Off) {
-                        message = R.string.camera_failed
-                    } else {
-                        brokenModes = brokenModes + (cameraIndex to mode)
+                    BindResult.ModeFailed -> {
+                        camera = null
+                        brokenModes = brokenModes + (index to mode)
                         notice = R.string.camera_mode_failed
                     }
-                    null
+                    BindResult.VideoOptionsFailed -> {
+                        camera = null
+                        brokenVideo = brokenVideo + index
+                        notice = R.string.camera_video_options_failed
+                    }
+                    BindResult.Failed -> {
+                        camera = null
+                        message = R.string.camera_failed
+                    }
                 }
             }
         }
     }
-    DisposableEffect(camera, activeMode, cameraIndex) {
+    DisposableEffect(camera, activeMode, featureSession, cameraIndex) {
         val bound = camera
         val mode = activeMode
-        if (bound == null || mode == CaptureMode.Off) return@DisposableEffect onDispose { }
+        val feature = featureSession
+        val index = cameraIndex
+        if (bound == null || (mode == CaptureMode.Off && !feature)) return@DisposableEffect onDispose { }
         val observer = Observer<CameraState> { state ->
             val code = state.error?.code
             if (code == CameraState.ERROR_STREAM_CONFIG || code == CameraState.ERROR_CAMERA_FATAL_ERROR) {
-                brokenModes = brokenModes + (cameraIndex to mode)
-                notice = R.string.camera_mode_failed
+                if (mode != CaptureMode.Off) {
+                    brokenModes = brokenModes + (index to mode)
+                    notice = R.string.camera_mode_failed
+                } else {
+                    brokenVideo = brokenVideo + index
+                    notice = R.string.camera_video_options_failed
+                }
             }
         }
         bound.cameraInfo.cameraState.observe(lifecycleOwner, observer)
         onDispose { bound.cameraInfo.cameraState.removeObserver(observer) }
+    }
+
+    val info = camera?.cameraInfo
+    val zoom = liveValue(remember(info) { info?.zoomState })
+    val zoomRatio = zoom?.zoomRatio ?: 1f
+    val minZoom = zoom?.minZoomRatio ?: 1f
+    val maxZoom = zoom?.maxZoomRatio ?: 1f
+    val lensRatios = remember(info) { info?.let(::lensZoomRatios).orEmpty() }
+    val stops = remember(minZoom, maxZoom, lensRatios) { zoomStops(minZoom, maxZoom, lensRatios) }
+    val torchOn = liveValue(remember(info) { info?.torchState }) == TorchState.ON
+    val torchAdjustable = remember(info) { info != null && runCatching { info.isTorchStrengthSupported }.getOrDefault(false) }
+    val torchLevel = liveValue(remember(info, torchAdjustable) { info?.takeIf { torchAdjustable }?.torchStrengthLevel })
+    val exposureState = info?.exposureState
+    val exposureSupported = exposureState?.isExposureCompensationSupported == true
+    val nightIndicatorSupported = remember(info) { info != null && runCatching { info.isNightModeIndicatorSupported }.getOrDefault(false) }
+    val nightIndicator = liveValue(remember(info, nightIndicatorSupported) { if (nightIndicatorSupported) info?.nightModeIndicator else null })
+    val extensionInfo = remember(info, activeMode, extensionsManager) {
+        if (activeMode == CaptureMode.Off || info == null) null else runCatching { extensionsManager?.getCameraExtensionsInfo(info) }.getOrNull()
+    }
+    val strengthAvailable = remember(extensionInfo) { runCatching { extensionInfo?.isExtensionStrengthAvailable }.getOrNull() == true }
+    val extensionStrength = liveValue(remember(extensionInfo, strengthAvailable) { if (strengthAvailable) extensionInfo?.extensionStrength else null })
+    val effectiveVideo = videoOptions.effectiveFor(videoSupport)
+    val lowLightWanted = videoMode && effectiveVideo.lowLight && !torchOn
+    val front = cameras.getOrNull(cameraIndex)?.facing == CameraFacing.Front
+    val hasFlashUnit = info?.hasFlashUnit() == true
+    val flashOptions = flashChoices(hasFlashUnit, front && screenFlash != null)
+    val flash = effectiveFlash(flashChoice, flashOptions)
+    val busy = capturing || countdown != null
+
+    LaunchedEffect(camera) {
+        focusSpot = null
+        exposureOpen = false
+        exposureIndex = camera?.cameraInfo?.exposureState?.exposureCompensationIndex ?: 0
+    }
+    LaunchedEffect(camera, lowLightWanted) {
+        val bound = camera ?: return@LaunchedEffect
+        if (lowLightSupported(bound.cameraInfo)) bound.cameraControl.enableLowLightBoostAsync(lowLightWanted)
+    }
+    LaunchedEffect(imageCapture, flash, hasFlashUnit, screenFlash) {
+        val capture = imageCapture ?: return@LaunchedEffect
+        capture.screenFlash = screenFlash
+        val mode = when {
+            flash == FlashChoice.Off -> ImageCapture.FLASH_MODE_OFF
+            !hasFlashUnit -> ImageCapture.FLASH_MODE_SCREEN
+            flash == FlashChoice.Auto -> ImageCapture.FLASH_MODE_AUTO
+            else -> ImageCapture.FLASH_MODE_ON
+        }
+        try {
+            capture.flashMode = mode
+        } catch (_: IllegalArgumentException) {
+            capture.flashMode = ImageCapture.FLASH_MODE_OFF
+        }
+    }
+    LaunchedEffect(nightIndicator) {
+        if (nightIndicator == NightModeIndicator.RECOMMENDED) {
+            delay(NIGHT_HINT_SHOW_MILLIS)
+            nightHint = true
+        } else if (nightHint) {
+            delay(NIGHT_HINT_HIDE_MILLIS)
+            nightHint = false
+        }
+    }
+    val exposureDragged by exposureInteraction.collectIsDraggedAsState()
+    val exposurePressed by exposureInteraction.collectIsPressedAsState()
+    val exposureFocused by exposureInteraction.collectIsFocusedAsState()
+    LaunchedEffect(exposureOpen, exposurePinned, exposureTouches, exposureDragged, exposurePressed, exposureFocused) {
+        if (exposureOpen && !exposurePinned && !exposureDragged && !exposurePressed && !exposureFocused) {
+            delay(EXPOSURE_HIDE_MILLIS)
+            exposureOpen = false
+        }
+    }
+    LaunchedEffect(focusSpot?.id, focusSpot?.phase) {
+        val spot = focusSpot ?: return@LaunchedEffect
+        if (!spot.locked && spot.phase != FocusPhase.Focusing) {
+            delay(FOCUS_RING_MILLIS)
+            if (focusSpot?.id == spot.id) focusSpot = null
+        }
     }
     LaunchedEffect(notice) {
         if (notice != null) {
@@ -251,7 +443,18 @@ fun CameraCaptureOverlay(
             notice = null
         }
     }
-    LaunchedEffect(flashMode) { imageCapture.flashMode = flashMode }
+    LaunchedEffect(settingsOpen) {
+        if (settingsOpen) {
+            panelWasOpen = true
+            if (inputModes.inputMode == InputMode.Keyboard) {
+                withFrameNanos { }
+                requestFocusSafely(panelFocus)
+            }
+        } else if (panelWasOpen) {
+            panelWasOpen = false
+            requestFocusSafely(focus)
+        }
+    }
     LaunchedEffect(Unit) { focus.requestFocus() }
     DisposableEffect(Unit) {
         onDispose {
@@ -262,11 +465,13 @@ fun CameraCaptureOverlay(
     }
 
     val takePhoto: () -> Unit = takePhoto@{
+        val capture = imageCapture ?: return@takePhoto
         if (capturing) return@takePhoto
         capturing = true
         captureProgress = NO_PROGRESS
+        postview = null
         val file = captureFile(context, "IMG", "jpg")
-        imageCapture.takePicture(
+        capture.takePicture(
             ImageCapture.OutputFileOptions.Builder(file).build(),
             mainExecutor,
             object : ImageCapture.OnImageSavedCallback {
@@ -274,8 +479,13 @@ fun CameraCaptureOverlay(
                     captureProgress = progress
                 }
 
+                override fun onPostviewBitmapAvailable(bitmap: Bitmap) {
+                    if (!closed.get()) postview = bitmap.asImageBitmap()
+                }
+
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     capturing = false
+                    postview = null
                     if (closed.get()) {
                         file.delete()
                     } else {
@@ -285,83 +495,207 @@ fun CameraCaptureOverlay(
 
                 override fun onError(exception: ImageCaptureException) {
                     capturing = false
+                    postview = null
                     file.delete()
                     notice = R.string.camera_failed
                 }
             },
         )
     }
-    val toggleRecording = {
+    val toggleRecording: () -> Unit = toggleRecording@{
         val active = recording
         if (active != null) {
             active.stop()
-        } else {
-            val file = captureFile(context, "VID", "mp4")
-            val output = FileOutputOptions.Builder(file).setFileSizeLimit(videoSizeLimitBytes).build()
-            var pending = videoCapture.output.prepareRecording(context, output)
-            if (audioGranted) {
-                pending = try {
-                    pending.withAudioEnabled()
-                } catch (_: SecurityException) {
-                    pending
-                }
+            return@toggleRecording
+        }
+        val output = videoCapture?.output ?: return@toggleRecording
+        val file = captureFile(context, "VID", "mp4")
+        val options = FileOutputOptions.Builder(file).setFileSizeLimit(videoSizeLimitBytes).build()
+        var pending = output.prepareRecording(context, options)
+        if (audioGranted) {
+            pending = try {
+                pending.withAudioEnabled(muted)
+            } catch (_: SecurityException) {
+                pending
             }
-            recordedMillis = 0L
-            recording = pending.start(mainExecutor) { event ->
-                when (event) {
-                    is VideoRecordEvent.Status -> recordedMillis = event.recordingStats.recordedDurationNanos / NANOS_PER_MILLI
-                    is VideoRecordEvent.Finalize -> {
-                        recording = null
-                        val limitReached = event.error == VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED
-                        if (closed.get()) {
-                            file.delete()
-                        } else if (!event.hasError() || limitReached) {
-                            onCaptured(LocalMedia(Uri.fromFile(file).toString(), file.name, "video/mp4", file.length()))
-                        } else {
-                            file.delete()
-                            message = R.string.camera_failed
-                        }
+        }
+        recordedMillis = 0L
+        paused = false
+        recording = pending.start(mainExecutor) { event ->
+            when (event) {
+                is VideoRecordEvent.Status -> recordedMillis = event.recordingStats.recordedDurationNanos / NANOS_PER_MILLI
+                is VideoRecordEvent.Pause -> paused = true
+                is VideoRecordEvent.Resume -> paused = false
+                is VideoRecordEvent.Finalize -> {
+                    recording = null
+                    paused = false
+                    val limitReached = event.error == VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED
+                    if (closed.get()) {
+                        file.delete()
+                    } else if (!event.hasError() || limitReached) {
+                        onCaptured(LocalMedia(Uri.fromFile(file).toString(), file.name, "video/mp4", file.length()))
+                    } else {
+                        file.delete()
+                        message = R.string.camera_failed
                     }
-                    else -> Unit
+                }
+                else -> Unit
+            }
+        }
+    }
+    val fire: () -> Unit = { if (videoMode) toggleRecording() else takePhoto() }
+    val shutter: () -> Unit = {
+        when {
+            countdown != null -> countdown = null
+            recording != null -> toggleRecording()
+            capturing -> Unit
+            timer != CaptureTimer.Off -> countdown = timer.seconds
+            else -> fire()
+        }
+    }
+    LaunchedEffect(countdown) {
+        val left = countdown ?: return@LaunchedEffect
+        if (left <= 0) {
+            countdown = null
+            fire()
+        } else {
+            delay(COUNTDOWN_TICK_MILLIS)
+            countdown = left - 1
+        }
+    }
+    val toggleMute: () -> Unit = {
+        muted = !muted
+        try {
+            recording?.mute(muted)
+        } catch (_: IllegalStateException) {
+        }
+    }
+    val togglePause: () -> Unit = {
+        val active = recording
+        if (paused) active?.resume() else active?.pause()
+    }
+    val currentZoom: () -> Float = { camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: zoomRatio }
+    val stepZoom: (Float) -> Unit = { target ->
+        zoomJob?.cancel()
+        camera?.cameraControl?.setZoomRatio(target.coerceIn(minZoom, maxZoom))
+    }
+    val animateZoom: (Float) -> Unit = animateZoom@{ target ->
+        val control = camera?.cameraControl ?: return@animateZoom
+        zoomJob?.cancel()
+        zoomJob = scope.launch {
+            if (reduceMotion) {
+                control.setZoomRatio(target.coerceIn(minZoom, maxZoom))
+            } else {
+                Animatable(currentZoom()).animateTo(target, motion.defaultEffectsSpec()) {
+                    control.setZoomRatio(value.coerceIn(minZoom, maxZoom))
                 }
             }
         }
     }
-    val shutter = { if (videoMode) toggleRecording() else takePhoto() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .focusRequester(focus)
-            .focusable()
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.Spacebar)) {
-                    shutter()
-                    true
-                } else {
+    val meter: (Offset, Boolean) -> Unit = meter@{ tap, lock ->
+        val bound = camera ?: return@meter
+        val request = surfaceRequest ?: return@meter
+        val point = with(transformer) { tap.transform() }
+        val factory = SurfaceOrientedMeteringPointFactory(request.resolution.width.toFloat(), request.resolution.height.toFloat())
+        val builder = FocusMeteringAction.Builder(factory.createPoint(point.x, point.y))
+        if (lock) {
+            builder.setLockingMode(FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE or FocusMeteringAction.FLAG_AWB)
+            builder.disableAutoCancel()
+        }
+        if (focusSpot?.locked == true) bound.cameraControl.cancelFocusAndMetering()
+        val id = focusSerial + 1
+        focusSerial = id
+        focusSpot = FocusSpot(id, tap, FocusPhase.Focusing, lock)
+        val future = bound.cameraControl.startFocusAndMetering(builder.build())
+        future.addListener(
+            {
+                val focused = try {
+                    future.get().isFocusSuccessful
+                } catch (_: ExecutionException) {
+                    false
+                } catch (_: CancellationException) {
                     false
                 }
+                val spot = focusSpot
+                if (spot != null && spot.id == id) focusSpot = spot.copy(phase = if (focused) FocusPhase.Focused else FocusPhase.Failed)
             },
-    ) {
-        surfaceRequest?.let { request ->
-            CameraXViewfinder(
-                surfaceRequest = request,
-                coordinateTransformer = transformer,
-                modifier = Modifier.fillMaxSize().pointerInput(camera, request) {
-                    detectTapGestures { tap ->
-                        val active = camera ?: return@detectTapGestures
-                        val point = with(transformer) { tap.transform() }
-                        val factory = SurfaceOrientedMeteringPointFactory(request.resolution.width.toFloat(), request.resolution.height.toFloat())
-                        active.cameraControl.startFocusAndMetering(FocusMeteringAction.Builder(factory.createPoint(point.x, point.y)).build())
-                    }
-                },
-            )
+            mainExecutor,
+        )
+        if (lock) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        } else if (exposureSupported) {
+            exposureOpen = true
+            exposurePinned = false
+            exposureTouches++
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().safeDrawingPadding().padding(8.dp),
-        ) {
+    }
+    val latestMeter by rememberUpdatedState(meter)
+    val latestWheel by rememberUpdatedState<(Float) -> Unit> { delta -> stepZoom(wheelZoom(currentZoom(), delta, minZoom, maxZoom)) }
+    val onCameraKey: (KeyEvent) -> Boolean = onCameraKey@{ event ->
+        val down = event.type == KeyEventType.KeyDown
+        val first = down && event.nativeKeyEvent.repeatCount == 0
+        when (event.key) {
+            Key.VolumeUp, Key.VolumeDown, Key.Camera -> {
+                if (first) shutter()
+                true
+            }
+            Key.Enter, Key.Spacebar -> {
+                if (first) shutter()
+                down
+            }
+            Key.Plus, Key.Equals, Key.NumPadAdd -> {
+                if (down) stepZoom(keyZoom(currentZoom(), zoomIn = true, minRatio = minZoom, maxRatio = maxZoom))
+                down
+            }
+            Key.Minus, Key.NumPadSubtract -> {
+                if (down) stepZoom(keyZoom(currentZoom(), zoomIn = false, minRatio = minZoom, maxRatio = maxZoom))
+                down
+            }
+            Key.Zero, Key.NumPad0 -> {
+                if (first) animateZoom(1f)
+                down
+            }
+            else -> false
+        }
+    }
+
+    val viewfinder: @Composable (Modifier, ContentScale) -> Unit = { modifier, scale ->
+        Box(modifier = modifier) {
+            surfaceRequest?.let { request ->
+                CameraXViewfinder(
+                    surfaceRequest = request,
+                    coordinateTransformer = transformer,
+                    contentScale = scale,
+                    isPinchToZoomEnabled = true,
+                    onScreenFlashReady = { screenFlash = it },
+                    onRelease = { screenFlash = null },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(request) {
+                            detectFocusGestures(onTap = { latestMeter(it, false) }, onLongPress = { latestMeter(it, true) })
+                        }
+                        .pointerInput(Unit) { detectWheel { latestWheel(it) } },
+                )
+            }
+            postview?.let { Image(it, contentDescription = null, contentScale = scale, modifier = Modifier.fillMaxSize()) }
+            focusSpot?.let { FocusRing(it, reduceMotion) }
+        }
+    }
+    val centerOverlays: @Composable BoxScope.() -> Unit = {
+        (notice ?: message)?.let { res ->
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = Color.Black.copy(alpha = 0.75f),
+                contentColor = Color.White,
+                modifier = Modifier.align(Alignment.Center).padding(24.dp).semantics { liveRegion = LiveRegionMode.Polite },
+            ) {
+                Text(stringResource(res), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(16.dp))
+            }
+        }
+        countdown?.takeIf { it > 0 }?.let { CountdownNumber(it, modifier = Modifier.align(Alignment.Center)) }
+    }
+    val topBar: @Composable (Modifier) -> Unit = { modifier ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
             TooltipIconButton(
                 label = stringResource(R.string.camera_close),
                 icon = Icons.Default.Close,
@@ -369,22 +703,44 @@ fun CameraCaptureOverlay(
                 tint = Color.White,
             )
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                recording?.let { RecordingBadge(recordedMillis) }
+                val active = recording
+                when {
+                    active != null -> RecordingBadge(recordedMillis, paused)
+                    timer != CaptureTimer.Off -> TimerBadge(timer)
+                }
             }
-            if (!videoMode) {
-                val (flashLabel, flashIcon) = when (flashMode) {
-                    ImageCapture.FLASH_MODE_ON -> R.string.camera_flash_on to Icons.Default.FlashOn
-                    ImageCapture.FLASH_MODE_AUTO -> R.string.camera_flash_auto to Icons.Default.FlashAuto
-                    else -> R.string.camera_flash_off to Icons.Default.FlashOff
+            if (exposureSupported) {
+                CameraToggleIcon(
+                    label = stringResource(R.string.camera_exposure),
+                    icon = Icons.Default.Exposure,
+                    checked = exposureOpen,
+                    onCheckedChange = { open ->
+                        exposureOpen = open
+                        exposurePinned = open
+                    },
+                )
+            }
+            if (videoMode && hasFlashUnit) {
+                CameraToggleIcon(
+                    label = stringResource(if (torchOn) R.string.camera_torch_on else R.string.camera_torch_off),
+                    icon = if (torchOn) Icons.Default.FlashlightOn else Icons.Default.FlashlightOff,
+                    checked = torchOn,
+                    onCheckedChange = { on -> camera?.cameraControl?.enableTorch(on) },
+                )
+            } else if (!videoMode && flashOptions.isNotEmpty()) {
+                val (flashLabel, flashIcon) = when (flash) {
+                    FlashChoice.On -> R.string.camera_flash_on to Icons.Default.FlashOn
+                    FlashChoice.Auto -> R.string.camera_flash_auto to Icons.Default.FlashAuto
+                    FlashChoice.Off -> R.string.camera_flash_off to Icons.Default.FlashOff
                 }
                 TooltipIconButton(
                     label = stringResource(flashLabel),
                     icon = flashIcon,
-                    onClick = { flashMode = nextFlashMode(flashMode) },
+                    onClick = { flashChoice = nextFlash(flash, flashOptions) },
                     tint = Color.White,
                 )
             }
-            if (cameras.size > 1 && recording == null && !capturing) {
+            if (cameras.size > 1 && recording == null && !busy) {
                 Box {
                     TooltipIconButton(
                         label = stringResource(R.string.camera_flip),
@@ -412,89 +768,264 @@ fun CameraCaptureOverlay(
                     }
                 }
             }
+            CameraToggleIcon(
+                label = stringResource(R.string.camera_settings),
+                icon = Icons.Default.Settings,
+                checked = settingsOpen,
+                onCheckedChange = onSettingsOpenChange,
+            )
         }
-        (notice ?: message)?.let { res ->
-            Surface(
-                shape = MaterialTheme.shapes.large,
-                color = Color.Black.copy(alpha = 0.75f),
-                contentColor = Color.White,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp).semantics { liveRegion = LiveRegionMode.Polite },
-            ) {
-                Text(stringResource(res), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(16.dp))
-            }
+    }
+    val showModes = !videoMode && captureModes.size > 1
+    val selectedMode = effectiveCaptureMode(captureMode, captureModes)
+    val showNightHint = nightHint && !videoMode && !busy && CaptureMode.Night in captureModes &&
+        activeMode != CaptureMode.Night && activeMode != CaptureMode.Auto
+    val framingControls: @Composable () -> Unit = {
+        if (showNightHint) NightHint(onClick = { onCaptureModeChange(CaptureMode.Night) })
+        if (exposureOpen && exposureSupported) {
+            val range = exposureState.exposureCompensationRange
+            val step = exposureState.exposureCompensationStep
+            ExposureSlider(
+                index = exposureIndex,
+                range = range.lower..range.upper,
+                value = exposureValue(exposureIndex, step.numerator, step.denominator),
+                onIndexChange = { value ->
+                    exposureIndex = value
+                    exposureTouches++
+                    camera?.cameraControl?.setExposureCompensationIndex(value)
+                },
+                interactionSource = exposureInteraction,
+            )
         }
-        val showModes = !videoMode && captureModes.size > 1
-        val selectedMode = effectiveCaptureMode(captureMode, captureModes)
-        val controls: @Composable () -> Unit = {
-            if (videoMode && !audioGranted && recording == null) {
-                MicrophoneNotice(blocked = audioBlocked, onClick = requestMicrophone)
-            }
-            if (capturing && activeMode != CaptureMode.Off) {
-                ProcessingNotice()
-            }
-            if (showModes && !landscape) {
-                CaptureModeChips(
-                    modes = captureModes,
-                    selected = selectedMode,
-                    vertical = false,
-                    enabled = !capturing,
-                    onSelect = onCaptureModeChange,
-                )
-            }
-            Row(
-                modifier = Modifier.selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
-            ) {
-                listOf(false to R.string.camera_photo, true to R.string.camera_video).forEachIndexed { index, (video, label) ->
-                    ToggleButton(
-                        checked = videoMode == video,
-                        onCheckedChange = {
-                            videoMode = video
-                            val firstAsk = !audioBlocked && !activity.shouldExplain(Manifest.permission.RECORD_AUDIO)
-                            if (video && !audioGranted && firstAsk) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        },
-                        enabled = recording == null && !capturing,
-                        shapes = if (index == 0) {
-                            ButtonGroupDefaults.connectedLeadingButtonShapes()
-                        } else {
-                            ButtonGroupDefaults.connectedTrailingButtonShapes()
-                        },
-                        modifier = Modifier.handCursor(recording == null && !capturing).semantics { role = Role.RadioButton },
-                    ) {
-                        Text(stringResource(label))
-                    }
+        if (stops.isNotEmpty()) ZoomStops(stops = stops, ratio = zoomRatio, onSelect = animateZoom)
+    }
+    val modeToggle: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier.selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        ) {
+            listOf(false to R.string.camera_photo, true to R.string.camera_video).forEachIndexed { index, (video, label) ->
+                val enabled = recording == null && !busy
+                ToggleButton(
+                    checked = videoMode == video,
+                    onCheckedChange = {
+                        videoMode = video
+                        val firstAsk = !audioBlocked && !activity.shouldExplain(Manifest.permission.RECORD_AUDIO)
+                        if (video && !audioGranted && firstAsk) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    enabled = enabled,
+                    shapes = if (index == 0) {
+                        ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    } else {
+                        ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    },
+                    modifier = Modifier.handCursor(enabled).semantics { role = Role.RadioButton },
+                ) {
+                    Text(stringResource(label))
                 }
             }
+        }
+    }
+    val shutterCluster: @Composable (Boolean) -> Unit = { vertical ->
+        val shutterButton: @Composable () -> Unit = {
             ShutterButton(
                 video = videoMode,
                 recording = recording != null,
+                counting = countdown != null,
                 busy = capturing,
                 progress = captureProgress,
                 onClick = shutter,
             )
         }
-        if (showModes && landscape) {
-            CaptureModeChips(
-                modes = captureModes,
-                selected = selectedMode,
-                vertical = true,
-                enabled = !capturing,
-                onSelect = onCaptureModeChange,
-                modifier = Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(24.dp),
+        if (videoMode) {
+            ShutterCluster(
+                vertical = vertical,
+                start = if (audioGranted) {
+                    {
+                        CameraRoundButton(
+                            label = stringResource(if (muted) R.string.camera_unmute else R.string.camera_mute),
+                            icon = if (muted) Icons.Default.MicOff else Icons.Default.Mic,
+                            onClick = toggleMute,
+                            checked = muted,
+                        )
+                    }
+                } else {
+                    null
+                },
+                end = if (recording != null) {
+                    {
+                        CameraRoundButton(
+                            label = stringResource(if (paused) R.string.camera_resume_recording else R.string.camera_pause_recording),
+                            icon = if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                            onClick = togglePause,
+                        )
+                    }
+                } else {
+                    null
+                },
+                shutter = shutterButton,
+            )
+        } else {
+            shutterButton()
+        }
+    }
+    val statusNotices: @Composable () -> Unit = {
+        if (videoMode && !audioGranted && recording == null) {
+            MicrophoneNotice(blocked = audioBlocked, onClick = requestMicrophone)
+        }
+        if (capturing && activeMode != CaptureMode.Off) {
+            CameraNotice(stringResource(if (postview != null) R.string.camera_processing_postview else R.string.camera_processing))
+        }
+    }
+    val modeChips: @Composable (Boolean, Modifier) -> Unit = { vertical, modifier ->
+        CaptureModeChips(
+            modes = captureModes,
+            selected = selectedMode,
+            vertical = vertical,
+            enabled = !busy,
+            onSelect = onCaptureModeChange,
+            modifier = modifier,
+        )
+    }
+    val settingsLayer: @Composable BoxScope.(Modifier) -> Unit = { panelModifier ->
+        if (settingsOpen) {
+            Box(modifier = Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { onSettingsOpenChange(false) } })
+        }
+        AnimatedVisibility(
+            visible = settingsOpen,
+            enter = if (reduceMotion) {
+                EnterTransition.None
+            } else {
+                fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.9f, transformOrigin = TransformOrigin(1f, 0f))
+            },
+            exit = if (reduceMotion) ExitTransition.None else fadeOut(motion.fastEffectsSpec()),
+            modifier = panelModifier,
+        ) {
+            CameraSettingsPanel(
+                timer = timer,
+                onTimerChange = { timer = it },
+                timerEnabled = countdown == null,
+                effectStrength = if (!videoMode && strengthAvailable && extensionStrength != null) {
+                    SliderSetting(R.string.camera_effect_strength, extensionStrength, 0..MAX_EXTENSION_STRENGTH) { value ->
+                        val bound = camera ?: return@SliderSetting
+                        runCatching { extensionsManager?.getCameraExtensionsControl(bound.cameraControl)?.setExtensionStrength(value) }
+                    }
+                } else {
+                    null
+                },
+                video = if (videoMode) {
+                    VideoSettings(
+                        options = videoOptions,
+                        support = videoSupport,
+                        recording = recording != null,
+                        torchOn = torchOn,
+                        onChange = onVideoOptionsChange,
+                    )
+                } else {
+                    null
+                },
+                torchBrightness = if (videoMode && torchOn && torchAdjustable && info != null) {
+                    SliderSetting(R.string.camera_torch_brightness, torchLevel ?: info.maxTorchStrengthLevel, 1..info.maxTorchStrengthLevel) { level ->
+                        camera?.cameraControl?.setTorchStrengthLevel(level)
+                    }
+                } else {
+                    null
+                },
+                focusRequester = panelFocus,
             )
         }
-        if (landscape) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                modifier = Modifier.align(Alignment.CenterEnd).safeDrawingPadding().padding(24.dp),
-            ) { controls() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onGloballyPositioned { coordinates ->
+                rootTop = coordinates.positionInWindow().y
+                rootHeight = coordinates.size.height
+            }
+            .focusRequester(focus)
+            .focusable()
+            .onKeyEvent(onCameraKey),
+    ) {
+        if (split != null) {
+            val (hingeTop, hingeBottom) = split
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxWidth().height(with(density) { hingeTop.toDp() })) {
+                    viewfinder(Modifier.fillMaxSize(), ContentScale.Fit)
+                    centerOverlays()
+                }
+                Spacer(modifier = Modifier.height(with(density) { (hingeBottom - hingeTop).toDp() }))
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)),
+                ) {
+                    val minHeight = maxHeight
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(min = minHeight)
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                    ) {
+                        topBar(Modifier.fillMaxWidth())
+                        framingControls()
+                        statusNotices()
+                        if (showModes) modeChips(false, Modifier)
+                        modeToggle()
+                        shutterCluster(false)
+                    }
+                    settingsLayer(Modifier.align(Alignment.TopEnd).padding(top = 56.dp, start = 16.dp, end = 16.dp, bottom = 8.dp))
+                }
+            }
         } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(24.dp),
-            ) { controls() }
+            viewfinder(Modifier.fillMaxSize(), ContentScale.Crop)
+            topBar(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeDrawingPadding().padding(8.dp))
+            centerOverlays()
+            if (landscape) {
+                if (showModes) {
+                    modeChips(true, Modifier.align(Alignment.CenterStart).safeDrawingPadding().padding(24.dp))
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(16.dp),
+                ) { framingControls() }
+                BoxWithConstraints(modifier = Modifier.align(Alignment.CenterEnd).safeDrawingPadding()) {
+                    val minHeight = maxHeight
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(min = minHeight)
+                            .padding(horizontal = 24.dp, vertical = 8.dp),
+                    ) {
+                        statusNotices()
+                        modeToggle()
+                        shutterCluster(true)
+                    }
+                }
+            } else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(horizontal = 16.dp, vertical = 24.dp),
+                ) {
+                    framingControls()
+                    statusNotices()
+                    if (showModes) modeChips(false, Modifier)
+                    modeToggle()
+                    shutterCluster(false)
+                }
+            }
+            settingsLayer(
+                Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
+            )
         }
     }
 }
@@ -573,25 +1104,10 @@ internal fun CaptureModeChips(
 }
 
 @Composable
-private fun ProcessingNotice() {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = Color.Black.copy(alpha = 0.75f),
-        contentColor = Color.White,
-        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-    ) {
-        Text(
-            text = stringResource(R.string.camera_processing),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-    }
-}
-
-@Composable
-private fun ShutterButton(video: Boolean, recording: Boolean, busy: Boolean, progress: Int, onClick: () -> Unit) {
+private fun ShutterButton(video: Boolean, recording: Boolean, counting: Boolean, busy: Boolean, progress: Int, onClick: () -> Unit) {
     val label = stringResource(
         when {
+            counting -> R.string.camera_countdown_cancel
             !video -> R.string.camera_take_photo
             recording -> R.string.camera_stop_recording
             else -> R.string.camera_start_recording
@@ -615,8 +1131,11 @@ private fun ShutterButton(video: Boolean, recording: Boolean, busy: Boolean, pro
             modifier = Modifier
                 .fillMaxSize()
                 .clip(if (recording) RoundedCornerShape(12.dp) else CircleShape)
-                .background((if (video) Color.Red else Color.White).copy(alpha = if (busy) DISABLED_CONTENT_ALPHA else 1f)),
+                .background((if (video) Color.Red else Color.White).copy(alpha = if (busy || counting) DISABLED_CONTENT_ALPHA else 1f)),
         )
+        if (counting) {
+            Icon(Icons.Default.Close, contentDescription = null, tint = Color.Black)
+        }
         if (busy) {
             val track = Color.White.copy(alpha = 0.3f)
             if (progress in 0..MAX_PROGRESS) {
@@ -634,9 +1153,9 @@ private fun ShutterButton(video: Boolean, recording: Boolean, busy: Boolean, pro
 }
 
 @Composable
-private fun RecordingBadge(millis: Long) {
+private fun RecordingBadge(millis: Long, paused: Boolean) {
     val time = formatElapsed(millis)
-    val description = stringResource(R.string.camera_recording_time, time)
+    val description = stringResource(if (paused) R.string.camera_recording_paused else R.string.camera_recording_time, time)
     Surface(
         shape = CircleShape,
         color = Color.Black.copy(alpha = 0.6f),
@@ -644,17 +1163,26 @@ private fun RecordingBadge(millis: Long) {
         modifier = Modifier.semantics { contentDescription = description },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red))
+            if (paused) {
+                Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(14.dp))
+            } else {
+                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red))
+            }
             Text(time, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
         }
     }
 }
 
-private fun nextFlashMode(current: Int): Int = when (current) {
-    ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_AUTO
-    ImageCapture.FLASH_MODE_AUTO -> ImageCapture.FLASH_MODE_ON
-    else -> ImageCapture.FLASH_MODE_OFF
+private fun requestFocusSafely(requester: FocusRequester) {
+    try {
+        requester.requestFocus()
+    } catch (_: IllegalStateException) {
+    }
 }
+
+private fun lensZoomRatios(info: CameraInfo): List<Float> = runCatching {
+    info.physicalCameraInfos.map { it.intrinsicZoomRatio }
+}.getOrDefault(emptyList())
 
 private fun formatElapsed(millis: Long): String {
     val seconds = millis / MILLIS_PER_SECOND
@@ -676,9 +1204,15 @@ private const val SECONDS_PER_MINUTE = 60L
 private const val NOTICE_MILLIS = 4000L
 private const val NO_PROGRESS = -1
 private const val MAX_PROGRESS = 100
+private const val MAX_EXTENSION_STRENGTH = 100
 private const val SCRIM_ALPHA = 0.55f
 private const val DISABLED_SCRIM_ALPHA = 0.35f
 private const val DISABLED_CONTENT_ALPHA = 0.5f
+private const val EXPOSURE_HIDE_MILLIS = 4000L
+private const val FOCUS_RING_MILLIS = 1500L
+private const val NIGHT_HINT_SHOW_MILLIS = 1000L
+private const val NIGHT_HINT_HIDE_MILLIS = 2000L
+private const val COUNTDOWN_TICK_MILLIS = 1000L
 
 private fun CaptureMode.labelRes(): Int = when (this) {
     CaptureMode.Off -> R.string.camera_mode_off
@@ -687,15 +1221,6 @@ private fun CaptureMode.labelRes(): Int = when (this) {
     CaptureMode.Night -> R.string.camera_mode_night
     CaptureMode.Portrait -> R.string.camera_mode_portrait
     CaptureMode.FaceRetouch -> R.string.camera_mode_face_retouch
-}
-
-private fun CaptureMode.extensionMode(): Int = when (this) {
-    CaptureMode.Off -> ExtensionMode.NONE
-    CaptureMode.Auto -> ExtensionMode.AUTO
-    CaptureMode.Hdr -> ExtensionMode.HDR
-    CaptureMode.Night -> ExtensionMode.NIGHT
-    CaptureMode.Portrait -> ExtensionMode.BOKEH
-    CaptureMode.FaceRetouch -> ExtensionMode.FACE_RETOUCH
 }
 
 private fun unbindIfReady(context: Context) {
