@@ -74,10 +74,8 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -593,7 +591,6 @@ private class ActionBarNode(element: ActionBarElement) : DelegatingNode(), Layou
         val renoteLabel = if (spec.renoted) labels.unrenote else labels.renote
         val renote = if (spec.renotes > 0) "$renoteLabel, ${spec.renotes}" else renoteLabel
         contentDescription = "$reply. $renote. ${labels.react}"
-        customActions = listOf(CustomAccessibilityAction(labels.more) { spec.actions.onCell(MORE, rect(MORE)); true })
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {

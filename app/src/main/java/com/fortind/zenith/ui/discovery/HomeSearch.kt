@@ -346,6 +346,7 @@ internal fun PersonSearchRow(person: NoteUser, signedIn: Boolean, actions: Peopl
             leading = { Avatar(name = person.displayName, url = person.avatarUrl, size = 40.dp) },
             onClick = onOpen,
             onLongClick = { menuOffset = DpOffset.Zero },
+            onLongClickLabel = stringResource(R.string.person_more),
             modifier = Modifier.contextMenuTrigger(onOpen = { menuOffset = it }).testTag("search:person"),
         )
         menuOffset?.let { offset ->
@@ -384,11 +385,13 @@ private fun SearchRow(
     supporting: String? = null,
     headlineContent: (@Composable () -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     var hovered by remember { mutableStateOf(false) }
     ListItem(
         onClick = onClick,
         onLongClick = onLongClick,
+        onLongClickLabel = onLongClickLabel,
         leadingContent = leading,
         supportingContent = supporting?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
         colors = ListItemDefaults.colors(containerColor = if (hovered) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent),

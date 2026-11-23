@@ -2,6 +2,7 @@ package com.fortind.zenith.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -34,12 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import com.fortind.zenith.R
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.ui.contextMenuTrigger
@@ -47,6 +51,9 @@ import com.fortind.zenith.ui.focusRing
 import com.fortind.zenith.ui.games.GameActions
 import com.fortind.zenith.ui.icons.GamesIcon
 import com.fortind.zenith.ui.pointerHover
+
+private val TileMinHeight = 64.dp
+private val TileVerticalPadding = 12.dp
 
 @Composable
 fun FavoritesCarousel(
@@ -68,17 +75,18 @@ fun FavoritesCarousel(
                 title = stringResource(R.string.home_favorites_browse),
                 trailing = true,
                 onClick = onBrowseGames,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
             )
             return@Column
         }
         val count = favorites.size + if (hasMore) 1 else 0
+        val titleLines = with(LocalDensity.current) { MaterialTheme.typography.titleSmall.lineHeight.toDp() * 2 }
         HorizontalUncontainedCarousel(
             state = rememberCarouselState { count },
             itemWidth = 168.dp,
             itemSpacing = 8.dp,
             contentPadding = PaddingValues(horizontal = 0.dp),
-            modifier = Modifier.fillMaxWidth().height(64.dp),
+            modifier = Modifier.fillMaxWidth().height(max(TileMinHeight, titleLines + TileVerticalPadding * 2)),
         ) { index ->
             if (index < favorites.size) {
                 val game = favorites[index]
@@ -103,7 +111,6 @@ private fun FavoriteTile(game: Game, actions: GameActions, modifier: Modifier = 
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
     Box(modifier = modifier.fillMaxSize()) {
         Surface(
-            onClick = { actions.open(game) },
             color = if (hovered) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier
                 .fillMaxSize()
@@ -112,7 +119,16 @@ private fun FavoriteTile(game: Game, actions: GameActions, modifier: Modifier = 
                 .contextMenuTrigger { offset ->
                     menuOffset = offset
                     menuOpen = true
-                },
+                }
+                .combinedClickable(
+                    onClickLabel = stringResource(R.string.home_favorites_open),
+                    onLongClickLabel = stringResource(R.string.games_menu_label, game.title),
+                    onLongClick = {
+                        menuOffset = DpOffset.Zero
+                        menuOpen = true
+                    },
+                    onClick = { actions.open(game) },
+                ),
         ) {
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),

@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalDensity
 import com.fortind.zenith.net.NetworkId
 import com.fortind.zenith.settings.ThemeMode
 import com.fortind.zenith.ui.Cursors
@@ -21,6 +22,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.foundation.layout.isCaptionBarVisible
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.annotation.StringRes
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.ui.discovery.HashtagsPage
 import com.fortind.zenith.ui.discovery.SearchResultsPage
@@ -61,6 +64,7 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -412,7 +416,7 @@ fun AppShell(
                             }
                         },
                         label = {
-                            Text(
+                            NavLabel(
                                 stringResource(
                                     if (destination == AppDestination.NOTIFICATIONS && !railExpanded) {
                                         R.string.nav_notifications_short
@@ -489,7 +493,24 @@ private fun RailSecondaryItem(
         navigationSuiteType = suiteType,
         modifier = Modifier.testTag(tag),
         icon = { Icon(imageVector = icon, contentDescription = stringResource(labelRes)) },
-        label = { Text(stringResource(labelRes)) },
+        label = { NavLabel(stringResource(labelRes)) },
+    )
+}
+
+@Composable
+private fun NavLabel(text: String) {
+    val fullSize = LocalTextStyle.current.fontSize
+    val density = LocalDensity.current
+    val normalSize = if (fullSize.isSp) with(density) { fullSize.value.dp.toSp() } else fullSize
+    if (density.fontScale <= 1f || !fullSize.isSp || normalSize.value >= fullSize.value) {
+        Text(text)
+        return
+    }
+    Text(
+        text = text,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        autoSize = TextAutoSize.StepBased(minFontSize = normalSize, maxFontSize = fullSize),
     )
 }
 

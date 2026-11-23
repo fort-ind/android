@@ -165,7 +165,7 @@ private fun ImageHeader(
             Avatar(name = name, url = avatarModel, size = AvatarSize)
             if (onPickAvatar != null) {
                 LabelTooltip(stringResource(R.string.account_change_avatar), modifier = Modifier.align(Alignment.BottomEnd)) {
-                    FilledTonalIconButton(onClick = onPickAvatar, modifier = Modifier.size(40.dp).handCursor()) {
+                    FilledTonalIconButton(onClick = onPickAvatar, modifier = Modifier.handCursor()) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = stringResource(R.string.account_change_avatar))
                     }
                 }

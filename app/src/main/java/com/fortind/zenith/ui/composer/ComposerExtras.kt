@@ -7,6 +7,7 @@ import android.text.format.DateUtils
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -191,7 +193,7 @@ internal fun PollEditor(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .heightIn(min = 48.dp)
                     .toggleable(value = state.pollMultiple, role = Role.Checkbox, onValueChange = viewModel::setPollMultiple),
             ) {
                 Checkbox(checked = state.pollMultiple, onCheckedChange = null)
@@ -613,9 +615,10 @@ internal fun DriveTile(
     val tile = remember { LayoutHolder() }
     val density = LocalDensity.current
     var shiftHeld by remember { mutableStateOf(false) }
+    val openMenuAtTile: () -> Unit = {
+        tile.coordinates?.let { coordinates -> onOpenMenu(coordinates, Offset(0f, coordinates.size.height.toFloat())) }
+    }
     Surface(
-        onClick = { if (shiftHeld) onRangeSelect() else onToggle() },
-        enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -623,6 +626,13 @@ internal fun DriveTile(
             .fillMaxWidth()
             .height(104.dp)
             .focusRing(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
+            .clip(MaterialTheme.shapes.medium)
+            .combinedClickable(
+                enabled = enabled,
+                onLongClickLabel = stringResource(R.string.drive_tile_menu_label, name),
+                onLongClick = openMenuAtTile,
+                onClick = { if (shiftHeld) onRangeSelect() else onToggle() },
+            )
             .onPlaced { tile.coordinates = it }
             .pointerInput(Unit) {
                 awaitPointerEventScope {

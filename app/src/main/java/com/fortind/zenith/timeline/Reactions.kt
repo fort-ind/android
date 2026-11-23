@@ -11,6 +11,11 @@ object Reactions {
         return key.substring(1, key.length - 1).substringBefore('@')
     }
 
+    fun spokenName(key: String): String = customName(key)?.let(::spokenEmojiName) ?: key
+
+    fun spokenEmojiName(name: String): String =
+        name.split('_', '-', ' ').filter { it.isNotEmpty() }.joinToString(" ").ifEmpty { name }
+
     fun customHost(key: String): String? {
         if (!isCustom(key)) return null
         val inner = key.substring(1, key.length - 1)

@@ -124,9 +124,11 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -728,12 +730,16 @@ private fun BodyField(viewModel: ComposerViewModel, state: ComposerUiState, focu
         is ComposerTarget.Quote -> R.string.composer_hint_quote
         else -> R.string.composer_hint_new
     }
+    val over by remember(viewModel, state.textLimit) { computedStateOf { viewModel.text.text.length > state.textLimit } }
+    val overMessage = stringResource(R.string.composer_over_limit_error)
     TextField(
         state = viewModel.text,
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
-            .onPreviewKeyEvent(viewModel::handleSuggestionKey),
+            .onPreviewKeyEvent(viewModel::handleSuggestionKey)
+            .semantics { if (over) error(overMessage) },
+        isError = over,
         lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 6),
         placeholder = { Text(stringResource(hint)) },
         textStyle = MaterialTheme.typography.bodyLarge,
@@ -764,9 +770,11 @@ private fun transparentFieldColors() = TextFieldDefaults.colors(
     focusedContainerColor = Color.Transparent,
     unfocusedContainerColor = Color.Transparent,
     disabledContainerColor = Color.Transparent,
+    errorContainerColor = Color.Transparent,
     focusedIndicatorColor = Color.Transparent,
     unfocusedIndicatorColor = Color.Transparent,
     disabledIndicatorColor = Color.Transparent,
+    errorIndicatorColor = Color.Transparent,
 )
 
 @Composable
@@ -945,11 +953,18 @@ internal fun SheetTitle(title: String) {
 private fun Counter(length: () -> Int, limit: Int) {
     val value = length()
     val over = value > limit
+    val spoken = if (over) {
+        pluralStringResource(R.plurals.composer_counter_over_description, value - limit, value - limit)
+    } else {
+        pluralStringResource(R.plurals.composer_counter_description, limit, value, limit)
+    }
     Text(
         text = if (over) stringResource(R.string.composer_counter_over, value - limit) else stringResource(R.string.composer_counter, value, limit),
         style = MaterialTheme.typography.labelMedium,
         color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 8.dp),
+        modifier = Modifier
+            .padding(horizontal = 8.dp)
+            .semantics { contentDescription = spoken },
     )
 }
 

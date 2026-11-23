@@ -29,11 +29,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -115,6 +120,7 @@ private fun ChoiceOption(text: String, multiple: Boolean, selected: Boolean, onC
     } else {
         base.clickable(role = Role.Button, onClick = onClick)
     }
+    val content = if (selected) colors.onSecondaryContainer else colors.onSurface
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -124,11 +130,11 @@ private fun ChoiceOption(text: String, multiple: Boolean, selected: Boolean, onC
             Icon(
                 if (selected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                 contentDescription = null,
-                tint = if (selected) colors.primary else colors.onSurfaceVariant,
+                tint = if (selected) content else colors.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )
         }
-        Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = content, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -138,12 +144,14 @@ private fun ChoiceResult(choice: PollChoice, total: Int) {
     val fraction = if (total == 0) 0f else choice.votes.toFloat() / total
     val percent = (fraction * 100).roundToInt()
     val fill = if (choice.isVoted) colors.primaryContainer else colors.secondaryContainer
+    val onFill = if (choice.isVoted) colors.onPrimaryContainer else colors.onSecondaryContainer
     val description = stringResource(
         if (choice.isVoted) R.string.note_poll_choice_voted else R.string.note_poll_choice_result,
         choice.text,
         percent,
     )
     Box(
+        contentAlignment = Alignment.CenterStart,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
@@ -156,22 +164,41 @@ private fun ChoiceResult(choice: PollChoice, total: Int) {
             }
             .semantics { contentDescription = description },
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            if (choice.isVoted) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
-            }
-            Text(
-                choice.text,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Text("$percent%", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+        ChoiceLabel(choice, percent, ChoiceTones(colors.onSurface, colors.onSurfaceVariant, colors.primary), Modifier.clipToFill(fraction, inside = false))
+        ChoiceLabel(choice, percent, ChoiceTones(onFill, onFill, onFill), Modifier.clipToFill(fraction, inside = true).clearAndSetSemantics {})
+    }
+}
+
+private class ChoiceTones(val text: Color, val percent: Color, val check: Color)
+
+@Composable
+private fun ChoiceLabel(choice: PollChoice, percent: Int, tones: ChoiceTones, modifier: Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        if (choice.isVoted) {
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = tones.check, modifier = Modifier.size(18.dp))
         }
+        Text(
+            choice.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = tones.text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text("$percent%", style = MaterialTheme.typography.labelLarge, color = tones.percent)
+    }
+}
+
+private fun Modifier.clipToFill(fraction: Float, inside: Boolean): Modifier = drawWithContent {
+    val width = size.width * fraction
+    val left = if (layoutDirection == LayoutDirection.Rtl) size.width - width else 0f
+    clipRect(left = left, top = 0f, right = left + width, bottom = size.height, clipOp = if (inside) ClipOp.Intersect else ClipOp.Difference) {
+        this@drawWithContent.drawContent()
     }
 }

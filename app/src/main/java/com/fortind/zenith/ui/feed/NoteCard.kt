@@ -39,6 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -58,10 +61,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import com.fortind.zenith.mfm.MfmText
@@ -113,7 +119,7 @@ fun NoteCard(
     val colors = MaterialTheme.colorScheme
     val container = when {
         focal -> Color.Transparent
-        selected -> colors.secondaryContainer
+        selected -> colors.surfaceContainerHigh
         hovered -> colors.surfaceContainerLow
         else -> Color.Transparent
     }
@@ -136,6 +142,7 @@ fun NoteCard(
             color = container,
             modifier = Modifier
                 .fillMaxWidth()
+                .selectedBar(colors.primary, show = selected && !focal)
                 .hostedPopupAnchor(popupAnchor)
                 .testTag("note")
                 .focusRing(MaterialTheme.colorScheme.primary, RectangleShape)
@@ -148,17 +155,22 @@ fun NoteCard(
                     runNoteKey(key, target, environment, callbacks, reveal, collapsible = !focal, renoted = renoted, openMenu = openMenu)
                 }
                 .semantics {
-                    customActions = listOf(
-                        CustomAccessibilityAction(labels.reply) { callbacks.reply(target); true },
-                        CustomAccessibilityAction(labels.quote) { callbacks.quote(target); true },
-                        CustomAccessibilityAction(labels.react) { callbacks.openReactionPicker(target); true },
-                        CustomAccessibilityAction(if (renoted) labels.unrenote else labels.renote) {
-                            if (renoted) callbacks.unrenote(target) else callbacks.renote(target)
-                            true
-                        },
-                        CustomAccessibilityAction(labels.copyLink) { callbacks.copyLink(target); true },
-                        CustomAccessibilityAction(labels.openBrowser) { callbacks.openUrl(target.webUrl); true },
-                    )
+                    if (selected && !focal) this.selected = true
+                    if (!target.deleted) {
+                        customActions = listOf(
+                            CustomAccessibilityAction(labels.reply) { callbacks.reply(target); true },
+                            CustomAccessibilityAction(labels.like) { callbacks.reactDefault(target); true },
+                            CustomAccessibilityAction(labels.react) { callbacks.openReactionPicker(target); true },
+                            CustomAccessibilityAction(if (renoted) labels.unrenote else labels.renote) {
+                                if (renoted) callbacks.unrenote(target) else callbacks.renote(target)
+                                true
+                            },
+                            CustomAccessibilityAction(labels.quote) { callbacks.quote(target); true },
+                            CustomAccessibilityAction(labels.copyLink) { callbacks.copyLink(target); true },
+                            CustomAccessibilityAction(labels.openBrowser) { callbacks.openUrl(target.webUrl); true },
+                            CustomAccessibilityAction(labels.more) { openMenu(DpOffset.Zero); true },
+                        )
+                    }
                 },
         ) {
             Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 2.dp)) {
@@ -233,7 +245,7 @@ private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCa
             url = note.user.avatarUrl,
             size = if (focal) 48.dp else 40.dp,
             modifier = Modifier
-                .clickable(onClickLabel = note.user.handle) { callbacks.openProfile(note.user) }
+                .clickable(onClickLabel = stringResource(R.string.person_menu_view)) { callbacks.openProfile(note.user) }
                 .testTag("note:avatar")
                 .semantics { contentDescription = note.user.handle },
         )
@@ -266,7 +278,7 @@ private fun RenoteHeader(note: Note, environment: NoteEnvironment) {
             modifier = Modifier.weight(1f, fill = false),
         )
         Text(stringResource(R.string.note_renoted), style = MaterialTheme.typography.labelLarge, color = tint, maxLines = 1)
-        Text("·", style = MaterialTheme.typography.labelMedium, color = tint)
+        Text("·", style = MaterialTheme.typography.labelMedium, color = tint, modifier = Modifier.semantics { hideFromAccessibility() })
         Text(relativeTime(note.createdAtMillis, environment.now), style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1)
     }
 }
@@ -616,6 +628,20 @@ private fun MenuItem(label: String, enabled: Boolean = true, destructive: Boolea
     val colors = if (destructive) MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error) else MenuDefaults.itemColors()
     DropdownMenuItem(text = { Text(label) }, onClick = onClick, enabled = enabled, colors = colors)
 }
+
+private val SelectedBarWidth = 4.dp
+
+private fun Modifier.selectedBar(color: Color, show: Boolean): Modifier =
+    if (!show) {
+        this
+    } else {
+        drawWithContent {
+            drawContent()
+            val width = SelectedBarWidth.toPx()
+            val left = if (layoutDirection == LayoutDirection.Rtl) size.width - width else 0f
+            drawRect(color, topLeft = Offset(left, 0f), size = Size(width, size.height))
+        }
+    }
 
 fun absoluteTime(context: Context, millis: Long): String =
     DateUtils.formatDateTime(

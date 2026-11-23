@@ -47,6 +47,7 @@ import com.fortind.zenith.mfm.MfmStrike
 import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.mfm.MfmUrl
 import com.fortind.zenith.mfm.parseUnixSeconds
+import com.fortind.zenith.mfm.spoilerStandIn
 import com.fortind.zenith.mfm.toPlainText
 import com.fortind.zenith.ui.media.rememberAnimatedDrawableStopper
 import com.fortind.zenith.ui.media.rememberImageRequest
@@ -204,9 +205,9 @@ internal class MfmAnnotatedBuilder(
             append(fn.children, scale)
             return
         }
-        val hidden = SpanStyle(color = Color.Transparent, background = environment.spoilerColor)
+        val hidden = SpanStyle(color = environment.spoilerTextColor, background = environment.spoilerColor)
         builder.withLink(LinkAnnotation.Clickable("blur:$index") { onReveal(index) }) {
-            builder.withStyle(hidden) { append(fn.children.toPlainText()) }
+            builder.withStyle(hidden) { append(spoilerStandIn(fn.children.toPlainText(), environment.hiddenTextLabel)) }
         }
     }
 

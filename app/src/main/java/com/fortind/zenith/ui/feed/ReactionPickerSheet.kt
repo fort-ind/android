@@ -227,7 +227,7 @@ private fun LazyGridScope.entries(
 private fun PickerCell(entry: PickerEntry, environment: NoteEnvironment, onPick: (String) -> Unit) {
     var hovered by remember { mutableStateOf(false) }
     val label = when (entry) {
-        is PickerEntry.Custom -> ":${entry.emoji.name}:"
+        is PickerEntry.Custom -> Reactions.spokenEmojiName(entry.emoji.name)
         is PickerEntry.Unicode -> entry.name
     }
     Surface(

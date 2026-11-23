@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -71,6 +72,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private val TileSize = 112.dp
+private val BadgeSize = 32.dp
+private val BadgeTarget = 48.dp
+private val BadgeInset = 4.dp
 
 @Composable
 fun AttachmentStrip(
@@ -161,28 +165,44 @@ private fun AttachmentTile(
             AttachmentPhase.Ready -> ReadyBadges(attachment, onEditDetails)
         }
         if (attachment.canMarkUp) {
+            TileBadgeButton(
+                label = stringResource(R.string.attachment_mark_up),
+                icon = Icons.Default.Draw,
+                onClick = onMarkUp,
+                corner = Alignment.TopStart,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
+        TileBadgeButton(
+            label = stringResource(R.string.attachment_remove),
+            icon = Icons.Default.Close,
+            onClick = onRemove,
+            corner = Alignment.TopEnd,
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
+}
+
+@Composable
+private fun TileBadgeButton(label: String, icon: ImageVector, onClick: () -> Unit, corner: Alignment, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    LabelTooltip(label, modifier = modifier) {
+        Box(
+            contentAlignment = corner,
+            modifier = Modifier
+                .size(BadgeTarget)
+                .handCursor()
+                .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                .padding(BadgeInset),
+        ) {
             Surface(
                 shape = CircleShape,
                 color = Color.Black.copy(alpha = 0.6f),
                 contentColor = Color.White,
-                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                modifier = Modifier.size(BadgeSize).indication(interaction, ripple()),
             ) {
-                LabelTooltip(stringResource(R.string.attachment_mark_up)) {
-                    IconButton(onClick = onMarkUp, modifier = Modifier.size(32.dp).handCursor()) {
-                        Icon(Icons.Default.Draw, contentDescription = stringResource(R.string.attachment_mark_up), modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-        }
-        Surface(
-            shape = CircleShape,
-            color = Color.Black.copy(alpha = 0.6f),
-            contentColor = Color.White,
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-        ) {
-            LabelTooltip(stringResource(R.string.attachment_remove)) {
-                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp).handCursor()) {
-                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.attachment_remove), modifier = Modifier.size(16.dp))
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp))
                 }
             }
         }

@@ -254,6 +254,7 @@
     <string name="drive_menu_select">Select</string>
     <string name="drive_menu_deselect">Deselect</string>
     <string name="drive_menu_attached">Already attached!</string>
+    <string name="drive_tile_menu_label">More options for %1$s</string>
     <plurals name="drive_attach">
         <item quantity="one">Attach %1$d</item>
         <item quantity="other">Attach %1$d</item>
@@ -371,6 +372,7 @@
     <string name="picker_no_results">No emoji found :(</string>
 
     <string name="mfm_search">Search</string>
+    <string name="mfm_hidden_text">Hidden text</string>
 
     <plurals name="nav_notifications_unread">
         <item quantity="one">Notifications, %1$d unread</item>
@@ -530,6 +532,15 @@
     <string name="composer_poll_ended_warning">This poll has ended. Saving removes the poll and its results.</string>
     <string name="composer_counter">%1$d / %2$d</string>
     <string name="composer_counter_over">Over by %1$d</string>
+    <plurals name="composer_counter_description">
+        <item quantity="one">%1$d of %2$d character</item>
+        <item quantity="other">%1$d of %2$d characters</item>
+    </plurals>
+    <plurals name="composer_counter_over_description">
+        <item quantity="one">%d character over the limit</item>
+        <item quantity="other">%d characters over the limit</item>
+    </plurals>
+    <string name="composer_over_limit_error">Over the character limit</string>
     <string name="composer_discard_title">Keep this draft?</string>
     <string name="composer_discard_edit_title">Discard your changes?</string>
     <string name="composer_discard_body">You can pick up right where you left off. :p</string>

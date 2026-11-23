@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -115,7 +116,7 @@ fun ReactionChips(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
                 Text(
                     pluralStringResource(R.plurals.note_reactions_more, sorted.size - VISIBLE_REACTIONS, sorted.size - VISIBLE_REACTIONS),
                     style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.height(32.dp).padding(horizontal = 12.dp, vertical = 7.dp),
+                    modifier = Modifier.heightIn(min = 32.dp).padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
         }
@@ -132,8 +133,7 @@ internal fun ReactionChip(
     environment: NoteEnvironment,
     onClick: () -> Unit,
 ) {
-    val name = Reactions.customName(reactionKey)
-    val description = stringResource(R.string.note_reaction_description, name?.let { ":$it:" } ?: reactionKey, count)
+    val description = stringResource(R.string.note_reaction_description, Reactions.spokenName(reactionKey), count)
     var hovered by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val container = when {
@@ -158,7 +158,7 @@ internal fun ReactionChip(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.height(32.dp).padding(horizontal = 10.dp),
+            modifier = Modifier.heightIn(min = 32.dp).padding(horizontal = 10.dp),
         ) {
             ReactionGlyph(reactionKey, note, environment, sizeDp = 18)
             Text(count.toString(), style = MaterialTheme.typography.labelLarge)

@@ -67,6 +67,8 @@ class MfmEnvironment(
     val subtleColor: Color,
     val accentColor: Color,
     val spoilerColor: Color,
+    val spoilerTextColor: Color,
+    val hiddenTextLabel: String,
     val unixTimeLabel: (Long) -> String,
 ) {
     fun mentionUrl(mention: MfmMention): String = "https://${FortInstance.HOST}/${mention.acct}"
@@ -76,7 +78,7 @@ class MfmEnvironment(
     fun searchUrl(query: String): String = "https://${FortInstance.HOST}/search?q=${URLEncoder.encode(query, "UTF-8")}"
 
     fun withEmoji(emojiUrl: (String) -> String) =
-        MfmEnvironment(emojiUrl, animate, linkStyles, codeBackground, subtleColor, accentColor, spoilerColor, unixTimeLabel)
+        MfmEnvironment(emojiUrl, animate, linkStyles, codeBackground, subtleColor, accentColor, spoilerColor, spoilerTextColor, hiddenTextLabel, unixTimeLabel)
 }
 
 @Composable
@@ -84,21 +86,23 @@ fun rememberMfmEnvironment(emojiUrl: (String) -> String, animate: Boolean): MfmE
     val colors = MaterialTheme.colorScheme
     val resources = LocalResources.current
     return remember(emojiUrl, animate, colors, resources) {
-        val link = SpanStyle(color = colors.primary)
+        val link = SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)
         MfmEnvironment(
             emojiUrl = emojiUrl,
             animate = animate,
             linkStyles = TextLinkStyles(
                 style = link,
                 focusedStyle = link.copy(background = colors.primary.copy(alpha = 0.16f)),
-                hoveredStyle = link.copy(textDecoration = TextDecoration.Underline),
+                hoveredStyle = link.copy(background = colors.primary.copy(alpha = 0.08f)),
                 pressedStyle = link.copy(background = colors.primary.copy(alpha = 0.24f)),
             ),
             codeBackground = colors.surfaceContainerHighest,
             subtleColor = colors.onSurfaceVariant,
             accentColor = colors.primary,
             spoilerColor = colors.onSurfaceVariant,
-            unixTimeLabel = { seconds -> unixTimeLabel(resources, seconds, System.currentTimeMillis()) },
+            spoilerTextColor = colors.surface,
+            hiddenTextLabel = resources.getString(R.string.mfm_hidden_text),
+            unixTimeLabel ={ seconds -> unixTimeLabel(resources, seconds, System.currentTimeMillis()) },
         )
     }
 }

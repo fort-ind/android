@@ -65,6 +65,7 @@ import com.fortind.zenith.R
 import com.fortind.zenith.notifications.FortNotification
 import com.fortind.zenith.notifications.NotificationType
 import com.fortind.zenith.notifications.titleText
+import com.fortind.zenith.timeline.Reactions
 import com.fortind.zenith.ui.Avatar
 import com.fortind.zenith.ui.contextMenuTrigger
 import com.fortind.zenith.ui.pointerHover
@@ -231,7 +232,7 @@ private fun ReactionView(reaction: String, emojiUrl: String?) {
     if (emojiUrl != null) {
         AsyncImage(
             model = emojiUrl,
-            contentDescription = reaction,
+            contentDescription = Reactions.spokenName(reaction),
             modifier = Modifier.height(28.dp),
         )
     } else {
