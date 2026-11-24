@@ -6,8 +6,9 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,18 +62,39 @@ private const val TADA_FACTOR = 1.5f
 private const val MAX_TEXT_SCALE = 8f
 private const val BOX_PADDING_SP = 2f
 private const val UNIX_TIME_SLACK_PX = 2f
+private const val ASPECT_TOLERANCE = 0.05f
 
 object EmojiAspects {
-    private val ratios = ConcurrentHashMap<String, Float>()
-    var version by mutableIntStateOf(0)
-        private set
+    private val ratios = ConcurrentHashMap<String, MutableFloatState>()
 
-    fun ratio(url: String): Float = ratios[url] ?: 1f
+    private fun stateOf(url: String): MutableFloatState = ratios.getOrPut(url) { mutableFloatStateOf(1f) }
+
+    fun ratio(url: String): Float = stateOf(url).floatValue
 
     fun record(url: String, ratio: Float) {
         if (ratio <= 0f || ratio.isNaN()) return
-        val previous = ratios.put(url, ratio) ?: 1f
-        if (abs(previous - ratio) > 0.05f) version++
+        val state = stateOf(url)
+        if (abs(state.floatValue - ratio) > ASPECT_TOLERANCE) state.floatValue = ratio
+    }
+}
+
+internal class EmojiSlot(val key: String, val name: String, val url: String, val heightSp: Float)
+
+internal class BuiltText(
+    val text: AnnotatedString,
+    private val inline: Map<String, InlineTextContent>,
+    val emoji: List<EmojiSlot>,
+    private val animate: Boolean,
+) {
+    fun inlineContent(ratios: List<Float>): Map<String, InlineTextContent> {
+        if (emoji.isEmpty()) return inline
+        val content = LinkedHashMap(inline)
+        emoji.forEachIndexed { index, slot ->
+            content[slot.key] = InlineTextContent(
+                Placeholder((slot.heightSp * ratios[index]).sp, slot.heightSp.sp, PlaceholderVerticalAlign.TextCenter),
+            ) { CustomEmojiImage(slot.name, slot.url, animate) }
+        }
+        return content
     }
 }
 
@@ -90,6 +112,7 @@ internal class MfmAnnotatedBuilder(
 ) {
     private val builder = AnnotatedString.Builder()
     private val inline = LinkedHashMap<String, InlineTextContent>()
+    private val emoji = LinkedHashMap<String, EmojiSlot>()
     private var boxCount = 0
     private var blurCount = 0
     private var unixTimeCount = 0
@@ -103,7 +126,7 @@ internal class MfmAnnotatedBuilder(
 
     fun build(nodes: List<MfmNode>): BuiltText {
         append(nodes, 1f)
-        return BuiltText(builder.toAnnotatedString(), inline)
+        return BuiltText(builder.toAnnotatedString(), inline, emoji.values.toList(), environment.animate)
     }
 
     private fun append(nodes: List<MfmNode>, scale: Float) {
@@ -139,15 +162,8 @@ internal class MfmAnnotatedBuilder(
     }
 
     private fun appendEmoji(name: String, scale: Float) {
-        val url = environment.emojiUrl(name)
-        val heightSp = baseSize * scale * EMOJI_SCALE
-        val widthSp = heightSp * EmojiAspects.ratio(url)
         val key = "e:$name:$scale"
-        if (key !in inline) {
-            inline[key] = InlineTextContent(
-                Placeholder(widthSp.sp, heightSp.sp, PlaceholderVerticalAlign.TextCenter),
-            ) { CustomEmojiImage(name, url, environment.animate) }
-        }
+        if (key !in emoji) emoji[key] = EmojiSlot(key, name, environment.emojiUrl(name), baseSize * scale * EMOJI_SCALE)
         builder.appendInlineContent(key, ":$name:")
     }
 

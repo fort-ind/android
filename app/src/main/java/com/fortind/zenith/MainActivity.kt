@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        container.prefetchHomeTimeline()
         enableEdgeToEdge()
         if (savedInstanceState == null) handleIntent(intent) else restoreRequests(savedInstanceState)
         poppedOutTab?.let { tab ->

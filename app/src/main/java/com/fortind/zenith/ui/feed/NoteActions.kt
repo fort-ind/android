@@ -178,7 +178,6 @@ fun ReactionGlyph(reactionKey: String, note: Note?, environment: NoteEnvironment
         Text(":$name:", style = MaterialTheme.typography.labelMedium)
         return
     }
-    EmojiAspects.version
     val ratio = EmojiAspects.ratio(url).coerceIn(0.5f, 6f)
     Box(modifier = Modifier.height(sizeDp.dp).width((sizeDp * ratio).dp)) {
         CustomEmojiImage(name, url, environment.animate)

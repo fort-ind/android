@@ -89,8 +89,12 @@ import com.fortind.zenith.timeline.HttpLinkPreviewApi
 import com.fortind.zenith.timeline.HttpNotesApi
 import com.fortind.zenith.timeline.LinkPreviewSource
 import com.fortind.zenith.timeline.NotesApi
+import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.timeline.StreamingTimelineStream
+import com.fortind.zenith.timeline.TimelineKind
+import com.fortind.zenith.timeline.TimelinePrefetch
 import com.fortind.zenith.timeline.TimelineStream
+import com.fortind.zenith.ui.feed.FeedViewModel
 import com.fortind.zenith.shortcuts.AndroidShortcutStore
 import com.fortind.zenith.shortcuts.LauncherShortcuts
 import com.fortind.zenith.widget.DataStoreWidgetRenderStore
@@ -136,6 +140,7 @@ class AppContainer(application: Application) {
     val mediaCompressor: MediaCompressor = AndroidMediaCompressor(application)
     val mediaSanitizer: MediaSanitizer = AndroidMediaSanitizer(application, mediaReader)
     val timelineStream: TimelineStream = StreamingTimelineStream(streaming)
+    val timelinePrefetch = TimelinePrefetch(notesApi, scope)
     val linkPreviews: LinkPreviewSource = CachingLinkPreviews(HttpLinkPreviewApi(http) { Locale.getDefault().toLanguageTag() }, scope)
     val emojiRepository = EmojiRepository(HttpInstanceApi(http), { File(application.cacheDir, "instance") }, scope)
     val unicodeEmoji: UnicodeEmojiSource = AssetUnicodeEmojiSource(application.assets)
@@ -189,6 +194,16 @@ class AppContainer(application: Application) {
         scope = scope,
         locales = { application.resources.configuration.locales.toLanguageTags() },
     )
+
+    fun prefetchHomeTimeline() {
+        if (sessionService.state.value != SessionState.Restoring) return
+        scope.launch {
+            val token = sessionService.token() ?: return@launch
+            if (sessionService.state.value == SessionState.Restoring) {
+                timelinePrefetch.start(token, TimelineKind.Home, FeedViewModel.PAGE_SIZE)
+            }
+        }
+    }
 
     init {
         http.onPermissionDenied = { scope.launch { sessionService.markScopesStale() } }

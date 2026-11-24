@@ -39,6 +39,7 @@ import com.fortind.zenith.timeline.UserNotesTab
 import com.fortind.zenith.timeline.NotesApiSource
 import com.fortind.zenith.timeline.Reactions
 import com.fortind.zenith.timeline.TimelineKind
+import com.fortind.zenith.timeline.TimelinePrefetch
 import com.fortind.zenith.timeline.TimelineStream
 import com.fortind.zenith.timeline.TimelineStreamEvent
 import com.fortind.zenith.timeline.TimelineUnavailableException
@@ -71,6 +72,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -115,6 +117,7 @@ class FeedViewModel(
     private val clock: () -> Long = System::currentTimeMillis,
     private val muteDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val windows: WindowLink = WindowLink.Alone,
+    private val prefetch: TimelinePrefetch? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -138,7 +141,7 @@ class FeedViewModel(
     private val atTop = TimelineKind.entries.associateWith { true }.toMutableMap()
     private val loadJobs = HashMap<TimelineKind, Job>()
     private var threadJob: Job? = null
-    private var threadPages: Job = SupervisorJob(viewModelScope.coroutineContext[Job])
+    private var threadPages: CoroutineScope = threadPageScope()
     private val threadCache = object : LinkedHashMap<String, ThreadState>(THREAD_CACHE_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ThreadState>?) = size > THREAD_CACHE_SIZE
     }
@@ -635,9 +638,12 @@ class FeedViewModel(
         loadMoreFailed = rows.isNotEmpty(),
     )
 
+    private fun threadPageScope(): CoroutineScope =
+        CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
+
     private fun launchThreadPage(block: suspend CoroutineScope.(generation: Int) -> Unit) {
         val generation = authGeneration
-        viewModelScope.launch(threadPages) { block(generation) }
+        threadPages.launch { block(generation) }
     }
 
     private fun ThreadPeople.withPage(page: List<ThreadPerson>, more: Boolean): ThreadPeople {
@@ -1146,7 +1152,7 @@ class FeedViewModel(
         loadJobs.clear()
         threadJob?.cancel()
         threadPages.cancel()
-        threadPages = SupervisorJob(viewModelScope.coroutineContext[Job])
+        threadPages = threadPageScope()
         threadCache.clear()
         reactionJobs.values.forEach { it.cancel() }
         reactionJobs.clear()
@@ -1244,10 +1250,12 @@ class FeedViewModel(
         return api.collectionNotes(signedIn, chosen, untilId, sinceId, limit)
     }
 
-    private suspend fun fetchTimeline(kind: TimelineKind, untilId: String?): TimelinePage {
+    private suspend fun fetchTimeline(kind: TimelineKind, untilId: String?, firstPage: List<Note>? = null): TimelinePage {
         var cursor = untilId
+        var ready = firstPage
         repeat(HARD_MUTE_EXTRA_PAGES + 1) {
-            val page = rawTimeline(kind, untilId = cursor, sinceId = null, limit = PAGE_SIZE)
+            val page = ready ?: rawTimeline(kind, untilId = cursor, sinceId = null, limit = PAGE_SIZE)
+            ready = null
             if (page.isEmpty()) return TimelinePage(emptyList(), emptyMap(), cursor, ended = true)
             cursor = page.last().id
             val muted = applyMutes(page)
@@ -1328,7 +1336,7 @@ class FeedViewModel(
         val generation = authGeneration
         loadJobs[kind] = viewModelScope.launch {
             try {
-                val page = fetchTimeline(kind, untilId = null)
+                val page = fetchTimeline(kind, untilId = null, firstPage = prefetched(kind))
                 if (authGeneration != generation) return@launch
                 updateTimeline(kind) { page.toState() }
             } catch (_: TimelineUnavailableException) {
@@ -1338,6 +1346,11 @@ class FeedViewModel(
                 handleFailure(e) {}
             }
         }
+    }
+
+    private suspend fun prefetched(kind: TimelineKind): List<Note>? {
+        val signedIn = token ?: return null
+        return prefetch?.take(signedIn, kind, PAGE_SIZE)
     }
 
     private fun reload(kind: TimelineKind) {
@@ -1574,6 +1587,7 @@ class FeedViewModel(
                     unicode = app.container.unicodeEmoji,
                     moderation = app.container.moderationApi,
                     windows = windowLink(app.container.windowEvents),
+                    prefetch = app.container.timelinePrefetch,
                 )
             }
         }

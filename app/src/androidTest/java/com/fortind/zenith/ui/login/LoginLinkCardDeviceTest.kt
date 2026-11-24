@@ -6,11 +6,11 @@ import android.content.ClipboardManager
 import android.graphics.Bitmap
 import android.os.Build
 import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -55,7 +55,7 @@ class LoginLinkCardDeviceTest {
         var activity: Activity? = null
         var showCard by mutableStateOf(true)
         rule.setContent {
-            activity = LocalContext.current as Activity
+            activity = LocalActivity.current
             ZenithTheme {
                 LoginContent(
                     state = LoginUiState(signingIn = true, manualUrl = url.takeIf { showCard }),

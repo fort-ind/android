@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilledTonalButton
@@ -35,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -244,9 +242,8 @@ fun MfmParagraph(
 ) {
     val measurer = rememberTextMeasurer()
     var revealed by remember(nodes) { mutableStateOf(emptySet<Int>()) }
-    val aspectVersion = EmojiAspects.version
     val onDeceptiveLink = LocalDeceptiveLinks.current
-    val built = remember(nodes, environment, style, revealed, boxDepth, aspectVersion, onDeceptiveLink) {
+    val built = remember(nodes, environment, style, revealed, boxDepth, onDeceptiveLink) {
         MfmAnnotatedBuilder(
             environment = environment,
             baseStyle = style,
@@ -257,9 +254,11 @@ fun MfmParagraph(
             onDeceptiveLink = onDeceptiveLink,
         ).build(nodes)
     }
+    val ratios = if (built.emoji.isEmpty()) emptyList() else built.emoji.map { EmojiAspects.ratio(it.url) }
+    val inline = remember(built, ratios) { built.inlineContent(ratios) }
     Text(
         text = built.text,
-        inlineContent = built.inline,
+        inlineContent = inline,
         style = style,
         color = color,
         maxLines = maxLines,
@@ -268,7 +267,5 @@ fun MfmParagraph(
         modifier = modifier,
     )
 }
-
-internal class BuiltText(val text: AnnotatedString, val inline: Map<String, InlineTextContent>)
 
 internal fun linkAnnotation(url: String, environment: MfmEnvironment) = LinkAnnotation.Url(url, environment.linkStyles)

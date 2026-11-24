@@ -38,13 +38,16 @@ import com.fortind.zenith.timeline.UserNotesTab
 import com.fortind.zenith.timeline.Poll
 import com.fortind.zenith.timeline.PollChoice
 import com.fortind.zenith.timeline.TimelineKind
+import com.fortind.zenith.timeline.TimelinePrefetch
 import com.fortind.zenith.timeline.TimelineStreamEvent
 import com.fortind.zenith.timeline.TimelineUnavailableException
 import com.fortind.zenith.timeline.hasVoted
 import com.fortind.zenith.timeline.testNote
 import com.fortind.zenith.timeline.testUser
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
@@ -91,6 +94,7 @@ class FeedViewModelTest {
             fixtures.filter { it.viewModelCreated.isInitialized() }.forEach {
                 it.viewModel.viewModelScope.coroutineContext.job.cancelAndJoin()
             }
+            fixtures.forEach { it.prefetchScope?.coroutineContext?.job?.cancelAndJoin() }
         }
         mainDispatcher.scheduler.advanceUntilIdle()
         Dispatchers.resetMain()
@@ -118,7 +122,13 @@ class FeedViewModelTest {
         override suspend fun groups() = listOf(UnicodeEmojiGroup("Smileys", listOf(UnicodeEmoji("😀", "grinning face"))))
     }
 
-    private class Fixture(initialToken: String?, debounceMs: Long, settings: AccountSettings, windows: WindowLink) {
+    private class Fixture(
+        initialToken: String?,
+        debounceMs: Long,
+        settings: AccountSettings,
+        windows: WindowLink,
+        val prefetchScope: CoroutineScope? = null,
+    ) {
         val userApi = FakeUserApi(settings)
         val session = UserSessionService(FakeTokenStore(initialToken), userApi)
         var now = NOW_MILLIS
@@ -126,6 +136,7 @@ class FeedViewModelTest {
         val stream = FakeTimelineStream()
         val recents = FakeRecents()
         val moderation = FakeModerationApi()
+        val prefetch = prefetchScope?.let { TimelinePrefetch(api, it) }
         val viewModelCreated = lazy {
             FeedViewModel(
                 session,
@@ -139,10 +150,14 @@ class FeedViewModelTest {
                 clock = { now },
                 muteDispatcher = Dispatchers.Unconfined,
                 windows = windows,
+                prefetch = prefetch,
             )
         }
         val viewModel by viewModelCreated
     }
+
+    private fun prefetchFixture(settings: AccountSettings = AccountSettings()): Fixture =
+        Fixture("token", 0, settings, WindowLink.Alone, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)).also(fixtures::add)
 
     private fun muted(soft: String = "", hard: String = "") = AccountSettings(
         mutedWords = (MuteWordSet.parseEditor(soft) as MuteWordsParse.Valid).set,
@@ -178,6 +193,49 @@ class FeedViewModelTest {
         val events = mutableListOf<FeedEvent>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.events.collect { events += it } }
         return events
+    }
+
+    @Test
+    fun aHomePagePrefetchedDuringRestoreIsShownWithoutAskingAgain() = runTest {
+        val f = prefetchFixture()
+        f.api.timelines[TimelineKind.Home] = page(3, 2, 1)
+        f.prefetch!!.start("token", TimelineKind.Home, FeedViewModel.PAGE_SIZE)
+        f.session.restore()
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        assertEquals(listOf("n3", "n2", "n1"), timeline.items.map { it.id })
+        val firstPages = f.api.calls.filter { it.kind == TimelineKind.Home && it.untilId == null && it.sinceId == null }
+        assertEquals(firstPages.joinToString { "${it.token}:${it.limit}" }, 1, firstPages.size)
+    }
+
+    @Test
+    fun aPrefetchMadeWithAnotherTokenIsIgnored() = runTest {
+        val f = prefetchFixture()
+        f.api.timelines[TimelineKind.Home] = page(3, 2, 1)
+        f.prefetch!!.start("old-token", TimelineKind.Home, FeedViewModel.PAGE_SIZE)
+        f.session.restore()
+
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        assertTrue(f.api.calls.any { it.kind == TimelineKind.Home && it.token == "token" })
+    }
+
+    @Test
+    fun aPrefetchedPageStillHidesMutedWords() = runTest {
+        val f = prefetchFixture(settings = muted(soft = "soft", hard = "hide"))
+        f.api.timelines[TimelineKind.Home] = listOf(
+            testNote("n3", text = "plain"),
+            testNote("n2", text = "soft thing"),
+            testNote("n1", text = "hide thing"),
+        )
+        f.prefetch!!.start("token", TimelineKind.Home, FeedViewModel.PAGE_SIZE)
+        f.session.restore()
+
+        val timeline = f.viewModel.awaitTimeline(TimelineKind.Home)
+
+        assertEquals(listOf("n3", "n2"), timeline.items.map { it.id })
+        assertEquals(mapOf("n2" to listOf("soft")), timeline.softMuted)
     }
 
     @Test
