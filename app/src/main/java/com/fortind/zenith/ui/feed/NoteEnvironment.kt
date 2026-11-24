@@ -2,6 +2,7 @@ package com.fortind.zenith.ui.feed
 
 import com.fortind.zenith.timeline.LinkPreviewSource
 import com.fortind.zenith.timeline.Visibility
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -114,11 +115,12 @@ fun TooltipIconButton(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LabelTooltip(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-        tooltip = { PlainTooltip { Text(label) } },
-        state = rememberTooltipState(),
-        modifier = modifier,
-        content = content,
-    )
+    Box(modifier = modifier) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+            tooltip = { PlainTooltip { Text(label) } },
+            state = rememberTooltipState(),
+            content = content,
+        )
+    }
 }

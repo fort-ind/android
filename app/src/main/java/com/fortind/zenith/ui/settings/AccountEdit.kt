@@ -157,15 +157,17 @@ private fun ImageHeader(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .offset(x = 24.dp, y = AvatarSize / 2)
-                .size(AvatarSize + AvatarRing * 2)
-                .clip(CircleShape)
-                .background(colors.surface)
-                .padding(AvatarRing),
+                .size(AvatarSize + AvatarRing * 2),
         ) {
-            Avatar(name = name, url = avatarModel, size = AvatarSize)
+            Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(colors.surface).padding(AvatarRing)) {
+                Avatar(name = name, url = avatarModel, size = AvatarSize)
+            }
             if (onPickAvatar != null) {
                 LabelTooltip(stringResource(R.string.account_change_avatar), modifier = Modifier.align(Alignment.BottomEnd)) {
-                    FilledTonalIconButton(onClick = onPickAvatar, modifier = Modifier.handCursor()) {
+                    FilledTonalIconButton(
+                        onClick = onPickAvatar,
+                        modifier = Modifier.handCursor().background(colors.surface, CircleShape),
+                    ) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = stringResource(R.string.account_change_avatar))
                     }
                 }
