@@ -52,7 +52,7 @@ fun rememberMediaReceiver(
                 val picked = mutableListOf<Uri>()
                 val remaining = transferableContent.consume { item ->
                     val uri = item.uri
-                    if (uri != null && isMedia(context, resolver, uri)) {
+                    if (uri != null && isComposerMedia(context, resolver, uri)) {
                         picked += uri
                         true
                     } else {
@@ -80,7 +80,7 @@ private fun stageOne(context: Context, reader: MediaReader, uri: Uri): String =
 @OptIn(ExperimentalFoundationApi::class)
 private val VideoMediaType = MediaType("video/*")
 
-private fun isMedia(context: Context, resolver: ContentResolver, uri: Uri): Boolean {
+internal fun isComposerMedia(context: Context, resolver: ContentResolver, uri: Uri): Boolean {
     val readable = RemoteMediaProvider.isRemoteMedia(context, uri) ||
         isAcceptableShareUri(SharedUri(uri.toString(), uri.scheme, uri.authority), context.packageName)
     if (!readable) return false

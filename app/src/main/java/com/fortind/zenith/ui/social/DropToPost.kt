@@ -2,7 +2,6 @@ package com.fortind.zenith.ui.social
 
 import android.app.Activity
 import android.content.ClipDescription
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
@@ -39,10 +38,13 @@ import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
 import androidx.compose.runtime.rememberCoroutineScope
 import com.fortind.zenith.media.MediaReader
+import com.fortind.zenith.ui.composer.isComposerMedia
 import com.fortind.zenith.ui.composer.stageForComposer
 import com.fortind.zenith.ui.media.startedInThisWindow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Stable
 class DropToPost internal constructor(
@@ -77,15 +79,13 @@ class DropToPost internal constructor(
             val host = activity ?: return false
             val dragEvent = event.toAndroidDragEvent()
             val clip = dragEvent.clipData ?: return false
+            val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+            if (uris.isEmpty()) return false
             val permissions = host.requestDragAndDropPermissions(dragEvent)
-            val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.filter { isPostable(host, it) }
-            if (uris.isEmpty()) {
-                permissions?.release()
-                return false
-            }
             scope.launch {
                 try {
-                    onMedia(stageForComposer(host, reader, uris))
+                    val media = withContext(Dispatchers.IO) { uris.filter { isComposerMedia(host, host.contentResolver, it) } }
+                    if (media.isNotEmpty()) onMedia(stageForComposer(host, reader, media))
                 } finally {
                     permissions?.release()
                 }
@@ -110,15 +110,6 @@ fun rememberDropToPost(activity: Activity?, reader: MediaReader, enabled: Boolea
 }
 
 fun Modifier.dropToPost(drop: DropToPost): Modifier = dragAndDropTarget(shouldStartDragAndDrop = drop::accepts, target = drop.target)
-
-private fun isPostable(activity: Activity, uri: Uri): Boolean {
-    val type = try {
-        activity.contentResolver.getType(uri)
-    } catch (_: SecurityException) {
-        null
-    }
-    return type != null && (type.startsWith("image/") || type.startsWith("video/"))
-}
 
 @Composable
 fun DropToPostOverlay(drop: DropToPost) {

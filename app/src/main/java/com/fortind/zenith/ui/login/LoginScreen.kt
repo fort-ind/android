@@ -1,6 +1,7 @@
 package com.fortind.zenith.ui.login
 
 import android.app.Activity
+import androidx.activity.compose.ReportDrawn
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -76,6 +77,7 @@ fun LoginScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    ReportDrawn()
     AuthPageEffects(viewModel)
 
     LoginContent(

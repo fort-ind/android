@@ -153,4 +153,17 @@ class EmojiRepositoryTest {
         assertEquals(listOf("😺", "🐈"), groups.search("cat").map { it.emoji })
         assertEquals(listOf("😀", "😺"), groups.search("grin").map { it.emoji })
     }
+
+    @Test
+    fun emojiTheFontCannotDrawAreLeftOutAndEmptyGroupsDropped() {
+        val json = """[{"group":"Smileys","emoji":[["😀","grinning face"],["🫠","melting face"]]},{"group":"Objects","emoji":[["🪇","maracas"]]}]"""
+        val groups = parseUnicodeEmoji(ByteArrayInputStream(json.toByteArray()))
+        val newerThanFont = setOf("🫠", "🪇")
+
+        val drawable = groups.drawableOnly { it !in newerThanFont }
+
+        assertEquals(listOf("Smileys"), drawable.map { it.name })
+        assertEquals(listOf("😀"), drawable.single().emoji.map { it.emoji })
+        assertEquals(emptyList<UnicodeEmoji>(), drawable.search("melting"))
+    }
 }

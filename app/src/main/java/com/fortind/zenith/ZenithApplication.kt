@@ -99,6 +99,12 @@ import com.fortind.zenith.shortcuts.AndroidShortcutStore
 import com.fortind.zenith.shortcuts.LauncherShortcuts
 import com.fortind.zenith.widget.DataStoreWidgetRenderStore
 import com.fortind.zenith.widget.WidgetUpdater
+import com.fortind.zenith.ui.theme.AppNightModeSync
+import com.fortind.zenith.diagnostics.CrashRecorder
+import com.fortind.zenith.diagnostics.ProblemReports
+import com.fortind.zenith.diagnostics.androidExitHistory
+import com.fortind.zenith.diagnostics.currentAppEnvironment
+import com.fortind.zenith.diagnostics.problemReportStore
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
@@ -186,6 +192,14 @@ class AppContainer(application: Application) {
         appVersion = BuildConfig.VERSION_CODE,
     )
 
+    val appNightMode = AppNightModeSync(application, settingsStore.settings)
+
+    val problemReports = ProblemReports(
+        store = problemReportStore(application),
+        exits = androidExitHistory(application),
+        environment = currentAppEnvironment(),
+    )
+
     val launcherShortcuts = LauncherShortcuts(
         store = AndroidShortcutStore(application),
         sessions = sessionService.state,
@@ -221,11 +235,13 @@ class ZenithApplication : Application(), SingletonImageLoader.Factory, Configura
     override fun onCreate() {
         super.onCreate()
         DebugStrictMode.install()
+        CrashRecorder(problemReportStore(this), currentAppEnvironment()).install()
         container = AppContainer(this)
         appScope.launch { container.sessionService.restore() }
         container.notificationSyncCoordinator.start(container.scope)
         container.widgetUpdater.start(container.scope)
         container.launcherShortcuts.start()
+        container.appNightMode.start(container.scope)
         SignOutWipe(cacheDir = { cacheDir }, clearImageCaches = ::clearImageCaches)
             .start(container.scope, container.sessionService.state)
     }

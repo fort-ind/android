@@ -1,5 +1,7 @@
 package com.fortind.zenith.notifications
 
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -23,6 +25,23 @@ class NotificationCategoryTest {
         val ids = NotificationCategory.entries.map { it.channelId }
 
         assertEquals(ids.size, ids.toSet().size)
+    }
+
+    @Test
+    fun legacyPriorityAndSoundMatchTheChannelImportance() {
+        assertEquals(NotificationManagerCompat.IMPORTANCE_HIGH, NotificationCategory.Mentions.alert.importance)
+        assertEquals(NotificationCompat.PRIORITY_HIGH, NotificationCategory.Mentions.alert.legacyPriority)
+        assertTrue(NotificationCategory.Mentions.alert.legacySound)
+
+        assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, NotificationCategory.Follows.alert.importance)
+        assertEquals(NotificationCompat.PRIORITY_DEFAULT, NotificationCategory.Follows.alert.legacyPriority)
+        assertTrue(NotificationCategory.Follows.alert.legacySound)
+
+        listOf(NotificationCategory.Reactions, NotificationCategory.Renotes, NotificationCategory.Other).forEach { quiet ->
+            assertEquals(NotificationManagerCompat.IMPORTANCE_LOW, quiet.alert.importance)
+            assertEquals(NotificationCompat.PRIORITY_LOW, quiet.alert.legacyPriority)
+            assertFalse(quiet.alert.legacySound)
+        }
     }
 
     @Test

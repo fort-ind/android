@@ -448,6 +448,7 @@ fun SocialHost(
         }
     }
 
+    ProblemReportPrompt(container.problemReports, snackbarHostState)
     deceptiveLink?.let { link ->
         DeceptiveLinkDialog(
             link = link,

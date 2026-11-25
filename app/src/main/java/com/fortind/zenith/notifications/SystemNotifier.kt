@@ -77,6 +77,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         )
         val isReply = action == QuickAction.Reply
         val notification = NotificationCompat.Builder(context, NotificationCategory.Mentions.channelId)
+            .alertAs(NotificationCategory.Mentions)
             .setSmallIcon(R.drawable.ic_stat_notification)
             .setContentTitle(context.getString(if (isReply) R.string.notification_reply_failed_title else R.string.notification_like_failed_title))
             .setContentText(context.getString(if (isReply) R.string.notification_reply_failed_body else R.string.notification_like_failed_body))
@@ -123,7 +124,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
     private fun createChannels() {
         NotificationCategory.entries.forEach { category ->
             manager.createNotificationChannel(
-                NotificationChannelCompat.Builder(category.channelId, category.importance())
+                NotificationChannelCompat.Builder(category.channelId, category.alert.importance)
                     .setName(context.getString(category.labelRes))
                     .setDescription(context.getString(category.descriptionRes))
                     .build()
@@ -134,7 +135,9 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
     private fun post(notification: FortNotification, avatar: Bitmap?, actions: Set<QuickAction>) {
         val resources = context.resources
         val text = notification.systemBodyText(context.getString(R.string.notifications_direct_body))
-        val builder = NotificationCompat.Builder(context, notification.type.category().channelId)
+        val category = notification.type.category()
+        val builder = NotificationCompat.Builder(context, category.channelId)
+            .alertAs(category)
             .setSmallIcon(R.drawable.ic_stat_notification)
             .setContentTitle(notification.titleText(resources))
             .setContentText(text)
@@ -258,6 +261,7 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
             return
         }
         val summary = NotificationCompat.Builder(context, NotificationCategory.Other.channelId)
+            .alertAs(NotificationCategory.Other)
             .setSmallIcon(R.drawable.ic_stat_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.notification_summary))
@@ -337,11 +341,10 @@ class AndroidSystemNotifier(private val context: Context) : SystemNotifier {
         return output
     }
 
-    private fun NotificationCategory.importance(): Int = when (this) {
-        NotificationCategory.Mentions -> NotificationManager.IMPORTANCE_HIGH
-        NotificationCategory.Follows -> NotificationManager.IMPORTANCE_DEFAULT
-        NotificationCategory.Reactions, NotificationCategory.Renotes, NotificationCategory.Other ->
-            NotificationManager.IMPORTANCE_LOW
+    private fun NotificationCompat.Builder.alertAs(category: NotificationCategory): NotificationCompat.Builder {
+        setPriority(category.alert.legacyPriority)
+        if (category.alert.legacySound) setDefaults(NotificationCompat.DEFAULT_SOUND)
+        return this
     }
 
     private companion object {

@@ -1184,4 +1184,18 @@
     <string name="profile_scheduled_count">Scheduled (%1$d)</string>
     <string name="profile_scheduled_description">Scheduled posts, %1$d of %2$d</string>
     <string name="notifications_scheduled_posted">Your scheduled post went out</string>
+    <string name="problem_report_snackbar">%1$s closed unexpectedly</string>
+    <string name="problem_report_view">View report</string>
+    <string name="problem_report_title">Problem report</string>
+    <string name="problem_report_header">%1$s %2$s (%3$d)\nAndroid %4$s (API %5$d) · %6$s\n%7$s · %8$s</string>
+    <string name="problem_report_thread">Thread: %1$s</string>
+    <string name="problem_report_kind_crash">Crash</string>
+    <string name="problem_report_kind_not_responding">Not responding (ANR)</string>
+    <string name="problem_report_kind_native">Native crash</string>
+    <string name="problem_report_no_details">No details were recorded.</string>
+    <string name="problem_report_copy">Copy</string>
+    <string name="problem_report_copied">Copied</string>
+    <string name="problem_report_share">Share</string>
+    <string name="problem_report_share_title">Share problem report</string>
+    <string name="problem_report_delete">Delete</string>
 </resources>

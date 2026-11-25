@@ -74,7 +74,7 @@ import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
 import com.fortind.zenith.ui.scrollbar
 
-private val ThreadMaxWidth = 720.dp
+private val ThreadMaxWidth = FeedMaxWidth
 
 @Composable
 fun ThreadPane(

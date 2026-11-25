@@ -10,6 +10,8 @@ import com.fortind.zenith.timeline.mergeChronological
 
 enum class TimelineStatus { Idle, Loading, Ready, Failed, Unavailable, SignInRequired }
 
+val TimelineStatus.isSettled: Boolean get() = this != TimelineStatus.Idle && this != TimelineStatus.Loading
+
 data class TimelineState(
     val items: List<Note> = emptyList(),
     val status: TimelineStatus = TimelineStatus.Idle,

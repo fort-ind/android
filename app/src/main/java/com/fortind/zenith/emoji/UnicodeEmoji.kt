@@ -1,6 +1,8 @@
 package com.fortind.zenith.emoji
 
 import android.content.res.AssetManager
+import android.graphics.Paint
+import androidx.core.graphics.PaintCompat
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +29,10 @@ fun parseUnicodeEmoji(input: InputStream): List<UnicodeEmojiGroup> {
     }
 }
 
+fun List<UnicodeEmojiGroup>.drawableOnly(canDraw: (String) -> Boolean): List<UnicodeEmojiGroup> = mapNotNull { group ->
+    group.emoji.filter { canDraw(it.emoji) }.takeIf { it.isNotEmpty() }?.let { group.copy(emoji = it) }
+}
+
 fun List<UnicodeEmojiGroup>.search(query: String, limit: Int = 60): List<UnicodeEmoji> {
     val needle = query.trim().lowercase()
     if (needle.isEmpty()) return emptyList()
@@ -40,15 +46,25 @@ interface UnicodeEmojiSource {
     suspend fun groups(): List<UnicodeEmojiGroup>
 }
 
-class AssetUnicodeEmojiSource(private val assets: AssetManager) : UnicodeEmojiSource {
+class AssetUnicodeEmojiSource(
+    private val assets: AssetManager,
+    private val canDraw: () -> (String) -> Boolean = ::systemFontCanDraw,
+) : UnicodeEmojiSource {
     private val mutex = Mutex()
     private var cached: List<UnicodeEmojiGroup>? = null
 
     override suspend fun groups(): List<UnicodeEmojiGroup> = mutex.withLock {
-        cached ?: withContext(Dispatchers.IO) { assets.open(ASSET).use(::parseUnicodeEmoji) }.also { cached = it }
+        cached ?: withContext(Dispatchers.IO) {
+            assets.open(ASSET).use(::parseUnicodeEmoji).drawableOnly(canDraw())
+        }.also { cached = it }
     }
 
     private companion object {
         const val ASSET = "emoji/unicode-emoji.json"
     }
+}
+
+private fun systemFontCanDraw(): (String) -> Boolean {
+    val paint = Paint()
+    return { PaintCompat.hasGlyph(paint, it) }
 }

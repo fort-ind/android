@@ -7,6 +7,7 @@ package com.fortind.zenith.ui.home
 
 import com.fortind.zenith.ui.login.ManualLinkCard
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.rememberSearchBarState
@@ -95,6 +96,7 @@ import com.fortind.zenith.ui.feed.PermissionBanner
 import com.fortind.zenith.ui.feed.ThreadPlaceholder
 import com.fortind.zenith.ui.feed.TimelineList
 import com.fortind.zenith.ui.feed.TimelineListCallbacks
+import com.fortind.zenith.ui.feed.isSettled
 import com.fortind.zenith.ui.feed.TimelineSwitcher
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.games.FavoriteNoticeEffect
@@ -274,6 +276,7 @@ private fun FeedPane(
     }
 
     val listShown = !(onLists && feed.signedIn && (collections.needsPermission || chosenCollection == null))
+    ReportDrawnWhen { !listShown || timeline.status.isSettled }
     val topBarReveal = rememberTopBarReveal(
         behavior = scrollBehavior,
         reduceMotion = reduceMotion,
