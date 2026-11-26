@@ -88,6 +88,8 @@ class MainActivity : ComponentActivity() {
                         onLeaveTab = ::leaveTab,
                         onOpenTabWindow = { destination, remembered -> AppWindows.openTab(this, destination, remembered = remembered) },
                         onTopRouteChanged = { topRoute = it },
+                        onOpenRouteInTabWindow = { destination, route, remembered -> AppWindows.openTab(this, destination, route, remembered) },
+                        tabWindowSender = { destination, route -> AppWindows.tabSender(this, destination, route) },
                     ),
                     requestedDestination = requestedDestination.value,
                     onRequestedDestinationHandled = { requestedDestination.value = null },

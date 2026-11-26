@@ -40,6 +40,7 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
@@ -77,6 +78,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.auth.FortInstance
 import com.fortind.zenith.notifications.FortNotification
 import com.fortind.zenith.ui.PrimaryButton
@@ -120,6 +122,21 @@ fun NotificationsScreen(
     }
 
     val actions = rememberNotificationActions(snackbarHostState, viewModel, onOpenNote, onOpenPerson = onOpenPerson)
+    val ready = state is NotificationsUiState.Ready
+    val titleInCaption = claimCaptionBar(
+        navigation = null,
+        title = {
+            Text(
+                text = stringResource(R.string.notifications_title),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
+        },
+        actions = {
+            if (ready) HeaderActions(unreadCount, onRefresh = viewModel::refresh, onMarkAllRead = viewModel::markAllAsRead)
+        },
+    )
 
     Box(modifier = modifier.fillMaxSize()) {
         when (val current = state) {
@@ -135,6 +152,7 @@ fun NotificationsScreen(
                 onLoadMore = viewModel::loadMore,
                 onMarkAllRead = viewModel::markAllAsRead,
                 actions = actions,
+                showTitle = !titleInCaption,
             )
         }
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
@@ -142,7 +160,7 @@ fun NotificationsScreen(
 }
 
 @Composable
-private fun rememberNotificationActions(
+internal fun rememberNotificationActions(
     snackbarHostState: SnackbarHostState,
     viewModel: NotificationsViewModel,
     onOpenNote: (String) -> Unit,
@@ -185,6 +203,7 @@ private fun ReadyContent(
     onLoadMore: () -> Unit,
     onMarkAllRead: () -> Unit,
     actions: NotificationActions,
+    showTitle: Boolean,
 ) {
     val wide = currentWindowAdaptiveInfoV2().windowSizeClass
         .isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
@@ -213,6 +232,7 @@ private fun ReadyContent(
             onFilter = onFilter,
             onRefresh = onRefresh,
             onMarkAllRead = onMarkAllRead,
+            showTitle = showTitle,
         )
         PullToRefreshBox(
             isRefreshing = refreshing,
@@ -254,6 +274,7 @@ private fun Header(
     onFilter: (NotificationFilter) -> Unit,
     onRefresh: () -> Unit,
     onMarkAllRead: () -> Unit,
+    showTitle: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -263,30 +284,37 @@ private fun Header(
             .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.notifications_title),
-                style = MaterialTheme.typography.headlineMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 8.dp)
-                    .semantics { heading() },
-            )
-            TooltipIconButton(
-                label = stringResource(R.string.notifications_mark_all_read),
-                onClick = onMarkAllRead,
-                enabled = unreadCount > 0,
-                icon = Icons.Default.DoneAll,
-            )
-            TooltipIconButton(
-                label = stringResource(R.string.notifications_refresh),
-                onClick = onRefresh,
-                icon = Icons.Default.Refresh,
-            )
+        if (showTitle) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.notifications_title),
+                    style = MaterialTheme.typography.headlineMediumEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
+                        .semantics { heading() },
+                )
+                HeaderActions(unreadCount, onRefresh = onRefresh, onMarkAllRead = onMarkAllRead)
+            }
         }
         FilterChips(selected = filter, onSelect = onFilter)
     }
+}
+
+@Composable
+private fun HeaderActions(unreadCount: Int, onRefresh: () -> Unit, onMarkAllRead: () -> Unit) {
+    TooltipIconButton(
+        label = stringResource(R.string.notifications_mark_all_read),
+        onClick = onMarkAllRead,
+        enabled = unreadCount > 0,
+        icon = Icons.Default.DoneAll,
+    )
+    TooltipIconButton(
+        label = stringResource(R.string.notifications_refresh),
+        onClick = onRefresh,
+        icon = Icons.Default.Refresh,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

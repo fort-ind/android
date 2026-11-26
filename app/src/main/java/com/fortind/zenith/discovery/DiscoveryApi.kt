@@ -27,6 +27,8 @@ private const val ANNOUNCEMENT_LIMIT = 20
 
 data class Hashtag(val tag: String, val usedBy: Int)
 
+data class TrendingHashtag(val tag: String, val usersCount: Int)
+
 enum class AnnouncementKind { Info, Warning, Error, Success }
 
 data class Announcement(
@@ -41,6 +43,11 @@ fun parseHashtag(json: JSONObject): Hashtag? {
     val tag = json.optStringOrNull("tag")?.takeIf(String::isNotEmpty) ?: return null
     val count = json.optIntOrNull("mentionedUsersCount") ?: 0
     return if (count > 0) Hashtag(tag, count) else null
+}
+
+fun parseTrendingHashtag(json: JSONObject): TrendingHashtag? {
+    val tag = json.optStringOrNull("tag")?.takeIf(String::isNotEmpty) ?: return null
+    return TrendingHashtag(tag, json.optIntOrNull("usersCount") ?: 0)
 }
 
 fun parseAnnouncement(json: JSONObject): Announcement? {
@@ -68,6 +75,8 @@ fun rememberDismissed(dismissed: List<String>, id: String): List<String> =
 interface DiscoveryApi {
     suspend fun popularHashtags(): List<Hashtag>
 
+    suspend fun trendingHashtags(): List<TrendingHashtag>
+
     suspend fun announcements(token: String?): List<Announcement>
 
     suspend fun markAnnouncementRead(token: String, id: String)
@@ -78,6 +87,11 @@ class HttpDiscoveryApi(private val http: FortHttp) : DiscoveryApi {
         val body = JSONObject().put("sort", "+mentionedUsers").put("limit", POPULAR_HASHTAG_LIMIT)
         val array = http.postJsonArray("/api/hashtags/list", body)
         return withContext(Dispatchers.Default) { array.objects().mapNotNull(::parseHashtag) }
+    }
+
+    override suspend fun trendingHashtags(): List<TrendingHashtag> {
+        val array = http.postJsonArray("/api/hashtags/trend", JSONObject())
+        return withContext(Dispatchers.Default) { array.objects().mapNotNull(::parseTrendingHashtag) }
     }
 
     override suspend fun announcements(token: String?): List<Announcement> {

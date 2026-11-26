@@ -51,6 +51,10 @@ class FakeSettingsStore(initial: AppSettings = AppSettings()) : SettingsStore {
         state.update { it.copy(railCollapsed = collapsed) }
     }
 
+    override suspend fun setListPaneAnchor(index: Int) {
+        state.update { it.copy(listPaneAnchor = index) }
+    }
+
     override suspend fun setComposerWindowSize(size: WindowSizeDp) {
         state.update { it.copy(composerWindowSize = size) }
     }

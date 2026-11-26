@@ -18,6 +18,16 @@ class DiscoveryParsingTest {
     }
 
     @Test
+    fun aTrendingHashtagNeedsATagAndKeepsItsCount() {
+        assertEquals(
+            TrendingHashtag("android", 12),
+            parseTrendingHashtag(JSONObject("""{"tag":"android","chart":[1,2,3],"usersCount":12}""")),
+        )
+        assertEquals(TrendingHashtag("new", 0), parseTrendingHashtag(JSONObject("""{"tag":"new","chart":[]}""")))
+        assertNull(parseTrendingHashtag(JSONObject("""{"tag":"","usersCount":3}""")))
+    }
+
+    @Test
     fun announcementsDefaultToInfoAndUnread() {
         val parsed = parseAnnouncement(JSONObject("""{"id":"a","title":"Hi","text":"**there**","icon":"mystery"}"""))!!
 

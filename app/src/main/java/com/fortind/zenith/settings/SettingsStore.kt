@@ -46,6 +46,7 @@ data class AppSettings(
     val cameraMode: CaptureMode = CaptureMode.Auto,
     val cameraVideoOptions: VideoOptions = VideoOptions(),
     val railCollapsed: Boolean = false,
+    val listPaneAnchor: Int? = null,
     val composerWindowSize: WindowSizeDp? = null,
     val popOutBounds: Map<String, WindowBounds> = emptyMap(),
     val inkDrawWithMouse: Boolean = true,
@@ -66,6 +67,7 @@ interface SettingsStore {
     suspend fun setCameraMode(mode: CaptureMode)
     suspend fun setCameraVideoOptions(options: VideoOptions)
     suspend fun setRailCollapsed(collapsed: Boolean)
+    suspend fun setListPaneAnchor(index: Int)
     suspend fun setComposerWindowSize(size: WindowSizeDp)
     suspend fun setPopOutBounds(tab: String, bounds: WindowBounds)
     suspend fun setInkDrawWithMouse(enabled: Boolean)
@@ -104,6 +106,7 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
                 lowLight = prefs[CameraLowLightKey] ?: false,
             ),
             railCollapsed = prefs[RailCollapsedKey] ?: false,
+            listPaneAnchor = prefs[ListPaneAnchorKey],
             composerWindowSize = prefs[ComposerWindowWidthKey]?.let { width ->
                 prefs[ComposerWindowHeightKey]?.let { height -> WindowSizeDp(width, height) }
             },
@@ -156,6 +159,10 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
 
     override suspend fun setRailCollapsed(collapsed: Boolean) {
         dataStore.edit { it[RailCollapsedKey] = collapsed }
+    }
+
+    override suspend fun setListPaneAnchor(index: Int) {
+        dataStore.edit { it[ListPaneAnchorKey] = index }
     }
 
     override suspend fun setComposerWindowSize(size: WindowSizeDp) {
@@ -212,6 +219,7 @@ class DataStoreSettingsStore(context: Context) : SettingsStore {
         val CameraStabilizeKey = booleanPreferencesKey("camera_stabilize")
         val CameraLowLightKey = booleanPreferencesKey("camera_low_light")
         val RailCollapsedKey = booleanPreferencesKey("rail_collapsed")
+        val ListPaneAnchorKey = intPreferencesKey("list_pane_anchor")
         val ComposerWindowWidthKey = intPreferencesKey("composer_window_width_dp")
         val ComposerWindowHeightKey = intPreferencesKey("composer_window_height_dp")
         val PopOutBoundsKey = stringSetPreferencesKey("pop_out_bounds")

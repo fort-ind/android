@@ -36,7 +36,6 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -62,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.CaptionTopAppBar
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.shortcuts.ShortcutTarget
 import com.fortind.zenith.timeline.NoteListKey
@@ -152,16 +152,15 @@ private fun NoteListPage(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection).revealTopBarOnWheel(topBarReveal),
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            TopAppBar(
+            CaptionTopAppBar(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() }) },
-                navigationIcon = {
+                navigation = {
                     TooltipIconButton(label = stringResource(R.string.person_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },
                 actions = {
                     TooltipIconButton(label = stringResource(R.string.feed_refresh), icon = Icons.Default.Refresh, onClick = refresh)
                     if (menuItems.isNotEmpty()) PageOverflowMenu(menuItems)
                 },
-                windowInsets = WindowInsets(0),
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -288,15 +287,14 @@ fun HashtagsPage(discovery: DiscoveryViewModel, onOpenTag: (String) -> Unit, onB
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            TopAppBar(
+            CaptionTopAppBar(
                 title = { Text(stringResource(R.string.search_popular_hashtags), modifier = Modifier.semantics { heading() }) },
-                navigationIcon = {
+                navigation = {
                     TooltipIconButton(label = stringResource(R.string.person_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },
                 actions = {
                     TooltipIconButton(label = stringResource(R.string.feed_refresh), icon = Icons.Default.Refresh, onClick = { discovery.loadHashtags(force = true) })
                 },
-                windowInsets = WindowInsets(0),
             )
         },
     ) { padding ->

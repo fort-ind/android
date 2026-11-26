@@ -131,6 +131,9 @@ class FeedViewModel(
     val recentReactions: Flow<List<String>> = recents.recent
     val scopesOutdated: Flow<Boolean> = session.scopesOutdated
 
+    private val _reactors = MutableStateFlow<Map<ReactorsKey, ReactorsPreview>>(emptyMap())
+    val reactors: StateFlow<Map<ReactorsKey, ReactorsPreview>> = _reactors.asStateFlow()
+
     private val _unicodeEmoji = MutableStateFlow<List<UnicodeEmojiGroup>>(emptyList())
     val unicodeEmoji: StateFlow<List<UnicodeEmojiGroup>> = _unicodeEmoji.asStateFlow()
 
@@ -600,6 +603,20 @@ class FeedViewModel(
                 if (authGeneration == generation) updateThreadPeople(noteId, null, renotes = true) { it.failedPage() }
                 handleFailure(e) {}
             }
+        }
+    }
+
+    fun loadReactors(key: ReactorsKey) {
+        if (!_reactors.value.needsLoad(key)) return
+        _reactors.update { it.withPreview(key, ReactorsPreview(loading = true)) }
+        viewModelScope.launch {
+            val preview = try {
+                val type = Reactions.toApi(key.reaction, instance.emojis.value?.names) ?: key.reaction
+                ReactorsPreview(users = api.reactionsOn(token, key.noteId, type, null, REACTORS_PREVIEW_LIMIT).map { it.user })
+            } catch (_: IOException) {
+                ReactorsPreview(failed = true)
+            }
+            _reactors.update { it.withPreview(key, preview) }
         }
     }
 

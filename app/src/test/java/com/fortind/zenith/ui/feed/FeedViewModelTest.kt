@@ -484,6 +484,25 @@ class FeedViewModelTest {
     }
 
     @Test
+    fun reactorPreviewsLoadOncePerCountAndRefetchWhenTheCountChanges() = runTest {
+        val f = fixture()
+        f.api.reactionRows = listOf(NoteReactionRow("x1", testUser("u3"), "🎉"), NoteReactionRow("x2", testUser("u4"), "❤"))
+        f.viewModel.awaitTimeline(TimelineKind.Home)
+        val first = ReactorsKey("n1", "🎉", 1)
+
+        f.viewModel.loadReactors(first)
+        awaitTrue { f.viewModel.reactors.value[first]?.loading == false }
+        assertEquals(listOf("u3"), f.viewModel.reactors.value[first]?.users?.map { it.id })
+        f.viewModel.loadReactors(first)
+        assertEquals(1, f.api.reactionQueries.size)
+
+        val second = first.copy(count = 2)
+        f.viewModel.loadReactors(second)
+        awaitTrue { f.api.reactionQueries.size == 2 && f.viewModel.reactors.value[second]?.loading == false }
+        assertEquals(null, f.viewModel.reactors.value[first])
+    }
+
+    @Test
     fun aFailedPageOfRenotesWaitsForRetryInsteadOfLooping() = runTest {
         val f = fixture()
         f.api.notes["n1"] = testNote("n1")

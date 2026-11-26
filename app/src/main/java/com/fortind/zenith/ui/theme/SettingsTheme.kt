@@ -4,7 +4,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -12,6 +14,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.settings.ThemeMode
+
+val LocalAppSettings = compositionLocalOf { AppSettings() }
 
 @Composable
 fun SettingsTheme(onDarkTheme: (Boolean) -> Unit = {}, content: @Composable () -> Unit) {
@@ -34,5 +38,7 @@ fun SettingsTheme(onDarkTheme: (Boolean) -> Unit = {}, content: @Composable () -
         onDarkTheme(darkTheme)
         onDispose {}
     }
-    ZenithTheme(darkTheme = darkTheme, dynamicColor = current.dynamicColor, appIcon = appIcon, content = content)
+    ZenithTheme(darkTheme = darkTheme, dynamicColor = current.dynamicColor, appIcon = appIcon) {
+        CompositionLocalProvider(LocalAppSettings provides current, content = content)
+    }
 }

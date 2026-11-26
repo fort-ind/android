@@ -17,6 +17,7 @@ import com.fortind.zenith.notifications.FakeUserApi
 import com.fortind.zenith.notifications.awaitTrue
 import com.fortind.zenith.settings.FakeSettingsStore
 import com.fortind.zenith.timeline.NoteFile
+import com.fortind.zenith.ui.profile.ProfileUiState
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.CopyOnWriteArrayList
@@ -111,6 +112,13 @@ class AccountViewModelTest {
     private suspend fun AccountViewModel.finishSaving() {
         awaitTrue { !saveState.value.saving }
         withContext(Dispatchers.Default) { delay(SETTLE_MS) }
+    }
+
+    @Test
+    fun accountIsLoadedBeforeAnythingCollectsIt() = runTest {
+        val model = model(Setup())
+
+        assertTrue(model.account.value is ProfileUiState.Loaded)
     }
 
     @Test

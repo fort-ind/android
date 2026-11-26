@@ -10,6 +10,7 @@ import com.fortind.zenith.discovery.AntennaInfo
 import com.fortind.zenith.discovery.CollectionsApi
 import com.fortind.zenith.discovery.DiscoveryApi
 import com.fortind.zenith.discovery.Hashtag
+import com.fortind.zenith.discovery.TrendingHashtag
 import com.fortind.zenith.discovery.InMemoryDismissedAnnouncementsStore
 import com.fortind.zenith.discovery.ListMember
 import com.fortind.zenith.discovery.UserListInfo
@@ -116,6 +117,15 @@ class DiscoveryViewModelsTest {
             hashtagCalls++
             hashtagFailure?.let { throw it }
             return listOf(Hashtag("linux", 3))
+        }
+
+        var trendingCalls = 0
+        var trendingFailure: IOException? = null
+
+        override suspend fun trendingHashtags(): List<TrendingHashtag> {
+            trendingCalls++
+            trendingFailure?.let { throw it }
+            return listOf(TrendingHashtag("android", 12))
         }
 
         override suspend fun announcements(token: String?): List<Announcement> {
@@ -345,6 +355,26 @@ class DiscoveryViewModelsTest {
         now += DiscoveryViewModel.HASHTAG_TTL_MS
         model.loadHashtags()
         awaitTrue { api.hashtagCalls == 3 }
+    }
+
+    @Test
+    fun trendingIsRefreshedAfterItsTtlAndKeptWhenARefreshFails() = runTest {
+        val api = FakeDiscovery()
+        val model = discovery(api)
+
+        model.loadTrending()
+        awaitTrue { model.uiState.value.trendingStatus == CollectionsStatus.Ready }
+        assertEquals(listOf("android"), model.uiState.value.trending.map { it.tag })
+
+        model.loadTrending()
+        assertEquals(1, api.trendingCalls)
+
+        api.trendingFailure = IOException("offline")
+        now += DiscoveryViewModel.TRENDING_TTL_MS
+        model.loadTrending()
+        awaitTrue { api.trendingCalls == 2 }
+        awaitTrue { model.uiState.value.trendingStatus == CollectionsStatus.Ready }
+        assertEquals(listOf("android"), model.uiState.value.trending.map { it.tag })
     }
 
     @Test

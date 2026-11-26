@@ -56,6 +56,8 @@ class NoteCallbacks(
     val renoteAs: (Note, Visibility) -> Unit = { _, _ -> },
     val togglePin: (Note) -> Unit = {},
     val toggleThreadMute: (Note) -> Unit = {},
+    val startDrag: (Note) -> Unit = {},
+    val openInWindow: (Note) -> Unit = openThread,
 )
 
 class NoteEnvironment(

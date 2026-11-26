@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -84,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.timeline.TimelineKind
 import com.fortind.zenith.ui.feed.FeedMaxWidth
@@ -112,6 +115,10 @@ import com.fortind.zenith.ui.revealTopBarOnWheel
 import com.fortind.zenith.ui.scrollbar
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
+
+private val CaptionSearchHeight = 40.dp
+private val CaptionSearchMaxWidth = 480.dp
+private val CaptionDragGap = 48.dp
 
 @Composable
 fun HomeScreen(
@@ -284,6 +291,36 @@ private fun FeedPane(
         canScrollBack = { listShown && listStates.getValue(selected).canScrollBackward },
     )
 
+    val searchInCaption = claimCaptionBar(
+        navigation = null,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth().padding(end = CaptionDragGap),
+            ) {
+                SearchBar(
+                    state = searchState,
+                    inputField = { CollapsedSearchField(searchState, height = CaptionSearchHeight) },
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .widthIn(max = CaptionSearchMaxWidth)
+                        .height(CaptionSearchHeight)
+                        .systemGestureExclusion()
+                        .onSizeChanged { searchWidth = with(density) { it.width.toDp() } },
+                )
+                Box(Modifier.systemGestureExclusion()) {
+                    TooltipIconButton(
+                        label = stringResource(R.string.feed_refresh),
+                        icon = Icons.Default.Refresh,
+                        onClick = refresh,
+                    )
+                }
+            }
+        },
+        actions = {},
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection).revealTopBarOnWheel(topBarReveal),
@@ -295,19 +332,21 @@ private fun FeedPane(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth(),
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            SearchBar(
-                                state = searchState,
-                                inputField = { CollapsedSearchField(searchState) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .onSizeChanged { searchWidth = with(density) { it.width.toDp() } },
-                            )
-                            TooltipIconButton(
-                                label = stringResource(R.string.feed_refresh),
-                                icon = Icons.Default.Refresh,
-                                onClick = refresh,
-                            )
+                        if (!searchInCaption) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                SearchBar(
+                                    state = searchState,
+                                    inputField = { CollapsedSearchField(searchState) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .onSizeChanged { searchWidth = with(density) { it.width.toDp() } },
+                                )
+                                TooltipIconButton(
+                                    label = stringResource(R.string.feed_refresh),
+                                    icon = Icons.Default.Refresh,
+                                    onClick = refresh,
+                                )
+                            }
                         }
                         TimelineSwitcher(
                             selected = selected,
@@ -318,7 +357,7 @@ private fun FeedPane(
                         )
                     }
                 },
-                expandedHeight = 128.dp,
+                expandedHeight = if (searchInCaption) TopAppBarDefaults.TopAppBarExpandedHeight else 128.dp,
                 windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,

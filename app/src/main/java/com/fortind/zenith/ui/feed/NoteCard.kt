@@ -4,7 +4,9 @@ import android.content.Context
 import android.text.format.DateUtils
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -70,6 +72,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.Cursors
 import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.timeline.Note
 import androidx.compose.material3.MenuDefaults
@@ -101,6 +104,7 @@ fun NoteCard(
     focal: Boolean = false,
     showReplyContext: Boolean = true,
     mutedWords: List<String>? = null,
+    selectableText: Boolean = false,
 ) {
     var muteRevealed by rememberSaveable(note.id) { mutableStateOf(false) }
     if (!mutedWords.isNullOrEmpty() && !muteRevealed) {
@@ -148,6 +152,7 @@ fun NoteCard(
                 .focusRing(MaterialTheme.colorScheme.primary, RectangleShape)
                 .pointerHover { hovered = it }
                 .contextMenuTrigger(enabled = !target.deleted, onOpen = openMenu)
+                .middleClickOpens(target, callbacks, enabled = !focal && !target.deleted)
                 .onPreviewKeyEvent { event ->
                     val plain = !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
                     if (event.type != KeyEventType.KeyDown || !plain || target.deleted || target.isHidden) return@onPreviewKeyEvent false
@@ -180,7 +185,7 @@ fun NoteCard(
                 } else if (target.isHidden) {
                     DeletedStub(R.string.note_hidden)
                 } else {
-                    NoteMain(target, environment, callbacks, focal, showReplyContext, reveal)
+                    NoteMain(target, environment, callbacks, focal, showReplyContext, reveal, selectableText)
                 }
             }
         }
@@ -238,21 +243,39 @@ private fun MutedNoteRow(words: List<String>, onShow: () -> Unit, modifier: Modi
 }
 
 @Composable
-private fun NoteMain(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks, focal: Boolean, showReplyContext: Boolean, reveal: NoteReveal) {
+private fun NoteMain(
+    note: Note,
+    environment: NoteEnvironment,
+    callbacks: NoteCallbacks,
+    focal: Boolean,
+    showReplyContext: Boolean,
+    reveal: NoteReveal,
+    selectableText: Boolean,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Avatar(
             name = note.user.displayName,
             url = note.user.avatarUrl,
             size = if (focal) 48.dp else 40.dp,
             modifier = Modifier
-                .clickable(onClickLabel = stringResource(R.string.person_menu_view)) { callbacks.openProfile(note.user) }
+                .mousePostDrag(note, callbacks)
+                .combinedClickable(
+                    onClickLabel = stringResource(R.string.person_menu_view),
+                    onLongClickLabel = stringResource(R.string.note_drag_post),
+                    onLongClick = { callbacks.startDrag(note) },
+                ) { callbacks.openProfile(note.user) }
+                .hoverCard(HoverTarget.Profile(note.user))
                 .testTag("note:avatar")
                 .semantics { contentDescription = note.user.handle },
         )
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            NoteHeader(note, environment)
+            NoteHeader(note, environment, callbacks)
             if (showReplyContext) note.reply?.let { ReplyContext(it) }
-            NoteContent(note, environment, callbacks, focal, reveal)
+            if (selectableText) {
+                SelectionContainer { NoteContent(note, environment, callbacks, focal, reveal) }
+            } else {
+                NoteContent(note, environment, callbacks, focal, reveal)
+            }
             if (note.reactions.isNotEmpty()) ReactionChips(note, environment, callbacks)
             NoteActionBar(note, environment, callbacks)
         }
@@ -275,7 +298,7 @@ private fun RenoteHeader(note: Note, environment: NoteEnvironment) {
             style = MaterialTheme.typography.labelLarge,
             color = tint,
             maxLines = 1,
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f, fill = false).hoverCard(HoverTarget.Profile(note.user)),
         )
         Text(stringResource(R.string.note_renoted), style = MaterialTheme.typography.labelLarge, color = tint, maxLines = 1)
         Text("·", style = MaterialTheme.typography.labelMedium, color = tint, modifier = Modifier.semantics { hideFromAccessibility() })
@@ -303,7 +326,7 @@ private fun ReplyContext(parent: Note) {
 }
 
 @Composable
-fun NoteHeader(note: Note, environment: NoteEnvironment) {
+fun NoteHeader(note: Note, environment: NoteEnvironment, callbacks: NoteCallbacks? = null) {
     val nameEnvironment = remember(note.user, environment.mfm) { environment.mfm.withEmoji(environment.userEmoji(note.user)) }
     val subtle = MaterialTheme.colorScheme.onSurfaceVariant
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -312,7 +335,7 @@ fun NoteHeader(note: Note, environment: NoteEnvironment) {
             environment = nameEnvironment,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f, fill = false).then(if (callbacks != null) Modifier.hoverCard(HoverTarget.Profile(note.user)) else Modifier),
         )
         Text(
             text = note.user.handle,
@@ -344,6 +367,7 @@ fun NoteHeader(note: Note, environment: NoteEnvironment) {
             style = MaterialTheme.typography.bodyMedium,
             color = subtle,
             maxLines = 1,
+            modifier = if (callbacks != null) Modifier.mousePostDrag(note, callbacks).pointerHoverIcon(Cursors.Grab).testTag("note:time") else Modifier,
         )
     }
 }

@@ -9,7 +9,6 @@ import com.fortind.zenith.ZenithApplication
 import com.fortind.zenith.account.AccountApi
 import com.fortind.zenith.account.ProfileEdit
 import com.fortind.zenith.auth.CurrentUser
-import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.TokenRejectedException
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.drive.DriveApi
@@ -22,6 +21,7 @@ import com.fortind.zenith.net.MissingPermissionException
 import com.fortind.zenith.net.isRateLimited
 import com.fortind.zenith.settings.SettingsStore
 import com.fortind.zenith.ui.profile.ProfileUiState
+import com.fortind.zenith.ui.profile.profileUiState
 import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -30,14 +30,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,15 +62,7 @@ class AccountViewModel(
     private val settings: SettingsStore,
 ) : ViewModel() {
 
-    val account: StateFlow<ProfileUiState> = session.state
-        .mapNotNull { state ->
-            when (state) {
-                is SessionState.SignedIn -> state.user?.let(ProfileUiState::Loaded) ?: ProfileUiState.Unavailable
-                SessionState.Guest -> ProfileUiState.Guest
-                SessionState.Restoring, SessionState.SignedOut -> null
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ProfileUiState.Unavailable)
+    val account: StateFlow<ProfileUiState> = session.profileUiState(viewModelScope, STOP_TIMEOUT_MS)
 
     private val _saveState = MutableStateFlow(ProfileSaveState())
     val saveState: StateFlow<ProfileSaveState> = _saveState.asStateFlow()

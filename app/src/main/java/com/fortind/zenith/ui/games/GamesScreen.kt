@@ -110,6 +110,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.horizontalScrollWithBar
@@ -137,6 +138,11 @@ fun GamesScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val actions = gameActions(snackbarHostState, onToggleFavorite = viewModel::toggleFavorite)
     val gameUnavailable = stringResource(R.string.shortcut_game_unavailable)
+    claimCaptionBar(
+        navigation = null,
+        title = { Text(stringResource(R.string.nav_games), maxLines = 1, modifier = Modifier.semantics { heading() }) },
+        actions = {},
+    )
 
     FavoriteNoticeEffect(
         notice = favoriteNotice,

@@ -84,6 +84,12 @@ import com.fortind.zenith.ui.feed.FeedViewModel
 import com.fortind.zenith.ui.feed.FullscreenVideo
 import com.fortind.zenith.ui.feed.HostedPopups
 import com.fortind.zenith.ui.feed.HostedPopupsLayer
+import com.fortind.zenith.ui.feed.PostDragShadow
+import com.fortind.zenith.ui.feed.ThreadWindowActions
+import com.fortind.zenith.ui.feed.startPostDrag
+import com.fortind.zenith.ui.feed.HoverCardLayer
+import com.fortind.zenith.ui.feed.HoverCards
+import com.fortind.zenith.ui.feed.LocalHoverCards
 import com.fortind.zenith.ui.feed.ImageViewer
 import com.fortind.zenith.ui.feed.LocalHostedPopups
 import com.fortind.zenith.ui.motion.LocalSharedTransitionScope
@@ -103,6 +109,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
 import com.fortind.zenith.ui.feed.MuteDurationDialog
 import com.fortind.zenith.ui.feed.NoteCallbacks
 import com.fortind.zenith.ui.feed.NoteEnvironment
@@ -159,6 +167,7 @@ class ViewerControl(private val open: State<Boolean>, private val close: State<(
 
 @Composable
 fun SocialHost(
+    threadWindow: ThreadWindowActions?,
     selectedNoteId: String?,
     onOpenThread: (Note) -> Unit,
     onOpenPerson: (String) -> Unit,
@@ -272,6 +281,7 @@ fun SocialHost(
         )
     }
     val noteCallbacks = rememberNoteCallbacks(
+        threadWindow = threadWindow,
         feedViewModel = feedViewModel,
         snackbarHostState = snackbarHostState,
         signedIn = feed.signedIn,
@@ -371,6 +381,8 @@ fun SocialHost(
         onMedia = { uris -> composerViewModel.open(ComposerTarget.NewPost, null, shared = SharedContent("", caretAtStart = false, uris = uris)) },
     )
     val hostedPopups = remember { HostedPopups() }
+    val hoverScope = rememberCoroutineScope()
+    val hoverCards = remember(hoverScope) { HoverCards(hoverScope) }
     SharedTransitionLayout(modifier = Modifier.fillMaxSize().dropToPost(dropToPost)) {
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             Box(
@@ -380,9 +392,17 @@ fun SocialHost(
                     .focusGroup()
                     .then(if (viewerShown) Modifier.clearAndSetSemantics {} else Modifier),
             ) {
-                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, LocalDeceptiveLinks provides onDeceptiveLink, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit(), LocalHostedPopups provides hostedPopups) {
+                CompositionLocalProvider(LocalNoteEnvironment provides environment, LocalUriHandler provides linkRouter, LocalDeceptiveLinks provides onDeceptiveLink, com.fortind.zenith.ui.feed.LocalNoteActionKit provides com.fortind.zenith.ui.feed.rememberNoteActionKit(), LocalHostedPopups provides hostedPopups, LocalHoverCards provides hoverCards) {
                     content(ui)
                     HostedPopupsLayer(hostedPopups)
+                    HoverCardLayer(
+                        cards = hoverCards,
+                        people = peopleViewModel,
+                        feed = feedViewModel,
+                        environment = environment,
+                        peopleActions = peopleActions,
+                        onOpenProfile = noteCallbacks.openProfile,
+                    )
                 }
                 DropToPostOverlay(dropToPost)
             }
@@ -939,6 +959,7 @@ private fun ComposerEventsEffect(
 
 @Composable
 private fun rememberNoteCallbacks(
+    threadWindow: ThreadWindowActions?,
     feedViewModel: FeedViewModel,
     snackbarHostState: SnackbarHostState,
     signedIn: Boolean,
@@ -974,7 +995,11 @@ private fun rememberNoteCallbacks(
     val reportNote by rememberUpdatedState(onReport)
     val openProfile by rememberUpdatedState(onOpenProfile)
     val isSignedIn by rememberUpdatedState(signedIn)
-    return remember(feedViewModel, context, clipboard, uriHandler) {
+    val view = LocalView.current
+    val window by rememberUpdatedState(threadWindow)
+    val shadowBackground by rememberUpdatedState(MaterialTheme.colorScheme.inverseSurface.toArgb())
+    val shadowForeground by rememberUpdatedState(MaterialTheme.colorScheme.inverseOnSurface.toArgb())
+    return remember(feedViewModel, context, clipboard, uriHandler, view) {
         fun copy(label: String, text: String, message: String) {
             scope.launch {
                 clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(label, text)))
@@ -1021,6 +1046,11 @@ private fun rememberNoteCallbacks(
                     .putExtra(Intent.EXTRA_TEXT, note.webUrl)
                 context.startActivity(Intent.createChooser(send, note.user.handle))
             },
+            startDrag = { note ->
+                val shadow = PostDragShadow(note.user.handle, shadowBackground, shadowForeground, view.resources.displayMetrics.density)
+                startPostDrag(view, note, window?.sender(note.id), shadow)
+            },
+            openInWindow = { note -> window?.open(note.id) ?: openThread(note) },
         )
     }
 }

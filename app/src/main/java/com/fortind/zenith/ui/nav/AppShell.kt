@@ -6,6 +6,10 @@ package com.fortind.zenith.ui.nav
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import com.fortind.zenith.ui.theme.LocalAppSettings
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
@@ -48,6 +52,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,7 +74,6 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
-import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
 import androidx.compose.material3.adaptive.layout.PaneMotionDefaults
 import androidx.compose.material3.adaptive.layout.PaneExpansionState
 import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
@@ -84,6 +89,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -114,11 +120,11 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.R
 import com.fortind.zenith.ZenithApplication
-import com.fortind.zenith.settings.AppSettings
 import com.fortind.zenith.shortcuts.LauncherShortcut
 import com.fortind.zenith.shortcuts.LauncherShortcuts
 import com.fortind.zenith.shortcuts.ShortcutTarget
 import com.fortind.zenith.ui.feed.ThreadPane
+import com.fortind.zenith.ui.feed.ThreadWindowActions
 import com.fortind.zenith.ui.feed.ThreadPlaceholder
 import com.fortind.zenith.ui.feed.TooltipIconButton
 import com.fortind.zenith.ui.games.GamesScreen
@@ -155,13 +161,7 @@ private val ListPaneWidth = 440.dp
 private val RailActionMargin = 20.dp
 private val CollapsedRailWidth = 96.dp
 private val SecondaryRailMinHeight = 720.dp
-private val DefaultSplitOffset = 414.dp
-private val DetailCollapsedAnchor = PaneExpansionAnchor.Proportion(1f)
-private val PaneExpansionAnchors = listOf(
-    PaneExpansionAnchor.Proportion(0f),
-    PaneExpansionAnchor.Offset.fromStart(DefaultSplitOffset),
-    DetailCollapsedAnchor,
-)
+private val SideColumnTabs = setOf(AppDestination.HOME, AppDestination.NOTIFICATIONS, AppDestination.PROFILE)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -189,7 +189,7 @@ fun AppShell(
     val canPopOut = !poppedOut && WindowInsets.isCaptionBarVisible
     val app = LocalContext.current.applicationContext as ZenithApplication
     val scope = rememberCoroutineScope()
-    val settings by app.container.settingsStore.settings.collectAsStateWithLifecycle<AppSettings?>(initialValue = null)
+    val settings = LocalAppSettings.current
     val gamesViewModel: GamesViewModel = viewModel(factory = GamesViewModel.Factory)
     val notificationsViewModel: NotificationsViewModel = viewModel(factory = NotificationsViewModel.Factory)
     val unreadCount by notificationsViewModel.unreadCount.collectAsStateWithLifecycle()
@@ -197,13 +197,24 @@ fun AppShell(
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
     val sizeClass = adaptiveInfo.windowSizeClass
     val directive = remember(adaptiveInfo) { calculatePaneScaffoldDirective(adaptiveInfo) }
-    val paneExpansion = rememberPaneExpansionState(anchors = PaneExpansionAnchors)
+    val paneExpansion = rememberPaneExpansionState(
+        anchors = PaneExpansionAnchors,
+        initialAnchoredIndex = restoredAnchorIndex(settings.listPaneAnchor),
+    )
+    LaunchedEffect(paneExpansion) {
+        snapshotFlow { anchorIndexOf(paneExpansion.currentAnchor) }
+            .filterNotNull()
+            .distinctUntilChanged()
+            .collect { app.container.settingsStore.setListPaneAnchor(it) }
+    }
     val detailCollapsed = paneExpansion.currentAnchor == DetailCollapsedAnchor
     val twoPane = directive.maxHorizontalPartitions > 1 && !detailCollapsed
     val hasRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
     val hasWideRail = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
+    val showSideColumn = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXTRA_LARGE_LOWER_BOUND) &&
+        stacks.tab in SideColumnTabs
     val composeInRail = !poppedOut && hasRail && sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
-    val railExpanded = hasWideRail && settings?.railCollapsed != true
+    val railExpanded = hasWideRail && !settings.railCollapsed
     val suiteType = when {
         poppedOut -> NavigationSuiteType.None
         railExpanded -> NavigationSuiteType.WideNavigationRailExpanded
@@ -255,7 +266,20 @@ fun AppShell(
     val hideBar = !hasRail && stacks.top.isDetailPage
     LaunchedEffect(hideBar) { if (hideBar) navigationState.hide() else navigationState.show() }
 
+    val captionVisible = WindowInsets.isCaptionBarVisible
+    val homeBounds = settings.popOutBounds[AppDestination.HOME.name]
+    val threadWindow = remember(captionVisible, window, homeBounds) {
+        if (captionVisible && window.poppedOutTab != AppDestination.HOME) {
+            ThreadWindowActions(
+                open = { noteId -> window.onOpenRouteInTabWindow(AppDestination.HOME, AppRoute.Thread(noteId), homeBounds) },
+                sender = { noteId -> window.tabWindowSender(AppDestination.HOME, AppRoute.Thread(noteId)) },
+            )
+        } else {
+            null
+        }
+    }
     SocialHost(
+        threadWindow = threadWindow,
         requestedReplyId = requestedReplyId,
         onRequestedReplyHandled = onRequestedReplyHandled,
         selectedNoteId = stacks.openThreadId?.takeIf { twoPane },
@@ -304,7 +328,7 @@ fun AppShell(
 
         val systemDark = isSystemInDarkTheme()
         val currentDark by rememberUpdatedState(
-            when (settings?.themeMode) {
+            when (settings.themeMode) {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
                 else -> systemDark
@@ -409,7 +433,7 @@ fun AppShell(
                                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
                                         onClick = {
                                             menuOpen = false
-                                            window.onOpenTabWindow(destination, settings?.popOutBounds?.get(destination.name))
+                                            window.onOpenTabWindow(destination, settings.popOutBounds[destination.name])
                                         },
                                     )
                                 }
@@ -460,18 +484,44 @@ fun AppShell(
                 bottomBar = { OfflineBanner(offline = network == null) },
             ) { innerPadding ->
                 Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavDisplay(
-                        stacks = stacks,
-                        contentPadding = innerPadding,
-                        ui = ui,
-                        twoPane = twoPane,
-                        paneExpansion = paneExpansion,
-                        detailCollapsed = detailCollapsed,
-                        showHomeComposeButton = !composeInRail,
-                        gamesViewModel = gamesViewModel,
-                        notificationsViewModel = notificationsViewModel,
-                        backPreview = tabBackPreview,
-                    )
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                            AppNavDisplay(
+                                stacks = stacks,
+                                contentPadding = innerPadding,
+                                ui = ui,
+                                twoPane = twoPane,
+                                paneExpansion = paneExpansion,
+                                detailCollapsed = detailCollapsed,
+                                showHomeComposeButton = !composeInRail,
+                                gamesViewModel = gamesViewModel,
+                                notificationsViewModel = notificationsViewModel,
+                                backPreview = tabBackPreview,
+                            )
+                        }
+                        if (showSideColumn) {
+                            SideColumn(
+                                notifications = notificationsViewModel,
+                                showNotifications = feedState.signedIn && stacks.tab != AppDestination.NOTIFICATIONS,
+                                discovery = ui.discovery,
+                                snackbar = ui.snackbar,
+                                onOpenTag = { tag -> stacks.openTag(tag, app.container.launcherShortcuts) },
+                                onOpenNote = { noteId -> stacks.push(AppRoute.Thread(noteId)) },
+                                onOpenPerson = { userId ->
+                                    if (userId == ui.people.uiState.value.myUserId) {
+                                        stacks.select(AppDestination.PROFILE)
+                                    } else {
+                                        stacks.push(AppRoute.Person(userId))
+                                    }
+                                },
+                                onSeeAllNotifications = { stacks.select(AppDestination.NOTIFICATIONS) },
+                                modifier = Modifier
+                                    .width(SideColumnWidth)
+                                    .fillMaxHeight()
+                                    .padding(innerPadding),
+                            )
+                        }
+                    }
                     SnackbarHost(ui.snackbar, modifier = Modifier.align(Alignment.BottomCenter).padding(innerPadding))
                 }
             }
@@ -583,12 +633,16 @@ private fun AppNavDisplay(
     val tabState = remember { SeekableTransitionState(stacks.tab) }
     var settlingPreview by remember { mutableStateOf(false) }
     LaunchedEffect(stacks.tab, previewFraction) {
-        if (previewFraction != null) {
-            settlingPreview = true
-            tabState.seekTo(fraction = previewFraction, targetState = AppDestination.HOME)
-        } else {
-            tabState.animateTo(stacks.tab)
-            settlingPreview = false
+        when {
+            previewFraction != null -> {
+                settlingPreview = true
+                tabState.seekTo(fraction = previewFraction, targetState = AppDestination.HOME)
+            }
+            settlingPreview -> {
+                tabState.animateTo(stacks.tab)
+                settlingPreview = false
+            }
+            else -> tabState.snapTo(stacks.tab)
         }
     }
     val previewScale by animateFloatAsState(
@@ -840,10 +894,15 @@ private fun TabNavDisplay(
 
 @Composable
 private fun EntryPage(contentPadding: PaddingValues, paneRole: ThreePaneScaffoldRole?, content: @Composable () -> Unit) {
-    EntryVisibilityScope(paneRole) { Padded(contentPadding, content) }
+    val pane = remember { CaptionPane() }
+    EntryVisibilityScope(paneRole) {
+        CompositionLocalProvider(LocalCaptionPane provides pane) {
+            Padded(contentPadding, Modifier.captionPane(pane), content)
+        }
+    }
 }
 
 @Composable
-private fun Padded(contentPadding: PaddingValues, content: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().padding(contentPadding).consumeWindowInsets(contentPadding)) { content() }
+private fun Padded(contentPadding: PaddingValues, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(modifier = modifier.fillMaxSize().padding(contentPadding).consumeWindowInsets(contentPadding)) { content() }
 }

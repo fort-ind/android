@@ -139,6 +139,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.window.core.layout.WindowSizeClass
 import com.fortind.zenith.BuildConfig
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.notifications.NotificationCategory
 import com.fortind.zenith.settings.AppIcon
 import androidx.compose.material.icons.filled.Edit
@@ -486,18 +487,21 @@ private fun SettingsList(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             contentWindowInsets = WindowInsets(0),
             topBar = {
-                LargeFlexibleTopAppBar(
-                    title = {
-                        Text(
-                            text = stringResource(R.string.settings_title),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.semantics { heading() },
-                        )
-                    },
-                    windowInsets = WindowInsets(0),
-                    scrollBehavior = scrollBehavior,
-                )
+                val title = @Composable {
+                    Text(
+                        text = stringResource(R.string.settings_title),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                }
+                if (!claimCaptionBar(navigation = null, title = title, actions = {})) {
+                    LargeFlexibleTopAppBar(
+                        title = title,
+                        windowInsets = WindowInsets(0),
+                        scrollBehavior = scrollBehavior,
+                    )
+                }
             },
         ) { innerPadding ->
             Column(

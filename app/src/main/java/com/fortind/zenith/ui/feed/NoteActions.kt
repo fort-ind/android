@@ -94,6 +94,7 @@ fun ReactionChips(note: Note, environment: NoteEnvironment, callbacks: NoteCallb
                     note = note,
                     environment = environment,
                     onClick = { callbacks.toggleReaction(note, key) },
+                    modifier = if (usable || !environment.signedIn) Modifier.hoverCard(HoverTarget.Reactors(ReactorsKey(note.id, key, count))) else Modifier,
                 )
             }
             if (environment.signedIn && !usable) {
@@ -132,6 +133,7 @@ internal fun ReactionChip(
     note: Note,
     environment: NoteEnvironment,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val description = stringResource(R.string.note_reaction_description, Reactions.spokenName(reactionKey), count)
     var hovered by remember { mutableStateOf(false) }
@@ -148,7 +150,7 @@ internal fun ReactionChip(
         color = container,
         contentColor = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
         border = if (selected) BorderStroke(1.dp, colors.primary) else null,
-        modifier = Modifier
+        modifier = modifier
             .pointerHover { hovered = it }
             .semantics {
                 contentDescription = description

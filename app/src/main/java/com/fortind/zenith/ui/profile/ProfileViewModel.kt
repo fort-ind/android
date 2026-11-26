@@ -10,6 +10,7 @@ import com.fortind.zenith.auth.CurrentUser
 import com.fortind.zenith.auth.SessionState
 import com.fortind.zenith.auth.UserSessionService
 import com.fortind.zenith.composer.DraftStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,20 +26,22 @@ sealed interface ProfileUiState {
     data object Guest : ProfileUiState
 }
 
+fun SessionState.toProfileUiState(): ProfileUiState? = when (this) {
+    is SessionState.SignedIn -> user?.let(ProfileUiState::Loaded) ?: ProfileUiState.Unavailable
+    SessionState.Guest -> ProfileUiState.Guest
+    SessionState.Restoring, SessionState.SignedOut -> null
+}
+
+fun UserSessionService.profileUiState(scope: CoroutineScope, stopTimeoutMs: Long): StateFlow<ProfileUiState> = state
+    .mapNotNull { it.toProfileUiState() }
+    .stateIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMs), state.value.toProfileUiState() ?: ProfileUiState.Unavailable)
+
 class ProfileViewModel(
     private val session: UserSessionService,
     private val drafts: DraftStore,
 ) : ViewModel() {
 
-    val uiState: StateFlow<ProfileUiState> = session.state
-        .mapNotNull { state ->
-            when (state) {
-                is SessionState.SignedIn -> state.user?.let(ProfileUiState::Loaded) ?: ProfileUiState.Unavailable
-                SessionState.Guest -> ProfileUiState.Guest
-                SessionState.Restoring, SessionState.SignedOut -> null
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState.Unavailable)
+    val uiState: StateFlow<ProfileUiState> = session.profileUiState(viewModelScope, stopTimeoutMs = 5_000)
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()

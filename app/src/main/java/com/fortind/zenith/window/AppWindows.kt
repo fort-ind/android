@@ -3,8 +3,10 @@ package com.fortind.zenith.window
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.net.Uri
@@ -35,6 +37,7 @@ object AppWindows {
     private const val EDIT = "edit"
     private const val TAB = "tab"
     private const val CASCADE_STEP_DP = 48
+    private const val DROP_REQUEST_CODE = 7
 
     private val DefaultComposerSize = WindowSizeDp(widthDp = 560, heightDp = 640)
 
@@ -101,11 +104,22 @@ object AppWindows {
         return PoppableTabs.firstOrNull { it.name == name }
     }
 
-    fun openTab(opener: Activity, destination: AppDestination, route: AppRoute? = null, remembered: WindowBounds? = null) {
-        val intent = Intent(opener, MainActivity::class.java)
+    fun tabIntent(context: Context, destination: AppDestination, route: AppRoute?): Intent {
+        val intent = Intent(context, MainActivity::class.java)
             .setData(tabUri(destination))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
         route?.let { intent.putExtra(MainActivity.EXTRA_ROUTE, it.encode()) }
+        return intent
+    }
+
+    fun tabSender(context: Context, destination: AppDestination, route: AppRoute): IntentSender {
+        val intent = tabIntent(context, destination, route).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        return PendingIntent.getActivity(context, DROP_REQUEST_CODE, intent, flags).intentSender
+    }
+
+    fun openTab(opener: Activity, destination: AppDestination, route: AppRoute? = null, remembered: WindowBounds? = null) {
+        val intent = tabIntent(opener, destination, route)
         val placeNew = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !tabWindowExists(opener, destination)
         val options = if (placeNew) {
             ActivityOptions.makeBasic().setLaunchBounds(popOutBounds(opener, remembered)).toBundle()

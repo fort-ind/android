@@ -58,6 +58,10 @@
             android:supportsPictureInPicture="true"
             android:theme="@style/Theme.Zenith"
             android:windowSoftInputMode="adjustResize">
+            <layout
+                android:defaultWidth="1200dp"
+                android:defaultHeight="800dp"
+                android:gravity="center" />
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 

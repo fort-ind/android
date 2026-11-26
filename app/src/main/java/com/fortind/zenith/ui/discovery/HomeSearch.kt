@@ -174,7 +174,7 @@ fun rememberSearchInput(
 }
 
 @Composable
-fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier) {
+fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier, height: Dp = SearchBarDefaults.InputFieldHeight) {
     val scope = rememberCoroutineScope()
     val label = stringResource(R.string.search_placeholder)
     val expand = { scope.launch { state.animateToExpanded() } }
@@ -185,7 +185,7 @@ fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .handwritingDetector { expand() }
-            .height(SearchBarDefaults.InputFieldHeight)
+            .height(height)
             .testTag("search:field")
             .semantics { contentDescription = label },
     ) {

@@ -29,7 +29,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +52,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.CaptionTopAppBar
 import com.fortind.zenith.mfm.MfmText
 import com.fortind.zenith.people.FollowListKind
 import com.fortind.zenith.people.FollowState
@@ -131,13 +131,13 @@ fun FollowListScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            TopAppBar(
+            CaptionTopAppBar(
                 title = {
                     owner?.user?.let { user ->
                         Box(Modifier.semantics(mergeDescendants = true) { heading() }) { PersonTitle(user, environment) }
                     }
                 },
-                navigationIcon = {
+                navigation = {
                     TooltipIconButton(label = stringResource(R.string.person_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },
                 actions = {
@@ -147,7 +147,6 @@ fun FollowListScreen(
                         onClick = { ui.people.loadList(key) },
                     )
                 },
-                windowInsets = WindowInsets(0),
             )
         },
     ) { padding ->

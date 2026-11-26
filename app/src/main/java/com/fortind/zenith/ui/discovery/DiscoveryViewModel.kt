@@ -12,6 +12,7 @@ import com.fortind.zenith.discovery.Announcement
 import com.fortind.zenith.discovery.DiscoveryApi
 import com.fortind.zenith.discovery.DismissedAnnouncementsStore
 import com.fortind.zenith.discovery.Hashtag
+import com.fortind.zenith.discovery.TrendingHashtag
 import com.fortind.zenith.discovery.unreadAnnouncements
 import com.fortind.zenith.timeline.NoteUser
 import java.io.IOException
@@ -31,6 +32,8 @@ data class SearchSuggestions(val query: String = "", val tags: List<String> = em
 data class DiscoveryUiState(
     val hashtagStatus: CollectionsStatus = CollectionsStatus.Idle,
     val hashtags: List<Hashtag> = emptyList(),
+    val trendingStatus: CollectionsStatus = CollectionsStatus.Idle,
+    val trending: List<TrendingHashtag> = emptyList(),
     val announcements: List<Announcement> = emptyList(),
     val suggestions: SearchSuggestions = SearchSuggestions(),
     val searchRequested: Boolean = false,
@@ -50,6 +53,7 @@ class DiscoveryViewModel(
 
     private val query = MutableStateFlow("")
     private var hashtagsReadAt = 0L
+    private var trendingReadAt = 0L
     private var announcementsReadAt = 0L
     private var allAnnouncements: List<Announcement> = emptyList()
     private var dismissed: List<String> = emptyList()
@@ -95,6 +99,24 @@ class DiscoveryViewModel(
                 throw e
             } catch (_: IOException) {
                 _uiState.update { it.copy(hashtagStatus = if (it.hashtags.isEmpty()) CollectionsStatus.Failed else it.hashtagStatus) }
+            }
+        }
+    }
+
+    fun loadTrending() {
+        val state = _uiState.value
+        if (state.trendingStatus == CollectionsStatus.Loading) return
+        if (state.trendingStatus == CollectionsStatus.Ready && clock() - trendingReadAt < TRENDING_TTL_MS) return
+        _uiState.update { it.copy(trendingStatus = if (it.trending.isEmpty()) CollectionsStatus.Loading else it.trendingStatus) }
+        viewModelScope.launch {
+            try {
+                val tags = api.trendingHashtags()
+                trendingReadAt = clock()
+                _uiState.update { it.copy(trendingStatus = CollectionsStatus.Ready, trending = tags) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IOException) {
+                _uiState.update { it.copy(trendingStatus = if (it.trending.isEmpty()) CollectionsStatus.Failed else CollectionsStatus.Ready) }
             }
         }
     }
@@ -166,6 +188,7 @@ class DiscoveryViewModel(
         const val TAG_SUGGESTIONS = 5
         const val PEOPLE_SUGGESTIONS = 5
         const val HASHTAG_TTL_MS = 30 * 60 * 1_000L
+        const val TRENDING_TTL_MS = 10 * 60 * 1_000L
         const val ANNOUNCEMENT_TTL_MS = 10 * 60 * 1_000L
         const val ANNOUNCEMENT_FORCE_MIN_MS = 60 * 1_000L
 

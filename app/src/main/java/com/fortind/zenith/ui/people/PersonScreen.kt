@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
@@ -366,6 +367,7 @@ fun SegmentTabs(
     Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
+                .wrapContentWidth(Alignment.CenterHorizontally)
                 .widthIn(max = FeedMaxWidth)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)

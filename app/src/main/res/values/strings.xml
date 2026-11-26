@@ -335,6 +335,7 @@
     <string name="note_menu_share">Share</string>
     <string name="note_menu_view_thread">View conversation</string>
     <string name="note_link_copied">Link copied!</string>
+    <string name="note_drag_post">Drag post</string>
     <string name="note_text_copied">Text copied!</string>
     <string name="note_reaction_description">%1$s, %2$d</string>
     <plurals name="note_reactions_more">
@@ -379,6 +380,21 @@
         <item quantity="other">Notifications, %1$d unread</item>
     </plurals>
     <string name="notifications_title">Notifications</string>
+    <string name="side_see_all">See all</string>
+    <string name="hover_reactors_title">Reacted with %1$s</string>
+    <string name="hover_card_failed">Couldn\'t load this</string>
+    <plurals name="hover_reactors_more">
+        <item quantity="one">and %1$d more</item>
+        <item quantity="other">and %1$d more</item>
+    </plurals>
+    <string name="side_loading">Loading…</string>
+    <string name="side_trending_title">Trending</string>
+    <string name="side_trending_empty">Nothing trending right now</string>
+    <string name="side_trending_failed">Couldn\'t load trending hashtags. Try again</string>
+    <plurals name="side_trending_people">
+        <item quantity="one">%1$d person posting</item>
+        <item quantity="other">%1$d people posting</item>
+    </plurals>
     <string name="notifications_filter_all">All</string>
     <string name="notifications_filter_mentions">Mentions</string>
     <string name="notifications_filter_reactions">Reactions</string>

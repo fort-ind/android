@@ -49,7 +49,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +68,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.CaptionTopAppBar
 import com.fortind.zenith.timeline.Note
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
@@ -96,7 +96,7 @@ fun ThreadPane(
         contentWindowInsets = WindowInsets(0),
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
+            CaptionTopAppBar(
                 title = {
                     Text(
                         stringResource(R.string.thread_title),
@@ -105,14 +105,13 @@ fun ThreadPane(
                         modifier = Modifier.semantics { heading() },
                     )
                 },
-                navigationIcon = {
+                navigation = {
                     TooltipIconButton(
                         label = stringResource(if (twoPane) R.string.thread_close else R.string.thread_back),
                         icon = if (twoPane) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
                         onClick = onBack,
                     )
                 },
-                windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
@@ -176,7 +175,7 @@ private fun ThreadContent(
     ) {
         items(thread.ancestors, key = { "ancestor:${it.id}" }, contentType = { "ancestor" }) { note ->
             Column(modifier = itemModifier) {
-                NoteCard(note, environment, callbacks)
+                NoteCard(note, environment, callbacks, selectableText = true)
                 ThreadDivider()
             }
         }
@@ -222,6 +221,7 @@ private fun ThreadContent(
                         callbacks = callbacks,
                         modifier = Modifier.threadIndent(row.depth, lineColor),
                         showReplyContext = false,
+                        selectableText = true,
                     )
                     is ReplyRow.Toggle -> BranchToggle(row, lineColor) { onToggleBranch(row.parentId) }
                     is ReplyRow.More -> BranchMore(row, lineColor) { onLoadMoreBranch(row.parentId) }

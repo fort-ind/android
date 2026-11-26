@@ -35,7 +35,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.CaptionTopAppBar
 import com.fortind.zenith.schedule.ScheduledNote
 import com.fortind.zenith.ui.PrimaryButton
 import com.fortind.zenith.ui.StatusMessage
@@ -112,9 +112,9 @@ fun ScheduledScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            TopAppBar(
+            CaptionTopAppBar(
                 title = { Text(stringResource(R.string.scheduled_title), modifier = Modifier.semantics { heading() }) },
-                navigationIcon = {
+                navigation = {
                     TooltipIconButton(label = stringResource(R.string.person_back), icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                 },
                 actions = {
@@ -124,7 +124,6 @@ fun ScheduledScreen(
                         onClick = { viewModel.refresh(quiet = true) },
                     )
                 },
-                windowInsets = WindowInsets(0),
             )
         },
     ) { padding ->
