@@ -327,7 +327,7 @@ fun SettingsScreen(
     var searchRequested by remember { mutableStateOf(false) }
 
     LaunchedEffect(editProfileRequested) {
-        if (editProfileRequested) navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, SettingsPage.ACCOUNT)
+        if (editProfileRequested) scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, SettingsPage.ACCOUNT) }
     }
 
     val reduceMotion = rememberReduceMotion()
