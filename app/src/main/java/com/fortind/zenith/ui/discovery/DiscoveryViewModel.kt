@@ -110,7 +110,7 @@ class DiscoveryViewModel(
         _uiState.update { it.copy(trendingStatus = if (it.trending.isEmpty()) CollectionsStatus.Loading else it.trendingStatus) }
         viewModelScope.launch {
             try {
-                val tags = api.trendingHashtags()
+                val tags = api.trendingHashtags().filter { it.usersCount > 0 }
                 trendingReadAt = clock()
                 _uiState.update { it.copy(trendingStatus = CollectionsStatus.Ready, trending = tags) }
             } catch (e: CancellationException) {

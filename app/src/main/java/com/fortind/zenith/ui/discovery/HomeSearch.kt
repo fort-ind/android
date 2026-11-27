@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.handwriting.handwritingDetector
@@ -173,9 +174,15 @@ fun rememberSearchInput(
     }
 }
 
+val CompactSearchFieldHeight = 32.dp
+private val SearchIconSize = 24.dp
+private val CompactSearchIconSize = 20.dp
+
 @Composable
-fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier, height: Dp = SearchBarDefaults.InputFieldHeight) {
+fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier, compact: Boolean = false) {
     val scope = rememberCoroutineScope()
+    val height = if (compact) CompactSearchFieldHeight else SearchBarDefaults.InputFieldHeight
+    val padding = if (compact) 12.dp else 16.dp
     val label = stringResource(R.string.search_placeholder)
     val expand = { scope.launch { state.animateToExpanded() } }
     Surface(
@@ -191,13 +198,18 @@ fun CollapsedSearchField(state: SearchBarState, modifier: Modifier = Modifier, h
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(padding),
+            modifier = Modifier.padding(horizontal = padding),
         ) {
-            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(if (compact) CompactSearchIconSize else SearchIconSize),
+            )
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

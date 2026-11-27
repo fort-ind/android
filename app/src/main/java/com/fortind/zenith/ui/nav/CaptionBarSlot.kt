@@ -39,13 +39,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -222,6 +227,45 @@ private fun CaptionClaimRow(claim: CaptionBarClaim, modifier: Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             content = claim.actions,
         )
+    }
+}
+
+@Composable
+fun CaptionCenteredRow(
+    centered: @Composable () -> Unit,
+    trailing: @Composable () -> Unit,
+    maxCenteredWidth: Dp,
+    spacing: Dp,
+    endGap: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Layout(contents = listOf(centered, trailing), modifier = modifier) { (centeredMeasurables, trailingMeasurables), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val trailingPlaceables = trailingMeasurables.map { it.measure(loose) }
+        val trailingWidth = trailingPlaceables.sumOf { it.width }
+        val gap = spacing.roundToPx()
+        val reserved = endGap.roundToPx()
+        val cap = maxCenteredWidth.roundToPx()
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else cap + gap + trailingWidth + reserved
+        val centeredWidth = (width - reserved - gap - trailingWidth).coerceIn(0, cap)
+        val centeredPlaceables = centeredMeasurables.map { it.measure(loose.copy(minWidth = centeredWidth, maxWidth = centeredWidth)) }
+        val height = (centeredPlaceables + trailingPlaceables).maxOfOrNull { it.height }?.coerceAtLeast(constraints.minHeight) ?: constraints.minHeight
+        val rtl = layoutDirection == LayoutDirection.Rtl
+        layout(width, height) {
+            val desired = coordinates?.let { (it.findRootCoordinates().size.width / 2f - it.positionInRoot().x).roundToInt() } ?: (width / 2)
+            val start = if (rtl) {
+                centeredStart(centeredWidth, desired, minStart = reserved + trailingWidth + gap, maxEnd = width)
+            } else {
+                centeredStart(centeredWidth, desired, minStart = 0, maxEnd = width - reserved - gap - trailingWidth)
+            }
+            centeredPlaceables.forEach { it.place(start, (height - it.height) / 2) }
+            var x = if (rtl) start - gap else start + centeredWidth + gap
+            trailingPlaceables.forEach { placeable ->
+                if (rtl) x -= placeable.width
+                placeable.place(x, (height - placeable.height) / 2)
+                if (!rtl) x += placeable.width
+            }
+        }
     }
 }
 

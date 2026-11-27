@@ -29,3 +29,6 @@ fun placeCaptionClaims(
         CaptionSpan(start, end).takeIf { it.width >= minWidth }?.let { placement.copy(span = it) }
     }
 }
+
+fun centeredStart(itemWidth: Int, desiredCenter: Int, minStart: Int, maxEnd: Int): Int =
+    (desiredCenter - itemWidth / 2).coerceIn(minStart, maxOf(minStart, maxEnd - itemWidth))

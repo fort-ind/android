@@ -57,4 +57,20 @@ class CaptionPlacementTest {
         val placed = place(CaptionSpan(1026, 2880), CaptionSpan(330, 990))
         assertEquals(listOf(1, 0), placed.map { it.index })
     }
+
+    @Test
+    fun aCenteredItemSitsOnTheDesiredCentreWhenItFits() {
+        assertEquals(700, centeredStart(itemWidth = 600, desiredCenter = 1000, minStart = 0, maxEnd = 2000))
+    }
+
+    @Test
+    fun aCenteredItemIsPushedBackInsideItsBounds() {
+        assertEquals(0, centeredStart(itemWidth = 600, desiredCenter = 100, minStart = 0, maxEnd = 2000))
+        assertEquals(1400, centeredStart(itemWidth = 600, desiredCenter = 1900, minStart = 0, maxEnd = 2000))
+    }
+
+    @Test
+    fun aCenteredItemWiderThanItsBoundsStartsAtTheMinimum() {
+        assertEquals(150, centeredStart(itemWidth = 900, desiredCenter = 400, minStart = 150, maxEnd = 800))
+    }
 }

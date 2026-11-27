@@ -121,11 +121,12 @@ class DiscoveryViewModelsTest {
 
         var trendingCalls = 0
         var trendingFailure: IOException? = null
+        var trending = listOf(TrendingHashtag("android", 12))
 
         override suspend fun trendingHashtags(): List<TrendingHashtag> {
             trendingCalls++
             trendingFailure?.let { throw it }
-            return listOf(TrendingHashtag("android", 12))
+            return trending
         }
 
         override suspend fun announcements(token: String?): List<Announcement> {
@@ -375,6 +376,28 @@ class DiscoveryViewModelsTest {
         awaitTrue { api.trendingCalls == 2 }
         awaitTrue { model.uiState.value.trendingStatus == CollectionsStatus.Ready }
         assertEquals(listOf("android"), model.uiState.value.trending.map { it.tag })
+    }
+
+    @Test
+    fun trendingDropsTagsNobodyIsPostingInAnyMore() = runTest {
+        val api = FakeDiscovery()
+        api.trending = listOf(TrendingHashtag("fediverse", 1), TrendingHashtag("wisskomm", 0), TrendingHashtag("linux", 3))
+        val model = discovery(api)
+
+        model.loadTrending()
+        awaitTrue { model.uiState.value.trendingStatus == CollectionsStatus.Ready }
+        assertEquals(listOf("fediverse", "linux"), model.uiState.value.trending.map { it.tag })
+    }
+
+    @Test
+    fun trendingWithOnlyZeroCountTagsIsReadyAndEmpty() = runTest {
+        val api = FakeDiscovery()
+        api.trending = listOf(TrendingHashtag("wisskomm", 0))
+        val model = discovery(api)
+
+        model.loadTrending()
+        awaitTrue { model.uiState.value.trendingStatus == CollectionsStatus.Ready }
+        assertEquals(emptyList<String>(), model.uiState.value.trending.map { it.tag })
     }
 
     @Test

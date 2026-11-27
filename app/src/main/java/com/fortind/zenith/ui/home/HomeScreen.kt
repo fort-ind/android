@@ -19,6 +19,7 @@ import com.fortind.zenith.ui.discovery.AnnouncementBars
 import com.fortind.zenith.ui.discovery.CollectionTab
 import com.fortind.zenith.ui.discovery.CollectionsBar
 import com.fortind.zenith.ui.discovery.CollapsedSearchField
+import com.fortind.zenith.ui.discovery.CompactSearchFieldHeight
 import com.fortind.zenith.ui.discovery.CollectionsEmptyPane
 import com.fortind.zenith.ui.discovery.SearchActions
 import com.fortind.zenith.ui.discovery.SearchOverlay
@@ -39,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -86,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fortind.zenith.R
+import com.fortind.zenith.ui.nav.CaptionCenteredRow
 import com.fortind.zenith.ui.nav.claimCaptionBar
 import com.fortind.zenith.games.Game
 import com.fortind.zenith.timeline.TimelineKind
@@ -116,7 +119,9 @@ import com.fortind.zenith.ui.scrollbar
 import com.fortind.zenith.ui.social.LocalNoteEnvironment
 import com.fortind.zenith.ui.social.SocialUi
 
-private val CaptionSearchHeight = 40.dp
+private val CaptionSwitcherBottomGap = 12.dp
+private val SwitcherTouchInset = 4.dp
+private val CaptionSwitcherBarHeight = 40.dp + CaptionSwitcherBottomGap
 private val CaptionSearchMaxWidth = 480.dp
 private val CaptionDragGap = 48.dp
 
@@ -294,29 +299,31 @@ private fun FeedPane(
     val searchInCaption = claimCaptionBar(
         navigation = null,
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth().padding(end = CaptionDragGap),
-            ) {
-                SearchBar(
-                    state = searchState,
-                    inputField = { CollapsedSearchField(searchState, height = CaptionSearchHeight) },
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .widthIn(max = CaptionSearchMaxWidth)
-                        .height(CaptionSearchHeight)
-                        .systemGestureExclusion()
-                        .onSizeChanged { searchWidth = with(density) { it.width.toDp() } },
-                )
-                Box(Modifier.systemGestureExclusion()) {
-                    TooltipIconButton(
-                        label = stringResource(R.string.feed_refresh),
-                        icon = Icons.Default.Refresh,
-                        onClick = refresh,
+            CaptionCenteredRow(
+                maxCenteredWidth = CaptionSearchMaxWidth,
+                spacing = 4.dp,
+                endGap = CaptionDragGap,
+                modifier = Modifier.fillMaxWidth(),
+                centered = {
+                    SearchBar(
+                        state = searchState,
+                        inputField = { CollapsedSearchField(searchState, compact = true) },
+                        modifier = Modifier
+                            .height(CompactSearchFieldHeight)
+                            .systemGestureExclusion()
+                            .onSizeChanged { searchWidth = with(density) { it.width.toDp() } },
                     )
-                }
-            }
+                },
+                trailing = {
+                    Box(Modifier.systemGestureExclusion()) {
+                        TooltipIconButton(
+                            label = stringResource(R.string.feed_refresh),
+                            icon = Icons.Default.Refresh,
+                            onClick = refresh,
+                        )
+                    }
+                },
+            )
         },
         actions = {},
     )
@@ -330,7 +337,10 @@ private fun FeedPane(
                 title = {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.widthIn(max = FeedMaxWidth).fillMaxWidth(),
+                        modifier = Modifier
+                            .widthIn(max = FeedMaxWidth)
+                            .fillMaxWidth()
+                            .padding(bottom = if (searchInCaption) CaptionSwitcherBottomGap else 0.dp),
                     ) {
                         if (!searchInCaption) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -353,11 +363,13 @@ private fun FeedPane(
                             available = available,
                             onSelect = feedViewModel::select,
                             reduceMotion = reduceMotion,
-                            modifier = Modifier.semantics { heading() },
+                            modifier = Modifier
+                                .offset(y = if (searchInCaption) -SwitcherTouchInset else 0.dp)
+                                .semantics { heading() },
                         )
                     }
                 },
-                expandedHeight = if (searchInCaption) TopAppBarDefaults.TopAppBarExpandedHeight else 128.dp,
+                expandedHeight = if (searchInCaption) CaptionSwitcherBarHeight else 128.dp,
                 windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
