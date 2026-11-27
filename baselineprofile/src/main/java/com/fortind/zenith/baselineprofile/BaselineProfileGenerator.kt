@@ -20,6 +20,8 @@ class BaselineProfileGenerator {
         ) {
             pressHome()
             startActivityAndWait()
+            enterAsGuest()
+            awaitFeed()
         }
     }
 
